@@ -54,6 +54,13 @@ export const cfg = {
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),
   llmModel: str('LLM_MODEL', 'deepseek-chat'),
   llmDailyLimit: num('LLM_DAILY_LIMIT', 1500),
+  // Tarif untuk menghitung perkiraan biaya di dashboard: USD per 1 juta token.
+  // Bawaan = tarif jam sibuk deepseek-flash (dicek 2026-11-11); di luar jam
+  // sibuk tarifnya separuh, jadi angka di dashboard adalah batas atas.
+  llmPriceIn: num('LLM_PRICE_IN', 0.3),
+  llmPriceCached: num('LLM_PRICE_CACHED', 0.006),
+  llmPriceOut: num('LLM_PRICE_OUT', 1.2),
+  usdIdr: num('USD_IDR', 16_500),
 
   followupAfterHours: num('FOLLOWUP_AFTER_HOURS', 23),
   followupStartHour: num('FOLLOWUP_START_HOUR', 8),
@@ -78,6 +85,12 @@ export const cfg = {
     .filter((s): s is string => Boolean(s)),
   maxInboundPerNumber: num('MAX_INBOUND_PER_NUMBER', 40),
   debounceMs: num('DEBOUNCE_MS', 4000),
+
+  // Pengaman nomor di jalur Baileys (lihat transport/sendguard.ts). Per menit
+  // hanya mengantre; per jam dan per 24 jam menolak kiriman berikutnya.
+  waMaxPerMinute: num('WA_MAX_PER_MINUTE', 5),
+  waMaxPerHour: num('WA_MAX_PER_HOUR', 100),
+  waMaxPerDay: num('WA_MAX_PER_DAY', 800),
 
   // Baileys
   waAuthDir: str('WA_AUTH_DIR', './auth'),

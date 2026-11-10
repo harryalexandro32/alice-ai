@@ -15,7 +15,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { botStatus, leadRows } from './admin/store-local';
+import { botStatus, leadRows, usageReport } from './admin/store-local';
 import type { Snapshot } from './admin/stores';
 import { mediaDir, replaceOverrides } from './business';
 import type { Editable } from './business/types';
@@ -73,7 +73,7 @@ export async function pushSnapshot(force = false): Promise<boolean> {
   const leads = leadRows();
   const key = JSON.stringify(leads);
   if (!force && (key === lastLeads || Date.now() - lastPushAt < MIN_PUSH_GAP_MS)) return false;
-  const snapshot: Snapshot = { at: Date.now(), status: botStatus(), leads };
+  const snapshot: Snapshot = { at: Date.now(), status: botStatus(), leads, usage: usageReport() };
   try {
     await blob().put(remotePath.snapshot(), JSON.stringify(snapshot), 'application/json');
     lastPushAt = Date.now();

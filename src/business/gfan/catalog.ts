@@ -9,6 +9,8 @@
  * Katalognya TIDAK memuat harga, stok, garansi, maupun kontak.
  */
 
+import { renderCatalog } from '../catalog';
+
 export interface Table {
   title: string;
   columns: string[];
@@ -249,15 +251,7 @@ export const MODEL_CODES: ReadonlySet<string> = new Set(
 
 /** Katalog sebagai teks polos buat prompt. Sama persis tiap panggilan. */
 export function catalogText(): string {
-  return SERIES.map((s) => {
-    const tables = s.tables
-      .map(
-        (t) =>
-          `${t.title}:\n${t.columns.join(' | ')}\n` + t.rows.map((r) => r.join(' | ')).join('\n')
-      )
-      .join('\n\n');
-    return `### ${s.name}\n${s.facts.map((f) => `- ${f}`).join('\n')}\n\n${tables}`;
-  }).join('\n\n');
+  return renderCatalog(SERIES);
 }
 
 /**

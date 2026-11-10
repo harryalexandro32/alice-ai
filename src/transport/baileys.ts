@@ -7,6 +7,9 @@
  *   - Chat pribadi bisa datang sebagai @lid; nomornya ada di key.senderPn.
  *   - Tiap pesan yang dibuang disebut alasannya di log.
  *   - Jeda minimum antar kiriman.
+ *   - Batas kiriman dan jeda setelah tanda bahaya: sendguard.ts.
+ *   - Pesan pelanggan ditandai terbaca sebelum "sedang mengetik…" muncul,
+ *     seperti orang yang membuka chat dulu baru membalas.
  *
  * Bedanya dengan bot Oxy: bot ini melayani nomor yang TIDAK dikenal, dan
  * pemilik nomor ikut membalas dari HP. Pesan `fromMe` yang bukan kiriman bot
@@ -26,6 +29,7 @@ import { readFileSync } from 'node:fs';
 import qrcode from 'qrcode-terminal';
 
 import { cfg } from '../config';
+import { afterSend, beforeSend, onDisconnect, onOpen, onSendError } from './sendguard';
 import type { SendOptions, Transport, TransportHandlers } from './types';
 
 /** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
@@ -44,6 +48,8 @@ let selfNumber: string | null = null;
 const sentIds = new Set<string>();
 /** Teks terakhir yang dikirim bot per alamat — pagar kedua untuk hal yang sama. */
 const lastSentText = new Map<string, string>();
+/** Pesan pelanggan yang belum ditandai terbaca, per alamat. */
+const unread = new Map<string, NonNullable<Parameters<WASocket['readMessages']>[0]>>();
 
 function jidToE164(jid: string | null | undefined): string | null {
   const m = (jid ?? '').match(/^(\d{7,15})(?::\d+)?@s\.whatsapp\.net$/);
@@ -114,6 +120,7 @@ async function connect(): Promise<void> {
 
     if (connection === 'open') {
       retryDelayMs = 2_000;
+      onOpen();
       selfNumber = jidToE164(s.user?.id);
       console.log(`[wa] tersambung sebagai ${s.user?.id ?? '?'} — SIAP`);
     }
@@ -143,8 +150,10 @@ async function connect(): Promise<void> {
         return;
       }
 
-      console.warn(`[wa] terputus (${code ?? 'tanpa kode'}), menyambung lagi dalam ${retryDelayMs / 1000}s`);
-      setTimeout(() => void connect(), retryDelayMs);
+      // Pengaman boleh meminta jeda lebih panjang (mis. setelah 403/429).
+      const delay = Math.max(retryDelayMs, onDisconnect(code));
+      console.warn(`[wa] terputus (${code ?? 'tanpa kode'}), menyambung lagi dalam ${Math.round(delay / 1000)}s`);
+      setTimeout(() => void connect(), delay);
       retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_MS);
     }
   });
@@ -201,6 +210,10 @@ async function connect(): Promise<void> {
         // boleh diabaikan — tapi dicatat dengan pengenal LID, bukan nomor tebakan.
         `lid:${jid.split('@')[0]}`;
 
+      const keys = unread.get(jid) ?? [];
+      keys.push(m.key);
+      unread.set(jid, keys.slice(-20));
+      if (unread.size > 500) unread.delete(unread.keys().next().value as string);
       console.log(`[wa] diproses: ${phone} ${tag}`);
       handlers.onInbound({ phone, address: jid, text, waId: m.key.id ?? null });
     }
@@ -211,19 +224,37 @@ async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<v
   const s = sock;
   if (!s) throw new Error('WhatsApp belum tersambung');
 
-  const wait = Math.max(0, lastSentAt + MIN_GAP_MS - Date.now());
+  // Melempar kalau kiriman sedang dijeda atau batasnya tercapai: pemanggil
+  // mencatatnya sebagai gagal kirim, dan bot diam untuk pesan ini.
+  const wait = Math.max(beforeSend(), lastSentAt + MIN_GAP_MS - Date.now(), 0);
   if (wait) await new Promise((r) => setTimeout(r, wait));
   lastSentAt = Date.now();
 
   lastSentText.set(jid, text);
-  const res = await s.sendMessage(
-    jid,
-    opts?.image ? { image: readFileSync(opts.image), caption: text } : { text }
-  );
+  let res;
+  try {
+    await markRead(jid);
+    res = await s.sendMessage(
+      jid,
+      opts?.image ? { image: readFileSync(opts.image), caption: text } : { text }
+    );
+  } catch (e) {
+    onSendError(e);
+    throw e;
+  }
+  afterSend();
   if (res?.key.id) {
     sentIds.add(res.key.id);
     if (sentIds.size > 2000) sentIds.delete(sentIds.values().next().value as string);
   }
+}
+
+/** Tandai pesan pelanggan di chat ini terbaca. Gagal = tidak apa-apa. */
+async function markRead(jid: string): Promise<void> {
+  const keys = unread.get(jid);
+  if (!keys?.length || !sock) return;
+  unread.delete(jid);
+  await sock.readMessages(keys).catch(() => {});
 }
 
 export const baileysTransport: Transport = {
@@ -237,6 +268,7 @@ export const baileysTransport: Transport = {
   },
   async typing(to) {
     const jid = to.address || `${to.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    await markRead(jid);
     await sock?.sendPresenceUpdate('composing', jid).catch(() => {});
   },
   send(to, text, opts) {

@@ -189,7 +189,7 @@ export function createAdminHandler(store: AdminStore) {
     }
 
     if (path === '/admin/api/profile' && method === 'PUT') {
-      const body = JSON.parse((await readBody(req, 200_000)).toString('utf8')) as Record<string, unknown>;
+      const body = JSON.parse((await readBody(req, 400_000)).toString('utf8')) as Record<string, unknown>;
       let changes;
       try {
         changes = validate(body);
@@ -203,6 +203,10 @@ export function createAdminHandler(store: AdminStore) {
 
     if (path === '/admin/api/leads' && method === 'GET') {
       return json(200, { fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })), rows: await store.leads() });
+    }
+
+    if (path === '/admin/api/usage' && method === 'GET') {
+      return json(200, { usage: await store.usage() });
     }
 
     if (path === '/admin/api/test' && method === 'POST') {

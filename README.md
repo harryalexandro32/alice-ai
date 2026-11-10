@@ -62,7 +62,7 @@ Mesin tidak menyebut nama klien, produk, maupun field lead. Semua itu ada di sat
 2. Isi `profile.ts` (lihat `src/business/types.ts`):
    - `brand`, `about`, `honorific`, `greeting`
    - `leadFields` — data apa yang dikumpulkan (bebas: tanggal acara, jumlah orang, …)
-   - `knowledge` — satu-satunya sumber jawaban (katalog, FAQ, jam buka)
+   - `catalog` (tabel produk) + `notes` (FAQ, jam buka) — satu-satunya sumber jawaban
    - `handoffTopics` — yang harus dijawab manusia; `forbidPrices` kalau bot tidak boleh sebut harga
    - `checkReply` — pagar khas bisnis (opsional), `evalCases` — pertanyaan uji
 3. Daftarkan di `src/business/index.ts`.

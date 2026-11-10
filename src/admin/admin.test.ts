@@ -9,7 +9,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { checkReply, systemPrompt } from '../brain';
-import { biz, initBiz, mediaDir, refreshBiz } from '../business';
+import { biz, initBiz, knowledgeText, mediaDir, refreshBiz } from '../business';
+import { addUsage } from '../store';
 import { cfg } from '../config';
 import { pickDelayMs, typingMs } from '../pace';
 import { openDb } from '../store';
@@ -72,7 +73,10 @@ const PNG = Buffer.from(
       alias: 'Rina',
       replyDelayMin: 5,
       replyDelayMax: 12,
-      knowledge: biz.knowledge + '\nGFAF-70A | 28" | 220/380 | 50 | 400 | 9000',
+      catalog: biz.catalog.map((s, i) =>
+        i === 2 ? { ...s, tables: s.tables.map((t, j) => (j === 0 ? { ...t, rows: [...t.rows, ['GFAF-70A', ...t.columns.slice(1).map(() => '1')]] } : t)) } : s
+      ),
+      notes: 'Jam buka: Senin–Sabtu 08.00–17.00.',
       id: 'diretas',
       evalCases: [],
     });
@@ -82,6 +86,34 @@ const PNG = Buffer.from(
     assert.match(systemPrompt(), /Nama panggilanmu Rina/);
     assert.equal(checkReply('GFAF-70A tersedia'), null, 'pagar kode mengikuti data produk yang baru');
     assert.ok(checkReply('GFAF-99A tersedia'));
+    assert.match(knowledgeText(), /\nGFAF-70A \| 1 \| 1/);
+    assert.match(systemPrompt(), /Jam buka: Senin–Sabtu/);
+    assert.equal(state.body.profile.catalog.length, 6, 'tabel produk bawaan tampil di dashboard');
+    assert.equal(state.body.profile.knowledge, undefined);
+
+    // --- tabel produk: masukan dirapikan, yang salah ditolak ---
+    const tbl = (rows: unknown[], columns: unknown[] = ['Model', 'Daya']) =>
+      put({ catalog: [{ name: 'Seri Uji', facts: 'baris satu\n- baris dua', tables: [{ title: 'Spek', columns, rows }] }] });
+    assert.match((await tbl([['', '10']])).body.error, /belum diisi Model/);
+    assert.match((await tbl([['X-1', '10']], ['Model', 'model'])).body.error, /kolom yang sama/);
+    assert.match((await put({ catalog: [{ name: '', tables: [] }] })).body.error, /belum diberi nama/);
+    assert.equal((await tbl([['UJI-1', '10 | W\n'], ['', ''], ['UJI-2']])).status, 200);
+    assert.equal(
+      knowledgeText(),
+      '### Seri Uji\n- baris satu\n- baris dua\n\nSpek:\nModel | Daya\nUJI-1 | 10 W\nUJI-2 | \n\nJam buka: Senin–Sabtu 08.00–17.00.'
+    );
+    assert.equal(checkReply('UJI-1 tersedia'), null);
+    assert.ok(checkReply('UJI-9 tersedia'));
+
+    // --- pemakaian LLM + tarif ---
+    addUsage({ day: '2026-11-10', calls: 2, promptTokens: 9000, cachedTokens: 8000, completionTokens: 300 });
+    addUsage({ day: '2026-11-10', calls: 1, promptTokens: 1000, cachedTokens: 0, completionTokens: 100 });
+    addUsage({ day: '2026-11-11', calls: 1, promptTokens: 500, cachedTokens: 0, completionTokens: 50 });
+    const usage = (await call('/admin/api/usage')).body.usage;
+    assert.deepEqual(usage.days[1], { day: '2026-11-10', calls: 3, promptTokens: 10000, cachedTokens: 8000, completionTokens: 400 });
+    assert.equal(usage.days[0].day, '2026-11-11');
+    assert.equal(usage.price.out, cfg.llmPriceOut);
+    assert.equal((await call('/admin/api/usage', {}, false)).status, 401);
     assert.equal(JSON.parse(readFileSync(join(dir, 'gfan', 'profile.json'), 'utf8')).alias, 'Rina');
 
     // --- masukan yang salah ditolak dengan pesan yang bisa dibaca ---

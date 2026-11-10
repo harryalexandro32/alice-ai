@@ -31,6 +31,21 @@ export interface Photo {
   tags: string;
 }
 
+/** Satu tabel produk: baris = produk, kolom pertama = kode/modelnya. */
+export interface CatalogTable {
+  title: string;
+  columns: string[];
+  rows: string[][];
+}
+
+/** Satu kelompok produk (seri): keterangan umum + satu atau lebih tabel. */
+export interface CatalogSection {
+  name: string;
+  /** Keterangan umum seri ini, satu kalimat per baris. */
+  facts: string[];
+  tables: CatalogTable[];
+}
+
 export type Intent = 'info' | 'handoff' | 'human' | 'other';
 
 export interface EvalCase {
@@ -56,8 +71,13 @@ export interface Business {
   greeting: string;
   /** Data yang dikumpulkan dari tiap calon pelanggan, berurutan. */
   leadFields: LeadField[];
-  /** Satu-satunya sumber jawaban: katalog, FAQ, jam buka, dst. */
-  knowledge: string;
+  /**
+   * Data produk dalam bentuk tabel. Bersama `notes`, ini satu-satunya sumber
+   * jawaban; teks yang dilihat LLM dirakit oleh knowledgeText().
+   */
+  catalog: CatalogSection[];
+  /** Pengetahuan lain yang tidak berbentuk tabel: FAQ, jam buka, dst. */
+  notes: string;
   /** Cara menganalisis kebutuhan pelanggan dan menyarankan produk. */
   advice: string;
   /** Hal yang TIDAK diketahui bot dan harus dioper ke manusia. */
@@ -87,7 +107,7 @@ export interface Business {
 
 /** Kunci yang boleh diubah pemilik lewat dashboard. */
 export const EDITABLE = [
-  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'knowledge',
+  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'catalog', 'notes',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
   'photos', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];

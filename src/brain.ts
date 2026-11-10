@@ -10,7 +10,7 @@
  * nada; pagar mengatur batas.
  */
 
-import { biz } from './business';
+import { biz, knowledgeText } from './business';
 import type { Intent } from './business/types';
 import { unknownCodes } from './guard';
 import { askJson } from './llm/provider';
@@ -123,7 +123,7 @@ ${biz.leadFields.map((f) => `  - "${f.key}" (${f.label})${f.hint ? `: ${f.hint}`
 - "photos": daftar id foto, atau [].
 
 PENGETAHUAN
-${biz.knowledge}
+${knowledgeText()}
 
 PANDUAN REKOMENDASI
 ${biz.advice || '(belum ada panduan; sarankan berdasarkan data di PENGETAHUAN, dan untuk hitungan yang pasti serahkan ke tim)'}
@@ -187,7 +187,7 @@ export function checkReply(reply: string, asked = ''): string | null {
   if (biz.guardCodes) {
     // Kode yang diketik pelanggan sendiri bukan karangan: "GZ-400 belum ada di
     // katalog kami" adalah jawaban jujur.
-    const unknown = unknownCodes(reply, biz.knowledge, asked);
+    const unknown = unknownCodes(reply, knowledgeText(), asked);
     if (unknown.length) return `produk tidak ada di data: ${unknown.join(', ')}`;
   }
   return biz.checkReply?.(reply, asked) ?? null;

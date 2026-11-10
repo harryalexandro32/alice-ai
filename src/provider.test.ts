@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net';
 
 import { llmBrain } from './brain';
 import { cfg } from './config';
-import { llmUsageToday } from './llm/provider';
+import { llmUsageToday, setUsageRecorder, type UsageDelta } from './llm/provider';
 
 let seen: { auth?: string; body?: any } = {};
 let status = 200;
@@ -41,6 +41,9 @@ server.listen(0, '127.0.0.1', async () => {
     justGreeted: false,
   };
 
+  const recorded: UsageDelta[] = [];
+  setUsageRecorder((d) => recorded.push(d));
+
   try {
     content = '{"reply":"GFAF-40A dayanya 130 W.","fields":{"name":"Budi","city":"Bekasi","need":null},"intent":"info"}';
     const r = await llmBrain(input);
@@ -54,6 +57,8 @@ server.listen(0, '127.0.0.1', async () => {
     assert.match(seen.body.messages[0].content, /json/);
     assert.match(seen.body.messages[1].content, /PESAN TERBARU PELANGGAN\nGFAF-40A berapa watt/);
     assert.equal(llmUsageToday().cachedTokens, 2000);
+    assert.deepEqual({ ...recorded[0], day: '' }, { day: '', calls: 1, promptTokens: 2100, cachedTokens: 2000, completionTokens: 60 });
+    assert.match(recorded[0]!.day, /^\d{4}-\d\d-\d\d$/);
 
     content = 'maaf, saya tidak bisa';
     assert.equal(await llmBrain(input), null, 'keluaran bukan JSON = null');

@@ -20,7 +20,8 @@ import { pullProfile, startSync } from './sync';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
-import { openDb } from './store';
+import { setUsageRecorder } from './llm/provider';
+import { addUsage, openDb } from './store';
 import type { Transport, TransportInbound } from './transport/types';
 
 /**
@@ -94,6 +95,8 @@ function flush(phone: string): void {
 export async function startApp(transport: Transport): Promise<void> {
   openDb(cfg.dbPath);
   initBiz();
+  // Tiap panggilan LLM dicatat per hari, supaya biayanya terlihat di dashboard.
+  setUsageRecorder(addUsage);
 
   // Balasan ke pelanggan menunggu dulu dengan irama manusia (lihat pace.ts).
   // Notifikasi ke sales dan follow-up tidak: keduanya bukan balasan.

@@ -82,6 +82,13 @@ export function openDb(path: string): void {
       attempts INTEGER NOT NULL DEFAULT 0,
       done_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS llm_usage (
+      day TEXT PRIMARY KEY,
+      calls INTEGER NOT NULL DEFAULT 0,
+      prompt_tokens INTEGER NOT NULL DEFAULT 0,
+      cached_tokens INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0
+    );
   `);
 }
 
@@ -200,4 +207,34 @@ export function outboxDone(id: number, at: number): void {
 
 export function outboxFailed(id: number): void {
   db.prepare('UPDATE outbox SET attempts = attempts + 1 WHERE id = ?').run(id);
+}
+
+export interface UsageDay {
+  day: string;
+  calls: number;
+  promptTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+}
+
+/** Tambahkan pemakaian LLM ke hari itu (hari menurut zona waktu bot). */
+export function addUsage(d: UsageDay): void {
+  db.prepare(
+    `INSERT INTO llm_usage (day, calls, prompt_tokens, cached_tokens, completion_tokens) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(day) DO UPDATE SET calls = calls + excluded.calls,
+       prompt_tokens = prompt_tokens + excluded.prompt_tokens,
+       cached_tokens = cached_tokens + excluded.cached_tokens,
+       completion_tokens = completion_tokens + excluded.completion_tokens`
+  ).run(d.day, d.calls, d.promptTokens, d.cachedTokens, d.completionTokens);
+}
+
+/** Pemakaian per hari, terbaru dulu. */
+export function usageDays(n: number): UsageDay[] {
+  const rows = db
+    .prepare(
+      `SELECT day, calls, prompt_tokens AS promptTokens, cached_tokens AS cachedTokens,
+              completion_tokens AS completionTokens FROM llm_usage ORDER BY day DESC LIMIT ?`
+    )
+    .all(n) as unknown as UsageDay[];
+  return rows.map((r) => ({ ...r }));
 }

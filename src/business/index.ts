@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSyn
 import { join } from 'node:path';
 
 import { cfg } from '../config';
+import { renderCatalog, validateCatalog } from './catalog';
 import { gfan } from './gfan/profile';
 import { EDITABLE, type Business, type Editable, type LeadField } from './types';
 
@@ -58,6 +59,28 @@ function apply(overrides: Partial<Editable>): void {
   for (const k of EDITABLE) {
     if (overrides[k] !== undefined) (biz as unknown as Record<string, unknown>)[k] = overrides[k];
   }
+  // Profil yang disimpan sebelum data produk berbentuk tabel: seluruh
+  // pengetahuannya satu teks. Teks itu tetap dipakai apa adanya.
+  const legacy = (overrides as { knowledge?: unknown }).knowledge;
+  if (typeof legacy === 'string' && overrides.catalog === undefined && overrides.notes === undefined) {
+    biz.catalog = [];
+    biz.notes = legacy;
+  }
+}
+
+let rendered: { catalog: unknown; notes: string; text: string } | null = null;
+
+/**
+ * Satu-satunya sumber jawaban bot: tabel produk + catatan bebas, sebagai teks.
+ * Dirakit ulang hanya kalau profilnya berganti, jadi teksnya sama persis dari
+ * panggilan ke panggilan (awalan prompt yang di-cache penyedia LLM).
+ */
+export function knowledgeText(): string {
+  if (rendered?.catalog !== biz.catalog || rendered.notes !== biz.notes) {
+    const text = [renderCatalog(biz.catalog), biz.notes.trim()].filter(Boolean).join('\n\n');
+    rendered = { catalog: biz.catalog, notes: biz.notes, text };
+  }
+  return rendered.text;
 }
 
 function read(): Partial<Editable> {
@@ -109,7 +132,12 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('about' in input) set('about', text(input.about, 600, 'Tentang bisnis', true));
   if ('honorific' in input) set('honorific', text(input.honorific, 30, 'Sapaan', true));
   if ('greeting' in input) set('greeting', text(input.greeting, 1500, 'Salam pembuka', true));
-  if ('knowledge' in input) set('knowledge', text(input.knowledge, 60_000, 'Data produk', true));
+  if ('notes' in input) set('notes', text(input.notes, 30_000, 'Pengetahuan tambahan'));
+  if ('catalog' in input) {
+    const catalog = validateCatalog(input.catalog);
+    if (renderCatalog(catalog).length > 60_000) throw new Error('Data produk terlalu besar (maksimal ±60.000 karakter)');
+    set('catalog', catalog);
+  }
   if ('advice' in input) set('advice', text(input.advice, 8000, 'Panduan rekomendasi'));
   if ('handoffTopics' in input) set('handoffTopics', text(input.handoffTopics, 400, 'Topik untuk manusia', true));
   if ('handoffLabel' in input) set('handoffLabel', text(input.handoffLabel, 40, 'Label notifikasi', true));

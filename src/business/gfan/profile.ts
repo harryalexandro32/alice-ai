@@ -1,7 +1,7 @@
 /** Bibit profil GFAN. Pemilik mengubahnya lewat dashboard; ini nilai awalnya. */
 
 import type { Business } from '../types';
-import { catalogText } from './catalog';
+import { SERIES } from './catalog';
 
 export const gfan: Business = {
   id: 'gfan',
@@ -35,7 +35,8 @@ export const gfan: Business = {
     },
   ],
 
-  knowledge: catalogText(),
+  catalog: SERIES.map(({ name, facts, tables }) => ({ name, facts, tables })),
+  notes: '',
 
   // Angka pergantian udara di bawah adalah acuan umum ventilasi, BUKAN dari
   // katalog GFAN. Klien perlu mengonfirmasi atau menggantinya lewat dashboard.

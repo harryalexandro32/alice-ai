@@ -28,8 +28,20 @@ export interface BotStatus {
   sales: string | null;
   sheet: boolean;
   onlyNumbers: number;
+  /** Keadaan pengaman nomor (jalur Baileys), satu baris. */
+  guard?: string;
   /** Kapan bot terakhir melapor (ms). Null = dashboard satu proses dengan bot. */
   reportedAt: number | null;
+}
+
+/** Pemakaian LLM per hari + tarif yang dipakai menghitung biayanya. */
+export interface UsageReport {
+  model: string;
+  /** USD per 1 juta token. */
+  price: { in: number; cached: number; out: number };
+  usdIdr: number;
+  /** Terbaru dulu. `promptTokens` sudah termasuk `cachedTokens`. */
+  days: { day: string; calls: number; promptTokens: number; cachedTokens: number; completionTokens: number }[];
 }
 
 /** Yang dikirim bot ke penyimpanan bersama untuk ditampilkan dashboard. */
@@ -37,6 +49,7 @@ export interface Snapshot {
   at: number;
   status: Omit<BotStatus, 'reportedAt'>;
   leads: LeadRow[];
+  usage?: UsageReport;
 }
 
 export interface AdminStore {
@@ -48,6 +61,8 @@ export interface AdminStore {
   delPhoto(file: string): Promise<void>;
   leads(): Promise<LeadRow[]>;
   status(): Promise<BotStatus | null>;
+  /** Null = bot belum pernah melapor. */
+  usage(): Promise<UsageReport | null>;
 }
 
 export function blobStore(): AdminStore {
@@ -74,6 +89,9 @@ export function blobStore(): AdminStore {
     async status() {
       const s = await snapshot();
       return s ? { ...s.status, reportedAt: s.at } : null;
+    },
+    async usage() {
+      return (await snapshot())?.usage ?? null;
     },
   };
 }

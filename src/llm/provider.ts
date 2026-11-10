@@ -28,6 +28,21 @@ function withinBudget(): boolean {
   return usage.calls < cfg.llmDailyLimit;
 }
 
+export interface UsageDelta {
+  day: string;
+  calls: number;
+  promptTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+}
+
+// Pencatat pemakaian yang awet (database bot). Penyedia ini sendiri tidak
+// mengimpor database: ia juga jalan di fungsi Vercel, yang tidak punya SQLite.
+let recorder: ((d: UsageDelta) => void) | null = null;
+export function setUsageRecorder(fn: ((d: UsageDelta) => void) | null): void {
+  recorder = fn;
+}
+
 export function llmUsageToday() {
   return { ...usage, model: cfg.llmModel, limit: cfg.llmDailyLimit };
 }
@@ -76,9 +91,21 @@ export async function askJson(opts: AskOptions): Promise<string | null> {
       choices?: { message?: { content?: string } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number };
     };
-    usage.promptTokens += data.usage?.prompt_tokens ?? 0;
-    usage.cachedTokens += data.usage?.prompt_cache_hit_tokens ?? 0;
-    usage.completionTokens += data.usage?.completion_tokens ?? 0;
+    const delta: UsageDelta = {
+      day: usage.day,
+      calls: 1,
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+      cachedTokens: data.usage?.prompt_cache_hit_tokens ?? 0,
+      completionTokens: data.usage?.completion_tokens ?? 0,
+    };
+    usage.promptTokens += delta.promptTokens;
+    usage.cachedTokens += delta.cachedTokens;
+    usage.completionTokens += delta.completionTokens;
+    try {
+      recorder?.(delta);
+    } catch (e) {
+      console.error(`[llm] pemakaian tidak tercatat: ${e instanceof Error ? e.message : e}`);
+    }
 
     return data.choices?.[0]?.message?.content?.trim() || null;
   } catch (e) {
