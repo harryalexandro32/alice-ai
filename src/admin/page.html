@@ -111,6 +111,14 @@
   .pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 150px; }
   .pdf a { color: var(--blue); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-size: 13px; }
   .pdf a:hover { text-decoration: underline; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .chips .chip { display: inline-flex; align-items: center; gap: 2px; padding-right: 3px; background: var(--blue-soft); color: var(--blue-dark); }
+  .chips .chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 3px; font-size: 13px; line-height: 1; opacity: .6; }
+  .chips .chip button:hover { opacity: 1; }
+  .chips select { width: auto; border: 1px dashed #a9adb2; padding: 2px 6px; font-size: 12px; color: var(--muted); border-radius: 99px; }
+  table.list td.acts { white-space: nowrap; text-align: right; width: 1%; }
+  table.list a { color: var(--blue); text-decoration: none; }
+  table.list a:hover { text-decoration: underline; }
   .pdf select { border: 0; background: transparent; padding: 7px 4px; color: var(--muted); font-size: 13px; min-width: 140px; }
 
   /* ---- data teknis ---- */
@@ -210,6 +218,7 @@
       <button data-tab="rekomendasi" data-en="Recommendations">Rekomendasi</button>
       <div class="nav-group">Data</div>
       <button data-tab="produk" data-en="Products">Produk</button>
+      <button data-tab="pdf">PDF</button>
       <button data-tab="data" data-en="Customer data">Data pelanggan</button>
       <div class="nav-group" data-en="Monitor">Pantau</div>
       <button data-tab="lead" data-en="Leads">Lead</button>
@@ -279,6 +288,8 @@
           <div class="cardfoot"><button class="btn ghost small" id="addProduct" type="button" data-en="+ Product">+ Produk</button><span id="knowLen"></span></div>
         </div>
 
+        <p class="help" style="margin:-6px 0 16px" data-en="Tip: upload brochures on the <b>PDF</b> page — each PDF is matched to the products it mentions automatically.">Tip: unggah brosur di halaman <b>PDF</b> — tiap PDF otomatis dipasangkan ke produk yang disebut di dalamnya.</p>
+
         <details class="fold" id="detailFold">
           <summary><span data-en="Detailed technical data (optional)">Data teknis rinci (opsional)</span> <span class="count" id="detailCount"></span></summary>
           <div class="fold-body">
@@ -304,6 +315,14 @@
             </div>
             <label class="check" style="margin:0"><input type="checkbox" data-key="forbidPrices"><span data-en="<b>The bot may only quote prices written in the product list.</b> Replies with any other amount are not sent."><b>Bot hanya boleh menyebut harga yang tertulis di daftar produk.</b> Balasan dengan nominal lain tidak dikirim.</span></label>
           </div>
+        </div>
+      </section>
+
+      <section id="tab-pdf">
+        <div class="card">
+          <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. You can still change the PDF of any product here or in the product table. Up to 4 MB per file.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. PDF tiap produk tetap bisa diubah di sini atau di tabel produk. Maksimal 4 MB per berkas.</p></div>
+          <div class="cb"><div class="scroll"><table class="list" id="pdfs"></table></div></div>
+          <div class="cardfoot"><button class="btn small" id="pdfUpload" type="button" data-en="Upload PDF">Unggah PDF</button><button class="btn ghost small" id="pdfRematch" type="button" data-en="Re-match all">Cocokkan ulang semua</button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read — attach those by hand.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca — pasangkan sendiri.</span></div>
         </div>
       </section>
 
@@ -370,6 +389,7 @@
 </div>
 
 <input type="file" id="pickFile" hidden>
+<input type="file" id="pickPdfs" accept="application/pdf" multiple hidden>
 <div class="viewer" id="viewer"><img alt=""></div>
 <div class="toast" id="toast"></div>
 <script src="/admin/app.js"></script>

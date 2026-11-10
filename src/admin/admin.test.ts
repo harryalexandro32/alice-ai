@@ -176,7 +176,7 @@ const PNG = Buffer.from(
       { name: 'GFAF-40A', description: 'Exhaust 16" industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id], pdf: pdf.id },
       { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: '' },
     ]);
-    assert.deepEqual(biz.files.map((f) => f.id), [photo.id, pdf.id], 'berkas yang tidak dipakai dihapus dari daftar');
+    assert.deepEqual(biz.files.map((f) => f.id), [photo.id, pdf.id], 'foto yang tidak dipakai dihapus dari daftar');
     assert.ok(!existsSync(join(mediaDir(), stray.file)), '…dan dari disk');
     assert.match(systemPrompt(), new RegExp(`GFAF-40A \\| Exhaust 16" industri \\| Rp 450.000 \\| ada \\| ${photo.id} \\| ${pdf.id}`));
     assert.match(systemPrompt(), /GFAF-50A \| - \| - \| - \| - \| -/);
@@ -201,10 +201,38 @@ const PNG = Buffer.from(
     assert.equal((await test('harga berapa')).body.rejected, 'menyebut harga', 'harga di luar daftar produk ditolak');
     assert.equal((await test('40A berapa')).body.rejected, null, 'harga yang tertulis di daftar produk boleh');
 
-    // Melepas lampiran dari produk = berkasnya ikut dihapus.
-    assert.equal((await put({ products: [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: '' }] })).status, 200);
-    assert.ok(!existsSync(join(mediaDir(), photo.file)) && !existsSync(join(mediaDir(), pdf.file)));
+    // Foto yang dilepas dari produk ikut dihapus; PDF tetap di pustaka sampai
+    // dihapus dari halaman PDF, dan saat itu lepas dari semua produk.
+    assert.equal((await put({ products: [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: pdf.id }, { name: 'GFAF-40AB', pdf: pdf.id }] })).status, 200);
+    assert.ok(!existsSync(join(mediaDir(), photo.file)) && existsSync(join(mediaDir(), pdf.file)));
+    assert.deepEqual(biz.files.map((f) => f.id), [pdf.id, logo.id]);
+    assert.equal((await call(`/admin/api/files/${logo.id}`, { method: 'DELETE' })).status, 404, 'hanya PDF yang dihapus lewat sini');
+    const gone = await call(`/admin/api/files/${pdf.id}`, { method: 'DELETE' });
+    assert.equal(gone.status, 200);
+    assert.deepEqual(gone.body.profile.products.map((p: { pdf: string }) => p.pdf), ['', '']);
+    assert.ok(!existsSync(join(mediaDir(), pdf.file)));
     assert.deepEqual(biz.files.map((f) => f.id), [logo.id]);
+
+    // --- PDF dicocokkan dengan produk yang disebut di dalamnya ---
+    {
+      const { matchProducts, pdfText, squash } = await import('./pdftext');
+      const names = ['GFAF-40A', 'GFAF-40AB', 'GFAF-50A', 'GZ-200', 'AB', 'Kipas Meja 12 inci'];
+      const text = squash('Model GFAF - 40AB | 16" ... gz200 ... KIPAS MEJA 12 INCI, AB');
+      assert.deepEqual(matchProducts(text, names), ['GFAF-40AB', 'GZ-200', 'Kipas Meja 12 inci'], '40A tidak ikut hanya karena 40AB ada; nama pendek dilewati');
+      assert.deepEqual(matchProducts(squash('GFAF-40A dan GFAF-40AB'), names), ['GFAF-40A', 'GFAF-40AB']);
+      assert.deepEqual(matchProducts('', names), []);
+      assert.equal(await pdfText(Buffer.from('%PDF-1.4 rusak')), '', 'PDF yang tidak terbaca = tanpa kecocokan, bukan galat');
+
+      const real = join(process.cwd(), 'catalog-pdf', 'Industrial Fan - GFan.pdf');
+      await put({ products: [{ name: 'GFAF-40A' }, { name: 'GFAF-40AB' }, { name: 'GZ-200' }] });
+      const upPdf = await call(`/admin/api/files?${new URLSearchParams({ name: 'Industrial Fan - GFan.pdf' })}`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: readFileSync(real) });
+      assert.equal(upPdf.body.readable, true);
+      assert.deepEqual(upPdf.body.matches, ['GFAF-40A']);
+      await put({ products: [{ name: 'GFAF-40A' }, { name: 'GFAF-60A' }] });
+      const again = await call(`/admin/api/files/${upPdf.body.file.id}/match`, { method: 'POST' });
+      assert.deepEqual(again.body.matches, ['GFAF-40A', 'GFAF-60A'], 'cocokkan ulang memakai daftar produk terbaru');
+      assert.ok(biz.files.some((f) => f.id === upPdf.body.file.id), 'PDF yang belum dipasang tetap ada di pustaka');
+    }
 
     // --- permintaan dari situs lain ditolak ---
     const cross = await call('/admin/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json', origin: 'https://situs-lain.example' }, body: '{"alias":"X"}' });

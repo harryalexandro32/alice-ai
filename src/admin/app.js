@@ -44,6 +44,7 @@ const PAGES = {
   identitas: () => [T('Identitas', 'Identity'), T('Siapa yang membalas chat, logonya, dan salam pembukanya. Perubahan berlaku pada pesan berikutnya setelah disimpan.', 'Who replies to chats, the logo, and the greeting. Changes apply to the next message after you save.')],
   perilaku: () => [T('Perilaku', 'Behaviour'), T('Irama balasan bot dan keadaan bot saat ini.', 'The rhythm of the bot\'s replies and its current state.')],
   rekomendasi: () => [T('Rekomendasi', 'Recommendations'), T('Apa yang ditanyakan bot ke pelanggan, dan cara ia memilih produk.', 'What the bot asks the customer, and how it picks a product.')],
+  pdf: () => ['PDF', T('Brosur dan katalog yang bisa dikirim bot ke pelanggan.', 'Brochures and catalogues the bot can send to customers.')],
   produk: () => [T('Produk', 'Products'), T('Satu-satunya sumber jawaban bot. Yang tidak tertulis di sini tidak akan dijawabnya.', 'The bot\'s only source of answers. Anything not written here, it will not answer.')],
   data: () => [T('Data pelanggan', 'Customer data'), T('Data yang diminta bot dari tiap calon pelanggan.', 'What the bot asks every prospective customer for.')],
   lead: () => ['Lead', T('Calon pelanggan yang sudah chat dengan bot.', 'Prospective customers who have chatted with the bot.')],
@@ -80,7 +81,7 @@ function setDirty(v, key) {
   if (!v) changed.clear();
   $('save').disabled = !v;
   $('save').textContent = v ? T('Simpan & terapkan', 'Save & apply') : T('Tersimpan', 'Saved');
-  $('save').style.display = ['lead', 'biaya', 'uji'].includes(tab) && !v ? 'none' : '';
+  $('save').style.display = ['lead', 'biaya', 'uji', 'pdf'].includes(tab) && !v ? 'none' : '';
 }
 
 // ---------- isian sederhana ----------
@@ -109,8 +110,118 @@ async function uploadFile(file) {
   if (file.size > 4000000) throw new Error(T('Berkas terlalu besar (maksimal 4 MB).', 'File too large (4 MB max).'));
   const r = await api('files?' + new URLSearchParams({ name: file.name }), { method: 'POST', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } });
   profile.files = r.files;
-  return r.file;
+  return Object.assign(r.file, { matches: r.matches, readable: r.readable });
 }
+
+// ---------- PDF: satu berkas untuk banyak produk ----------
+const isPdfFile = (f) => f.file.endsWith('.pdf');
+const pdfLibrary = () => (profile.files || []).filter(isPdfFile);
+
+/** Pasang PDF ke produk yang disebut di dalamnya dan belum punya PDF. */
+function assignPdf(id, names) {
+  const wanted = new Set(names || []);
+  let set = 0;
+  let taken = 0;
+  for (const p of profile.products) {
+    if (!wanted.has(p.name)) continue;
+    if (!p.pdf) { p.pdf = id; set += 1; } else if (p.pdf !== id) taken += 1;
+  }
+  if (set) setDirty(true, 'products');
+  return { set, taken };
+}
+
+const matchNote = (name, readable, r) =>
+  !readable ? name + T(': tidak terbaca (hasil pindai?) — pasangkan sendiri.', ': not readable (a scan?) — attach it by hand.')
+    : name + T(': dipasang ke ', ': attached to ') + r.set + T(' produk', ' products') +
+      (r.taken ? T(', ', ', ') + r.taken + T(' sudah punya PDF lain', ' already had another PDF') : '') + '.';
+
+/** Perubahan dari pencocokan langsung disimpan, kecuali ada suntingan lain yang belum disimpan. */
+async function afterAssign(wasDirty, notes) {
+  renderProducts();
+  renderPdfs();
+  if (dirty && !wasDirty) await save(true);
+  toast(notes.join(' ') + (dirty ? T(' Klik Simpan untuk menerapkan.', ' Click Save to apply.') : ''));
+}
+
+function renderPdfs() {
+  const list = pdfLibrary();
+  const head = el('thead', {}, el('tr', {}, el('th', { textContent: T('Berkas', 'File') }), el('th', { textContent: T('Produk yang memakai', 'Products using it') }), el('th')));
+  const rows = list.map((f) => {
+    const using = profile.products.filter((p) => p.pdf === f.id);
+    const free = profile.products.filter((p) => p.name && p.pdf !== f.id);
+    const add = el('select', {}, el('option', { value: '', textContent: T('+ produk…', '+ product…') }),
+      ...free.map((p) => el('option', { value: String(profile.products.indexOf(p)), textContent: p.name + (p.pdf ? T(' (ganti)', ' (replace)') : '') })));
+    add.addEventListener('change', () => {
+      if (add.value === '') return;
+      profile.products[Number(add.value)].pdf = f.id;
+      touchProducts();
+      renderProducts();
+      renderPdfs();
+    });
+    const chips = el('div', { className: 'chips' }, ...using.map((p) => {
+      const rm = el('button', { type: 'button', textContent: '×', title: T('Lepas dari produk ini', 'Detach from this product') });
+      rm.addEventListener('click', () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); });
+      return el('span', { className: 'chip' }, p.name, rm);
+    }), add);
+
+    const re = el('button', { className: 'btn ghost small', type: 'button', textContent: T('Cocokkan ulang', 'Re-match') });
+    re.addEventListener('click', async () => {
+      re.disabled = true;
+      try {
+        const wasDirty = dirty;
+        const r = await api('files/' + f.id + '/match', { method: 'POST' });
+        await afterAssign(wasDirty, [matchNote(f.name, r.readable, assignPdf(f.id, r.matches))]);
+      } catch (e) { toast(e.message, true); re.disabled = false; }
+    });
+    const del = el('button', { className: 'btn danger small', type: 'button', textContent: T('Hapus', 'Delete'), style: 'margin-left:6px' });
+    del.addEventListener('click', async () => {
+      if (dirty) return toast(T('Simpan dulu perubahan lain sebelum menghapus PDF.', 'Save your other changes before deleting a PDF.'), true);
+      if (!confirm(T('Hapus "', 'Delete "') + f.name + '"?' + (using.length ? ' ' + using.length + T(' produk akan kehilangan PDF-nya.', ' products will lose their PDF.') : ''))) return;
+      try {
+        profile = (await api('files/' + f.id, { method: 'DELETE' })).profile;
+        renderProducts();
+        renderPdfs();
+        toast(T('PDF dihapus.', 'PDF deleted.'));
+      } catch (e) { toast(e.message, true); }
+    });
+    return el('tr', {}, el('td', {}, el('a', { href: '/admin/media/' + f.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + f.name })),
+      el('td', {}, chips), el('td', { className: 'acts' }, re, del));
+  });
+  $('pdfs').replaceChildren(head, el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 3, style: 'color:var(--muted)', textContent: T('Belum ada PDF. Unggah brosur atau katalog Anda.', 'No PDFs yet. Upload your brochures or catalogues.') }))])));
+  $('pdfRematch').style.display = list.length ? '' : 'none';
+}
+
+$('pdfUpload').addEventListener('click', () => { $('pickPdfs').value = ''; $('pickPdfs').click(); });
+$('pickPdfs').addEventListener('change', async () => {
+  const files = [...$('pickPdfs').files];
+  if (!files.length) return;
+  const wasDirty = dirty;
+  const notes = [];
+  $('pdfUpload').disabled = true;
+  for (const file of files) {
+    try {
+      const f = await uploadFile(file);
+      if (!isPdfFile(f)) { notes.push(file.name + T(': bukan PDF.', ': not a PDF.')); continue; }
+      notes.push(matchNote(f.name, f.readable, assignPdf(f.id, f.matches)));
+    } catch (e) { notes.push(file.name + ': ' + e.message); }
+  }
+  $('pdfUpload').disabled = false;
+  await afterAssign(wasDirty, notes);
+});
+
+$('pdfRematch').addEventListener('click', async () => {
+  const wasDirty = dirty;
+  const notes = [];
+  $('pdfRematch').disabled = true;
+  for (const f of pdfLibrary()) {
+    try {
+      const r = await api('files/' + f.id + '/match', { method: 'POST' });
+      notes.push(matchNote(f.name, r.readable, assignPdf(f.id, r.matches)));
+    } catch (e) { notes.push(f.name + ': ' + e.message); }
+  }
+  $('pdfRematch').disabled = false;
+  await afterAssign(wasDirty, notes);
+});
 
 // Satu pemilih berkas untuk semua tombol unggah.
 let onPicked = null;
@@ -255,7 +366,7 @@ let focusProduct = () => {};
 
 function renderProducts() {
   const list = profile.products;
-  const pdfs = [...new Set(list.map((p) => p.pdf).filter(Boolean))].map(fileOf).filter(Boolean);
+  const pdfs = pdfLibrary();
   const ph = [T('mis. GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('mis. Rp 450.000', 'e.g. Rp 450.000'), T('mis. ada / 12 unit', 'e.g. ada / 12 unit')];
 
   const body = el('tbody', {}, ...list.map((p, ri) => {
@@ -286,7 +397,7 @@ function renderProducts() {
     const cur = fileOf(p.pdf);
     if (cur) {
       pdf = el('div', { className: 'pdf' }, el('a', { href: mediaUrl(p.pdf), target: '_blank', rel: 'noopener', textContent: '📄 ' + cur.name, title: cur.name }),
-        xBtn(T('Lepas PDF', 'Remove PDF'), () => { p.pdf = ''; touchProducts(); renderProducts(); }));
+        xBtn(T('Lepas PDF', 'Remove PDF'), () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); }));
     } else {
       const sel = el('select', {}, el('option', { value: '', textContent: T('— tanpa PDF —', '— no PDF —') }),
         el('option', { value: '+', textContent: T('⬆ Unggah PDF…', '⬆ Upload PDF…') }),
@@ -297,13 +408,18 @@ function renderProducts() {
           return pick('application/pdf', (f) => {
             if (!f.file.endsWith('.pdf')) return toast(T('Berkas itu bukan PDF.', 'That file is not a PDF.'), true);
             p.pdf = f.id;
+            // Produk lain yang disebut di PDF yang sama ikut dipasangkan.
+            const r = assignPdf(f.id, f.matches);
             touchProducts();
             renderProducts();
+            renderPdfs();
+            if (r.set) toast(matchNote(f.name, true, { set: r.set + 1, taken: r.taken }));
           });
         }
         p.pdf = sel.value;
         touchProducts();
         renderProducts();
+        renderPdfs();
       });
       pdf = el('div', { className: 'pdf' }, sel);
     }
@@ -631,6 +747,7 @@ function renderAll() {
   renderFields();
   renderQuestions();
   renderProducts();
+  renderPdfs();
   renderCatalog();
   renderStatus();
   if (!chat.length) $('chat').replaceChildren(chatHint());
@@ -650,7 +767,7 @@ $('lang').addEventListener('click', (e) => {
   renderAll();
 });
 
-$('save').addEventListener('click', async () => {
+async function save(quiet = false) {
   $('save').disabled = true;
   try {
     const body = {};
@@ -659,12 +776,13 @@ $('save').addEventListener('click', async () => {
     profile = r.profile;
     setDirty(false);
     renderAll();
-    toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.'));
+    if (!quiet) toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.'));
   } catch (e) {
     toast(e.message, true);
     setDirty(true);
   }
-});
+}
+$('save').addEventListener('click', () => void save());
 
 window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
 

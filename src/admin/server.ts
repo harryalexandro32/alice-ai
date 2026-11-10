@@ -25,9 +25,11 @@ import { join } from 'node:path';
 
 import { checkReply, llmBrain, type Brain } from '../brain';
 import { biz, editableView, fileById, referencedFiles, validate } from '../business';
+import { isPdf } from '../business/catalog';
 import type { MediaFile } from '../business/types';
 import { cfg } from '../config';
 import { llmEnabled } from '../llm/provider';
+import { matchProducts, pdfText } from './pdftext';
 import type { AdminStore } from './stores';
 
 const SESSION_MS = 12 * 3_600_000;
@@ -199,12 +201,13 @@ export function createAdminHandler(store: AdminStore) {
       }
       await store.save(changes);
       console.log(`[dashboard] profil disimpan: ${Object.keys(changes).join(', ')}`);
-      // Berkas yang tidak lagi dipakai produk mana pun (atau logo) dibuang.
+      // Foto yang tidak lagi dipakai produk mana pun (atau logo) dibuang. PDF
+      // tidak: ia punya halamannya sendiri dan dihapus dari sana.
       if ('products' in changes || 'logo' in changes) {
         const used = referencedFiles();
-        const orphans = biz.files.filter((f) => !used.has(f.id));
+        const orphans = biz.files.filter((f) => !isPdf(f) && !used.has(f.id));
         if (orphans.length) {
-          await store.save({ files: biz.files.filter((f) => used.has(f.id)) });
+          await store.save({ files: biz.files.filter((f) => !orphans.includes(f)) });
           for (const f of orphans) await store.delPhoto(f.file).catch(() => {});
           console.log(`[dashboard] ${orphans.length} berkas tak terpakai dihapus`);
         }
@@ -258,7 +261,34 @@ export function createAdminHandler(store: AdminStore) {
       await store.putPhoto(file.file, data, TYPES[ext] as string);
       await store.save({ files: [...biz.files, file] });
       console.log(`[dashboard] berkas ditambah: ${file.name}`);
-      return json(200, { ok: true, file, files: biz.files });
+      // Satu PDF sering memuat banyak produk: beri tahu dashboard produk mana
+      // yang disebut di dalamnya, supaya bisa langsung dipasangkan.
+      const text = ext === 'pdf' ? await pdfText(data) : '';
+      return json(200, {
+        ok: true, file, files: biz.files,
+        ...(ext === 'pdf' ? { readable: Boolean(text), matches: matchProducts(text, biz.products.map((x) => x.name)) } : {}),
+      });
+    }
+
+    const one = path.match(/^\/admin\/api\/files\/(d[0-9a-f]{8})(\/match)?$/);
+    if (one) {
+      const f = fileById(one[1] as string);
+      if (!f) return json(404, { error: 'PDF tidak ditemukan.' });
+      // Cocokkan ulang dengan daftar produk yang sekarang (mis. setelah produk ditambah).
+      if (one[2] && method === 'POST') {
+        const data = await store.getPhoto(f.file);
+        const text = data ? await pdfText(data) : '';
+        return json(200, { ok: true, readable: Boolean(text), matches: matchProducts(text, biz.products.map((x) => x.name)) });
+      }
+      if (!one[2] && method === 'DELETE') {
+        await store.save({
+          files: biz.files.filter((x) => x.id !== f.id),
+          products: biz.products.map((x) => (x.pdf === f.id ? { ...x, pdf: '' } : x)),
+        });
+        await store.delPhoto(f.file).catch(() => {});
+        console.log(`[dashboard] PDF dihapus: ${f.name}`);
+        return json(200, { ok: true, profile: editableView() });
+      }
     }
 
     // Berkas unggahan: hanya yang terdaftar di profil, jadi tidak ada jalan keluar folder.
