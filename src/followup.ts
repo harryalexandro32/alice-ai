@@ -10,7 +10,7 @@
 
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
-import { missingFields, type Sender } from './flow';
+import { contactName, missingFields, type Sender } from './flow';
 import { addMessage, followupCandidates, pausedUntil, updateContact } from './store';
 import { followupText } from './texts';
 
@@ -63,7 +63,7 @@ export async function runFollowups(send: Sender): Promise<number> {
       continue;
     }
 
-    const text = followupText(c.name, missingFields(c));
+    const text = followupText(contactName(c), missingFields(c));
     try {
       await send({ phone: c.phone, address: c.address }, text);
     } catch (e) {

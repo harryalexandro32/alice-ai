@@ -1,20 +1,23 @@
 /**
  * Alur percakapan: pesan masuk -> balasan keluar.
  *
- * Tidak tahu apa-apa soal WhatsApp. Yang mengirim adalah fungsi `send` yang
- * dipasang dari luar (Baileys, Cloud API, CLI latihan, atau tes), jadi pindah
- * jalur WhatsApp tidak menyentuh file ini.
+ * Tidak tahu apa-apa soal WhatsApp maupun soal bisnisnya. Yang mengirim adalah
+ * fungsi `send` yang dipasang dari luar (Baileys, Cloud API, CLI latihan, atau
+ * tes); salam, data yang dikumpulkan, dan pengetahuannya datang dari profil
+ * bisnis.
  */
 
 import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
+import { biz } from './business';
+import type { LeadField } from './business/types';
 import { cfg, HOUR } from './config';
 import { now } from './clock';
-import { deliverOutbox } from './sinks/outbox';
+import { deliverOutbox, type LeadPayload } from './sinks/outbox';
 import {
   addMessage, contactByAddress, countInboundSince, createContact, getContact, outboxAdd,
   pausedUntil, recentMessages, setPause, updateContact, type Contact,
 } from './store';
-import { askMissing, GREETING, HANDOFF, NON_TEXT, type LeadField } from './texts';
+import { askMissing, HANDOFF, NON_TEXT } from './texts';
 
 export type Sender = (to: { phone: string; address: string }, text: string) => Promise<void>;
 
@@ -36,8 +39,14 @@ export interface Inbound {
   waId?: string | null;
 }
 
-export function missingFields(c: Pick<Contact, 'name' | 'city' | 'need'>): LeadField[] {
-  return (['name', 'city', 'need'] as const).filter((f) => !c[f]);
+export function missingFields(c: Pick<Contact, 'lead'>): LeadField[] {
+  return biz.leadFields.filter((f) => !c.lead[f.key]);
+}
+
+/** Nama orangnya, kalau profil punya field nama dan sudah terisi. */
+export function contactName(c: Pick<Contact, 'lead'>): string | null {
+  const f = biz.leadFields.find((x) => x.isName);
+  return (f && c.lead[f.key]) || null;
 }
 
 /** Sapaan kosong: cukup dibalas salam, tidak perlu memanggil LLM. */
@@ -56,16 +65,14 @@ async function reply(c: Contact, text: string): Promise<Contact> {
   return updateContact(c.phone, { last_dir: 'out', last_out_text: text });
 }
 
-function leadPayload(c: Contact, kind: string, lastMessage: string) {
+function leadPayload(c: Contact, kind: string, lastMessage: string): LeadPayload {
   return {
-    lastMessage: lastMessage.slice(0, 300),
     kind,
     at: now(),
     phone: c.phone,
-    name: c.name,
-    city: c.city,
-    need: c.need,
-    wantsPrice: Boolean(c.wants_price),
+    fields: biz.leadFields.map((f) => [f.label, c.lead[f.key] ?? null]),
+    needsSales: Boolean(c.needs_sales),
+    lastMessage: lastMessage.slice(0, 300),
   };
 }
 
@@ -80,8 +87,8 @@ function awaitsCustomer(c: Contact): boolean {
 }
 
 export async function handleInbound(m: Inbound): Promise<void> {
-  // Nomor sales itu penerima notifikasi, bukan calon pembeli.
-  if (cfg.salesNumbers.includes(m.phone)) return;
+  // Nomor sales itu penerima notifikasi, bukan calon pelanggan.
+  if (cfg.salesNumber && cfg.salesNumber === m.phone) return;
 
   const at = now();
   const existing = getContact(m.phone);
@@ -110,7 +117,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
   }
 
   const isNew = !existing;
-  if (isNew) c = await reply(c, GREETING);
+  if (isNew) c = await reply(c, biz.greeting);
 
   const text = m.text?.trim();
   if (!text) {
@@ -125,12 +132,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
     const history = isNew ? [] : recentMessages(c.phone, 12).slice(0, -1);
     let result: BrainResult | null = null;
     try {
-      result = await brain({
-        text,
-        known: { name: c.name, city: c.city, need: c.need },
-        history,
-        justGreeted: isNew,
-      });
+      result = await brain({ text, known: c.lead, history, justGreeted: isNew });
     } catch (e) {
       console.error(`[alur] otak gagal: ${e instanceof Error ? e.message : e}`);
     }
@@ -138,15 +140,13 @@ export async function handleInbound(m: Inbound): Promise<void> {
     // Data lead: nilai baru menggantikan, kosong tidak pernah menghapus.
     if (result) {
       c = updateContact(c.phone, {
-        name: result.name ?? c.name,
-        city: result.city ?? c.city,
-        need: result.need ?? c.need,
-        wants_price: c.wants_price || result.intent === 'price' ? 1 : 0,
+        lead: { ...c.lead, ...result.fields },
+        needs_sales: c.needs_sales || result.intent === 'handoff' ? 1 : 0,
       });
     }
 
     let out = result?.reply ?? null;
-    let handoff = result?.intent === 'price' || result?.intent === 'human';
+    let handoff = result?.intent === 'handoff' || result?.intent === 'human';
 
     // Yang dihitung "ditanyakan pelanggan": pesan ini dan pesan-pesannya yang baru lalu.
     const asked = [text, ...history.filter((t) => t.dir === 'in').map((t) => t.text)].join('\n');
@@ -156,7 +156,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
       out = null;
     }
     if (!out) {
-      // Tanpa jawaban dari LLM: minta data yang kurang, atau serahkan ke sales.
+      // Tanpa jawaban dari LLM: minta data yang kurang, atau serahkan ke manusia.
       const missing = missingFields(c);
       if (missing.length && !isNew) {
         out = askMissing(missing);
@@ -169,8 +169,8 @@ export async function handleInbound(m: Inbound): Promise<void> {
     }
     if (out) c = await reply(c, out);
 
-    // Lead lengkap -> kabari sales sekali. Minta harga/orang sebelum lengkap ->
-    // kabari juga sekali, dengan data seadanya, supaya tidak ada yang menunggu.
+    // Lead lengkap -> kabari sekali. Butuh manusia sebelum lengkap -> kabari
+    // juga sekali, dengan data seadanya, supaya tidak ada yang menunggu.
     const complete = missingFields(c).length === 0;
     if (complete && !c.lead_sent_at) {
       const p = leadPayload(c, 'Lead lengkap', text);
@@ -178,7 +178,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
       outboxAdd('sheet', p, at);
       c = updateContact(c.phone, { lead_sent_at: at });
     } else if (handoff && !c.handoff_sent_at) {
-      const p = leadPayload(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Perlu dibantu sales', text);
+      const p = leadPayload(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Perlu dibantu', text);
       outboxAdd('sales', p, at);
       outboxAdd('sheet', p, at);
       c = updateContact(c.phone, { handoff_sent_at: at });

@@ -11,40 +11,45 @@
 
 import { createInterface } from 'node:readline';
 
+import { biz } from './business';
 import { advance, localStamp, now } from './clock';
 import { cfg, HOUR, MINUTE, normPhone } from './config';
 import { handleHumanReply, handleInbound, setSender, type Sender } from './flow';
 import { runFollowups } from './followup';
 import { llmEnabled, llmUsageToday } from './llm/provider';
-import { deliverOutbox, setOutboxSender, setSheetWriter } from './sinks/outbox';
+import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
 import { getContact, openDb } from './store';
-
-const SALES = '+620000000001';
 
 async function main() {
   openDb(':memory:');
-  cfg.salesNumbers = [SALES];
 
-  const send: Sender = async (to, text) => {
-    const who = to.phone === SALES ? '📣 KE SALES' : '🤖 BOT';
-    console.log(`\n${who}:\n${text}\n`);
-  };
+  const send: Sender = async (_to, text) => console.log(`\n🤖 BOT:\n${text}\n`);
   setSender(send);
-  setOutboxSender(send);
+  setSalesNotifier(async (text) => {
+    console.log(`\n📣 KE SALES:\n${text}\n`);
+    return true;
+  });
   setSheetWriter(async (row) => console.log(`\n📊 BARIS SHEET: ${row.join(' | ')}\n`));
 
   let phone = '+6281200000001';
-  console.log('Mode latihan bot GFAN. Ketik seperti calon pembeli. /keluar untuk selesai.');
+  console.log(`Mode latihan bot ${biz.brand}. Ketik seperti calon pelanggan. /keluar untuk selesai.`);
   console.log(
     llmEnabled()
       ? `LLM: ${cfg.llmModel}`
-      : 'LLM MATI (LLM_API_KEY kosong): salam, data lead, dan follow-up tetap jalan; tanya-jawab katalog dioper ke sales.'
+      : 'LLM MATI (LLM_API_KEY kosong): salam, data lead, dan follow-up tetap jalan; pertanyaan dioper ke manusia.'
   );
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const prompt = () => rl.setPrompt(`[${localStamp(now())}] ${phone} > `);
+  // Masukan lewat pipa bisa habis selagi LLM masih menjawab; baris yang sudah
+  // terbaca tetap diproses, tapi prompt tidak boleh ditulis ke rl yang tertutup.
+  let closed = false;
+  rl.on('close', () => (closed = true));
+  const prompt = () => {
+    if (closed) return;
+    rl.setPrompt(`[${localStamp(now())}] ${phone} > `);
+    rl.prompt();
+  };
   prompt();
-  rl.prompt();
 
   for await (const raw of rl) {
     const line = raw.trim();
@@ -65,11 +70,11 @@ async function main() {
     } else if (line.startsWith('/nomor')) {
       phone = normPhone(line.slice(6)) ?? phone;
     } else if (line) {
+      console.log(`\n👤 ${line}`);
       await handleInbound({ phone, address: phone, text: line });
       await deliverOutbox();
     }
     prompt();
-    rl.prompt();
   }
   rl.close();
 }

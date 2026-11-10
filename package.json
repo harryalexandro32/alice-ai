@@ -7,7 +7,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "chat": "tsx src/cli.ts",
-    "test": "tsx src/catalog.test.ts && tsx src/provider.test.ts && tsx src/flow.test.ts",
+    "test": "tsx src/business/gfan/catalog.test.ts && tsx src/provider.test.ts && tsx src/transport/cloud.test.ts && tsx src/flow.test.ts",
     "eval": "tsx src/eval.ts",
     "typecheck": "tsc --noEmit"
   },

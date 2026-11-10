@@ -60,7 +60,7 @@ async function accessToken(): Promise<string> {
 }
 
 export async function appendSheetRow(row: string[]): Promise<void> {
-  const range = encodeURIComponent(`${cfg.sheetTab}!A:H`);
+  const range = encodeURIComponent(`${cfg.sheetTab}!A1`);
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(cfg.sheetId)}` +
     `/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;

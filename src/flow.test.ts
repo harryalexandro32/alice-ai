@@ -5,35 +5,40 @@
 
 import assert from 'node:assert/strict';
 
+import { makeSalesNotifier } from './app';
 import { checkReply, parseBrain, type BrainInput, type BrainResult } from './brain';
+import { biz } from './business';
 import { advance, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
 import { handleHumanReply, handleInbound, setBrain, setSender } from './flow';
 import { followupDueAt, runFollowups } from './followup';
-import { deliverOutbox, setOutboxSender, setSheetWriter } from './sinks/outbox';
+import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
 import { getContact, openDb } from './store';
-import { GREETING, HANDOFF, NON_TEXT } from './texts';
+import { HANDOFF, NON_TEXT } from './texts';
+import type { Transport } from './transport/types';
 
+const GREETING = biz.greeting;
 const A = '+6281211110001';
 const SALES = '+6281299990001';
 /** Selasa 10 Nov 2026, 10:00 WIB. */
 const T0 = Date.UTC(2026, 10, 10, 3, 0);
 
-let sent: { phone: string; text: string }[] = [];
+let sent: string[] = [];
+let sales: string[] = [];
 let rows: string[][] = [];
 let brainCalls: BrainInput[] = [];
 let next: (i: BrainInput) => BrainResult | null = () => null;
 let sheetFails = 0;
 
-const R = (reply: string, extra: Partial<BrainResult> = {}): BrainResult => ({
-  reply, name: null, city: null, need: null, intent: 'catalog', ...extra,
+const R = (reply: string, fields: Record<string, string> = {}, intent: BrainResult['intent'] = 'info'): BrainResult => ({
+  reply, fields, intent,
 });
 
 function fresh(): void {
   openDb(':memory:');
   setNow(T0);
   cfg.tz = 'Asia/Jakarta';
-  cfg.salesNumbers = [SALES];
+  cfg.salesNumber = SALES;
   cfg.followupAfterHours = 23;
   cfg.followupStartHour = 8;
   cfg.followupEndHour = 20;
@@ -42,15 +47,16 @@ function fresh(): void {
   cfg.humanPauseHours = 12;
   cfg.maxInboundPerNumber = 40;
   sent = [];
+  sales = [];
   rows = [];
   brainCalls = [];
   sheetFails = 0;
   next = () => R('Baik.');
-  const send = async (to: { phone: string }, text: string) => {
-    sent.push({ phone: to.phone, text });
-  };
-  setSender(send);
-  setOutboxSender(send);
+  setSender(async (_to, text) => void sent.push(text));
+  setSalesNotifier(async (text) => {
+    sales.push(text);
+    return true;
+  });
   setSheetWriter(async (row) => {
     if (sheetFails > 0) {
       sheetFails -= 1;
@@ -69,18 +75,28 @@ async function say(text: string | null, phone = A, waId?: string): Promise<void>
   await deliverOutbox();
 }
 
-const toCustomer = () => sent.filter((s) => s.phone !== SALES).map((s) => s.text);
-const toSales = () => sent.filter((s) => s.phone === SALES).map((s) => s.text);
-const follow = () => runFollowups(async (to, text) => void sent.push({ phone: to.phone, text }));
+const follow = () => runFollowups(async (_to, text) => void sent.push(text));
+
+const fakeTransport = (name: string, self: string | null, canMessageSelf: boolean) => {
+  const out: { phone: string; text: string; notify?: boolean }[] = [];
+  const t: Transport = {
+    name,
+    canMessageSelf,
+    selfPhone: () => self,
+    start: async () => {},
+    send: async (to, text, opts) => void out.push({ phone: to.phone, text, notify: opts?.notify }),
+  };
+  return { t, out };
+};
 
 const tests: [string, () => Promise<void>][] = [
   ['salam hanya sekali, dan sapaan kosong tidak memanggil LLM', async () => {
     await say('Halo');
-    assert.deepEqual(toCustomer(), [GREETING]);
+    assert.deepEqual(sent, [GREETING]);
     assert.equal(brainCalls.length, 0);
     await say('mau tanya exhaust fan');
-    assert.equal(toCustomer().length, 2);
-    assert.notEqual(toCustomer()[1], GREETING);
+    assert.equal(sent.length, 2);
+    assert.notEqual(sent[1], GREETING);
     assert.equal(brainCalls.length, 1);
     assert.equal(brainCalls[0]?.justGreeted, false);
   }],
@@ -88,7 +104,7 @@ const tests: [string, () => Promise<void>][] = [
   ['pesan pertama berupa pertanyaan: salam + jawaban', async () => {
     next = () => R('GFAF-40A berukuran 16 inci.');
     await say('exhaust 16 inci ada?');
-    assert.deepEqual(toCustomer(), [GREETING, 'GFAF-40A berukuran 16 inci.']);
+    assert.deepEqual(sent, [GREETING, 'GFAF-40A berukuran 16 inci.']);
     assert.equal(brainCalls[0]?.justGreeted, true);
     assert.deepEqual(brainCalls[0]?.history, []);
   }],
@@ -97,68 +113,87 @@ const tests: [string, () => Promise<void>][] = [
     await say('halo');
     next = () => R('Baik Pak Budi, di kota mana?', { name: 'Budi' });
     await say('saya Budi');
-    assert.equal(toSales().length, 0);
+    assert.equal(sales.length, 0);
     next = () => R('Siap. Butuhnya untuk apa?', { city: 'Surabaya' });
     await say('di Surabaya');
-    assert.equal(getContact(A)?.name, 'Budi', 'nama tidak boleh terhapus oleh null');
+    assert.equal(getContact(A)?.lead.name, 'Budi', 'nama tidak boleh terhapus');
+    assert.deepEqual(brainCalls.at(-1)?.known, { name: 'Budi' });
     next = () => R('Baik, kami catat.', { need: 'exhaust fan gudang' });
     await say('butuh exhaust buat gudang');
-    assert.equal(toSales().length, 1);
-    assert.match(toSales()[0] ?? '', /Lead lengkap/);
-    assert.match(toSales()[0] ?? '', /Budi[\s\S]*Surabaya[\s\S]*exhaust fan gudang/);
-    assert.match(toSales()[0] ?? '', /wa\.me\/6281211110001/);
+    assert.equal(sales.length, 1);
+    assert.match(sales[0] ?? '', /Lead lengkap/);
+    assert.match(sales[0] ?? '', /Nama: Budi\nKota\/alamat: Surabaya\nKebutuhannya: exhaust fan gudang/);
+    assert.match(sales[0] ?? '', /wa\.me\/6281211110001/);
     assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0]?.slice(1, 6), ['Lead lengkap', A, 'Budi', 'Surabaya', 'exhaust fan gudang']);
+    assert.deepEqual(rows[0]?.slice(1), [
+      'Lead lengkap', A, 'Budi', 'Surabaya', 'exhaust fan gudang', '', 'butuh exhaust buat gudang',
+    ]);
     next = () => R('Sama-sama.', { need: 'exhaust fan gudang 16 inci' });
     await say('yang 16 inci ya');
-    assert.equal(toSales().length, 1, 'tidak dikabari dua kali');
+    assert.equal(sales.length, 1, 'tidak dikabari dua kali');
     assert.equal(rows.length, 1);
-    assert.equal(getContact(A)?.need, 'exhaust fan gudang 16 inci', 'koreksi menggantikan');
+    assert.equal(getContact(A)?.lead.need, 'exhaust fan gudang 16 inci', 'koreksi menggantikan');
   }],
 
   ['tanya harga sebelum data lengkap: sales dikabari sekali, lalu lead lengkap menyusul', async () => {
     await say('halo');
-    next = () => R('Untuk harga, tim sales kami yang akan menginfokan. Boleh tahu namanya?', { intent: 'price' });
+    next = () => R('Untuk harga, tim kami yang akan menginfokan. Boleh tahu namanya?', {}, 'handoff');
     await say('harga GFAF-40A berapa');
-    assert.equal(toSales().length, 1);
-    assert.match(toSales()[0] ?? '', /Perlu dibantu sales[\s\S]*menanyakan harga/);
+    assert.equal(sales.length, 1);
+    assert.match(sales[0] ?? '', /Perlu dibantu[\s\S]*menanyakan harga\/stok[\s\S]*harga GFAF-40A berapa/);
     await say('diskon ada?');
-    assert.equal(toSales().length, 1, 'serah-terima hanya sekali');
+    assert.equal(sales.length, 1, 'serah-terima hanya sekali');
     next = () => R('Terima kasih.', { name: 'Sari', city: 'Medan', need: 'GFAF-40A' });
     await say('Sari, Medan, mau GFAF-40A');
-    assert.equal(toSales().length, 2);
-    assert.match(toSales()[1] ?? '', /Lead lengkap[\s\S]*menanyakan harga/);
+    assert.equal(sales.length, 2);
+    assert.match(sales[1] ?? '', /Lead lengkap[\s\S]*menanyakan harga/);
   }],
 
   ['balasan yang menyebut harga atau model karangan dibuang', async () => {
     await say('halo');
     next = () => R('Harganya Rp 1.250.000 saja.');
     await say('harga?');
-    assert.ok(!toCustomer().some((t) => /Rp/.test(t)));
-    assert.match(toCustomer()[1] ?? '', /boleh diinfokan nama/);
-    assert.equal(toSales().length, 1, 'yang tidak terjawab diserahkan ke sales');
+    assert.ok(!sent.some((t) => /Rp/.test(t)));
+    assert.match(sent[1] ?? '', /boleh diinfokan nama/);
+    assert.equal(sales.length, 1, 'yang tidak terjawab diserahkan ke sales');
     next = () => R('Kami punya GFAF-90A ukuran 36 inci.');
     await say('ada yang 36 inci?');
-    assert.ok(!toCustomer().some((t) => /GFAF-90A/.test(t)));
+    assert.ok(!sent.some((t) => /GFAF-90A/.test(t)));
+  }],
+
+  ['model yang ditanyakan pelanggan boleh disangkal; karangan lain tetap dibuang', async () => {
+    await say('halo');
+    next = () => R('Mohon maaf, GZ-400 belum ada di katalog kami. Yang tersedia GZ-200, GZ-250 dan GZ-300.');
+    await say('ada jet fan gz 400 ga?');
+    assert.match(sent.at(-1) ?? '', /GZ-400 belum ada/);
+    next = () => R('Betul, yang itu belum ada. GZ-400 tidak kami sediakan.');
+    await say('yang itu beneran ga ada?');
+    assert.match(sent.at(-1) ?? '', /GZ-400 tidak kami sediakan/, 'kode dari pesan sebelumnya juga dihitung');
+    next = () => R('GZ-400 tidak ada, tapi kami punya GZ-500.');
+    await say('kalau gitu adanya apa?');
+    assert.ok(!sent.some((t) => /GZ-500/.test(t)), 'model yang tidak disebut pelanggan tetap dibuang');
+    assert.equal(checkReply('GZ-400 belum ada.', 'ada gz400?'), null);
+    assert.ok(checkReply('GZ-400 belum ada.', 'ada jet fan?'));
+    assert.ok(checkReply('GZ-400 harganya Rp 5.000.000', 'harga GZ-400?'), 'harga tetap dibuang');
   }],
 
   ['LLM mati: minta data yang kurang; kalau sudah lengkap, serahkan ke sales', async () => {
     await say('halo');
     next = () => null;
     await say('ada jet fan?');
-    assert.match(toCustomer()[1] ?? '', /nama, kota\/alamat dan kebutuhannya/);
+    assert.match(sent[1] ?? '', /nama, kota\/alamat dan kebutuhannya/);
     next = () => R('ok', { name: 'Adi', city: 'Solo', need: 'jet fan' });
     await say('Adi Solo jet fan');
     next = () => null;
     await say('yang GZ-300 berapa watt');
-    assert.equal(toCustomer().at(-1), HANDOFF);
+    assert.equal(sent.at(-1), HANDOFF);
   }],
 
   ['LLM mati dan pesan pertama berupa pertanyaan: cukup salam, sales dikabari', async () => {
     next = () => null;
     await say('ada inline fan 8 inci?');
-    assert.deepEqual(toCustomer(), [GREETING]);
-    assert.equal(toSales().length, 1);
+    assert.deepEqual(sent, [GREETING]);
+    assert.equal(sales.length, 1);
   }],
 
   ['follow-up di jam ke-23, sekali, dan menanyakan data yang kurang', async () => {
@@ -167,7 +202,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
     advance(1 * HOUR + MINUTE); // 09:01 besoknya
     assert.equal(await follow(), 1);
-    assert.match(toCustomer().at(-1) ?? '', /Menyambung chat sebelumnya[\s\S]*nama, kota\/alamat dan kebutuhannya/);
+    assert.match(sent.at(-1) ?? '', /Menyambung chat sebelumnya[\s\S]*nama, kota\/alamat dan kebutuhannya/);
     advance(HOUR);
     assert.equal(await follow(), 0, 'tidak dua kali untuk masa diam yang sama');
     advance(48 * HOUR);
@@ -186,7 +221,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
     advance(3 * HOUR + MINUTE); // 08:01
     assert.equal(await follow(), 1);
-    assert.match(toCustomer().at(-1) ?? '', /Halo Budi[\s\S]*kota\/alamat dan kebutuhannya/);
+    assert.match(sent.at(-1) ?? '', /Halo Budi[\s\S]*kota\/alamat dan kebutuhannya/);
   }],
 
   ['percakapan yang sudah selesai tidak dikejar', async () => {
@@ -201,7 +236,7 @@ const tests: [string, () => Promise<void>][] = [
     await say('Adi, Solo, butuh jet fan');
     advance(23 * HOUR + MINUTE);
     assert.equal(await follow(), 1);
-    assert.match(toCustomer().at(-1) ?? '', /Halo Adi[\s\S]*masih ada yang bisa kami bantu/);
+    assert.match(sent.at(-1) ?? '', /Halo Adi[\s\S]*masih ada yang bisa kami bantu/);
   }],
 
   ['batas follow-up seumur nomor', async () => {
@@ -218,15 +253,15 @@ const tests: [string, () => Promise<void>][] = [
   ['manusia membalas: bot diam, follow-up batal, lalu aktif lagi setelah jeda', async () => {
     await say('halo');
     handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
-    const before = toCustomer().length;
+    const before = sent.length;
     await say('oh iya bu, mau tanya exhaust');
-    assert.equal(toCustomer().length, before, 'bot tidak menyela');
+    assert.equal(sent.length, before, 'bot tidak menyela');
     assert.equal(brainCalls.length, 0);
     advance(23 * HOUR + MINUTE);
     assert.equal(await follow(), 0, 'follow-up batal');
     next = () => R('Ada, Pak.');
     await say('masih ada?');
-    assert.equal(toCustomer().at(-1), 'Ada, Pak.');
+    assert.equal(sent.at(-1), 'Ada, Pak.');
     assert.equal(brainCalls[0]?.history.some((h) => h.dir === 'human'), true);
   }],
 
@@ -240,13 +275,13 @@ const tests: [string, () => Promise<void>][] = [
   ['pesan ganda, nomor sales, dan pesan bukan teks', async () => {
     await say('halo', A, 'ID1');
     await say('halo', A, 'ID1');
-    assert.equal(toCustomer().length, 1, 'id yang sama tidak diproses dua kali');
+    assert.equal(sent.length, 1, 'id yang sama tidak diproses dua kali');
     await say('tes dari sales', SALES);
-    assert.equal(sent.filter((s) => s.phone === SALES).length, 0);
+    assert.equal(sent.length, 1);
     assert.equal(getContact(SALES), undefined);
     await say(null);
     await say(null);
-    assert.deepEqual(toCustomer().slice(1), [NON_TEXT], 'pemberitahuan tidak diulang');
+    assert.deepEqual(sent.slice(1), [NON_TEXT], 'pemberitahuan tidak diulang');
   }],
 
   ['lewat jatah harian: bot diam', async () => {
@@ -260,12 +295,41 @@ const tests: [string, () => Promise<void>][] = [
     next = () => R('Terima kasih 🙏', { name: 'Adi', city: 'Solo', need: 'jet fan' });
     await say('Adi, Solo, butuh jet fan');
     assert.equal(rows.length, 0);
-    assert.equal(toSales().length, 1);
+    assert.equal(sales.length, 1);
     await deliverOutbox();
     assert.equal(rows.length, 1);
     await deliverOutbox();
     assert.equal(rows.length, 1);
-    assert.equal(toSales().length, 1);
+    assert.equal(sales.length, 1);
+  }],
+
+  ['nomor sales = nomor bot: Baileys kirim ke diri sendiri, Cloud API melewatkan', async () => {
+    const BOT = '+6281255550000';
+    // Nomor sales diisi sama dengan nomor bot.
+    cfg.salesNumber = BOT;
+    const b = fakeTransport('baileys', BOT, true);
+    assert.equal(await makeSalesNotifier(b.t)('lead'), true);
+    assert.deepEqual(b.out, [{ phone: BOT, text: 'lead', notify: true }]);
+    const c = fakeTransport('cloud', BOT, false);
+    assert.equal(await makeSalesNotifier(c.t)('lead'), false, 'dilewat, bukan gagal');
+    assert.equal(c.out.length, 0);
+
+    // SALES_NUMBER=self: ikut nomor bot, siapa pun itu.
+    cfg.salesNumber = 'self';
+    const b2 = fakeTransport('baileys', BOT, true);
+    await makeSalesNotifier(b2.t)('lead');
+    assert.equal(b2.out[0]?.phone, BOT);
+    const b3 = fakeTransport('baileys', null, true);
+    await assert.rejects(makeSalesNotifier(b3.t)('lead'), /belum diketahui/, 'belum tersambung = coba lagi nanti');
+
+    // Nomor sales berbeda: dikirim biasa di kedua jalur.
+    cfg.salesNumber = SALES;
+    const c2 = fakeTransport('cloud', BOT, false);
+    assert.equal(await makeSalesNotifier(c2.t)('lead'), true);
+    assert.deepEqual(c2.out, [{ phone: SALES, text: 'lead', notify: true }]);
+
+    cfg.salesNumber = null;
+    assert.equal(await makeSalesNotifier(c2.t)('lead'), false);
   }],
 
   ['jadwal follow-up: jam tenang digeser, jendela 24 jam dihormati', async () => {
@@ -284,27 +348,14 @@ const tests: [string, () => Promise<void>][] = [
     }
   }],
 
-  ['model yang ditanyakan pelanggan boleh disangkal; karangan lain tetap dibuang', async () => {
-    await say('halo');
-    next = () => R('Mohon maaf, GZ-400 belum ada di katalog kami. Yang tersedia GZ-200, GZ-250 dan GZ-300.');
-    await say('ada jet fan gz 400 ga?');
-    assert.match(toCustomer().at(-1) ?? '', /GZ-400 belum ada/);
-    next = () => R('Betul, yang itu belum ada. GZ-400 tidak kami sediakan.');
-    await say('yang itu beneran ga ada?');
-    assert.match(toCustomer().at(-1) ?? '', /GZ-400 tidak kami sediakan/, 'kode dari pesan sebelumnya juga dihitung');
-    next = () => R('GZ-400 tidak ada, tapi kami punya GZ-500.');
-    await say('kalau gitu adanya apa?');
-    assert.ok(!toCustomer().some((t) => /GZ-500/.test(t)), 'model yang tidak disebut pelanggan tetap dibuang');
-    assert.equal(checkReply('GZ-400 belum ada.', 'ada gz400?'), null);
-    assert.ok(checkReply('GZ-400 belum ada.', 'ada jet fan?'));
-    assert.ok(checkReply('GZ-400 harganya Rp 5.000.000', 'harga GZ-400?'), 'harga tetap dibuang');
-  }],
-
   ['bentuk keluaran LLM dan pagar balasan', async () => {
     assert.equal(parseBrain('bukan json'), null);
     assert.equal(parseBrain('{"reply": ""}'), null);
-    const p = parseBrain('```json\n{"reply":"Halo","name":"null","city":" Bandung ","need":null,"intent":"hapus semua"}\n```');
-    assert.deepEqual(p, { reply: 'Halo', name: null, city: 'Bandung', need: null, intent: 'other' });
+    const p = parseBrain(
+      '```json\n{"reply":"Halo","fields":{"name":"null","city":" Bandung ","need":null,"admin":"ya"},"intent":"hapus semua"}\n```'
+    );
+    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other' });
+    assert.deepEqual(parseBrain('{"reply":"Hai"}'), { reply: 'Hai', fields: {}, intent: 'other' });
     assert.equal(checkReply('GFAF-40A: 130 W, 2880 m³/h, 62 dB.'), null);
     assert.equal(checkReply('Tegangan 220/380 V, berat 8.5 kg.'), null);
     assert.ok(checkReply('Sekitar Rp750.000'));

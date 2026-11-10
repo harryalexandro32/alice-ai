@@ -3,6 +3,9 @@
  *
  * Follow-up dan "sudah pernah disapa" harus selamat dari restart, jadi tidak
  * ada satu pun keadaan percakapan yang cuma hidup di memori.
+ *
+ * Data lead disimpan sebagai JSON (`lead`), bukan kolom tetap: field apa yang
+ * dikumpulkan ditentukan profil bisnis, bukan skema.
  */
 
 import { mkdirSync } from 'node:fs';
@@ -15,12 +18,11 @@ export type FollowupState = 'idle' | 'pending';
 export interface Contact {
   /** Nomor "+62…", atau "lid:…" kalau WhatsApp tidak memberi nomornya. */
   phone: string;
-  /** Alamat balasan milik transport (JID di Baileys). */
+  /** Alamat balasan milik transport (JID di Baileys, nomor di Cloud API). */
   address: string;
-  name: string | null;
-  city: string | null;
-  need: string | null;
-  wants_price: number;
+  lead: Record<string, string>;
+  /** Pernah menanyakan hal yang harus dijawab manusia (harga, stok, …). */
+  needs_sales: number;
   first_seen_at: number;
   last_inbound_at: number;
   last_dir: Dir;
@@ -47,8 +49,8 @@ export function openDb(path: string): void {
     CREATE TABLE IF NOT EXISTS contacts (
       phone TEXT PRIMARY KEY,
       address TEXT NOT NULL,
-      name TEXT, city TEXT, need TEXT,
-      wants_price INTEGER NOT NULL DEFAULT 0,
+      lead TEXT NOT NULL DEFAULT '{}',
+      needs_sales INTEGER NOT NULL DEFAULT 0,
       first_seen_at INTEGER NOT NULL,
       last_inbound_at INTEGER NOT NULL,
       last_dir TEXT NOT NULL DEFAULT 'in',
@@ -83,14 +85,25 @@ export function openDb(path: string): void {
   `);
 }
 
+type Row = Omit<Contact, 'lead'> & { lead: string };
+
+function toContact(r: Row | undefined): Contact | undefined {
+  if (!r) return undefined;
+  let lead: Record<string, string> = {};
+  try {
+    lead = JSON.parse(r.lead) as Record<string, string>;
+  } catch {
+    // baris rusak diperlakukan sebagai belum ada data, bukan bikin bot mati
+  }
+  return { ...r, lead };
+}
+
 export function getContact(phone: string): Contact | undefined {
-  return db.prepare('SELECT * FROM contacts WHERE phone = ?').get(phone) as Contact | undefined;
+  return toContact(db.prepare('SELECT * FROM contacts WHERE phone = ?').get(phone) as Row | undefined);
 }
 
 export function contactByAddress(address: string): Contact | undefined {
-  return db.prepare('SELECT * FROM contacts WHERE address = ?').get(address) as
-    | Contact
-    | undefined;
+  return toContact(db.prepare('SELECT * FROM contacts WHERE address = ?').get(address) as Row | undefined);
 }
 
 export function createContact(phone: string, address: string, at: number): Contact {
@@ -101,15 +114,18 @@ export function createContact(phone: string, address: string, at: number): Conta
 }
 
 const UPDATABLE = new Set<keyof Contact>([
-  'address', 'name', 'city', 'need', 'wants_price', 'last_inbound_at', 'last_dir',
-  'last_out_text', 'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at',
+  'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
+  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at',
 ]);
 
 export function updateContact(phone: string, patch: Partial<Contact>): Contact {
   const keys = (Object.keys(patch) as (keyof Contact)[]).filter((k) => UPDATABLE.has(k));
   if (keys.length) {
     const sql = `UPDATE contacts SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE phone = ?`;
-    db.prepare(sql).run(...keys.map((k) => patch[k] as string | number | null), phone);
+    const values = keys.map((k) =>
+      k === 'lead' ? JSON.stringify(patch.lead) : (patch[k] as string | number | null)
+    );
+    db.prepare(sql).run(...values, phone);
   }
   return getContact(phone) as Contact;
 }
@@ -150,9 +166,10 @@ export function pausedUntil(address: string): number {
 }
 
 export function followupCandidates(): Contact[] {
-  return db
+  const rows = db
     .prepare("SELECT * FROM contacts WHERE followup_state = 'pending' AND last_dir = 'out'")
-    .all() as unknown as Contact[];
+    .all() as unknown as Row[];
+  return rows.map((r) => toContact(r) as Contact);
 }
 
 export function outboxAdd(kind: OutboxRow['kind'], payload: unknown, at: number): void {

@@ -35,6 +35,7 @@ let generation = 0;
 let retryDelayMs = 2_000;
 let lastSentAt = 0;
 let sendChain: Promise<void> = Promise.resolve();
+let selfNumber: string | null = null;
 
 /** Id pesan yang dikirim bot sendiri, buat membedakannya dari balasan manusia. */
 const sentIds = new Set<string>();
@@ -110,6 +111,7 @@ async function connect(): Promise<void> {
 
     if (connection === 'open') {
       retryDelayMs = 2_000;
+      selfNumber = jidToE164(s.user?.id);
       console.log(`[wa] tersambung sebagai ${s.user?.id ?? '?'} — SIAP`);
     }
 
@@ -221,6 +223,10 @@ async function sendNow(jid: string, text: string): Promise<void> {
 }
 
 export const baileysTransport: Transport = {
+  name: 'baileys',
+  // Chat "pesan ke diri sendiri": notifikasi lead muncul di nomor bot itu sendiri.
+  canMessageSelf: true,
+  selfPhone: () => selfNumber,
   async start(h) {
     handlers = h;
     await connect();

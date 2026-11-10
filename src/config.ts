@@ -6,6 +6,7 @@
 import 'dotenv/config';
 
 const str = (k: string, d = ''): string => process.env[k]?.trim() || d;
+const has = (k: string): boolean => Boolean(process.env[k]?.trim());
 const num = (k: string, d: number): number => {
   const raw = process.env[k]?.trim();
   const n = Number(raw);
@@ -19,9 +20,24 @@ export function normPhone(s: string): string | null {
   return d.length >= 8 && d.length <= 15 ? `+${d}` : null;
 }
 
+const business = str('BUSINESS', 'gfan');
+const transport = str('TRANSPORT', 'baileys').toLowerCase() === 'cloud' ? 'cloud' : 'baileys';
+
+/**
+ * Satu nomor sales. "self" = nomor bot itu sendiri (sales membalas dari
+ * aplikasi WhatsApp di nomor yang sama). Kosong = tanpa notifikasi WA.
+ */
+function salesNumber(): string | null {
+  const raw = str('SALES_NUMBER');
+  if (!raw) return null;
+  return raw.toLowerCase() === 'self' ? 'self' : normPhone(raw);
+}
+
 export const cfg = {
+  business,
+  transport: transport as 'baileys' | 'cloud',
   tz: str('BOT_TZ', 'Asia/Jakarta'),
-  dbPath: str('DB_PATH', './data/gfan.db'),
+  dbPath: str('DB_PATH', `./data/${business}.db`),
 
   llmApiKey: str('LLM_API_KEY'),
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),
@@ -31,15 +47,14 @@ export const cfg = {
   followupAfterHours: num('FOLLOWUP_AFTER_HOURS', 23),
   followupStartHour: num('FOLLOWUP_START_HOUR', 8),
   followupEndHour: num('FOLLOWUP_END_HOUR', 20),
-  followupMaxHours: num('FOLLOWUP_MAX_HOURS', 0),
+  // Cloud API menolak teks bebas di luar 24 jam sejak pesan terakhir pelanggan,
+  // jadi di sana batasnya otomatis 24. Baileys tidak punya jendela itu.
+  followupMaxHours: has('FOLLOWUP_MAX_HOURS') ? num('FOLLOWUP_MAX_HOURS', 0) : transport === 'cloud' ? 24 : 0,
   followupMaxTotal: num('FOLLOWUP_MAX_TOTAL', 2),
 
   humanPauseHours: num('HUMAN_PAUSE_HOURS', 12),
 
-  salesNumbers: str('SALES_NUMBERS')
-    .split(',')
-    .map((s) => normPhone(s))
-    .filter((s): s is string => Boolean(s)),
+  salesNumber: salesNumber(),
   sheetId: str('SHEET_ID'),
   sheetTab: str('SHEET_TAB', 'Leads'),
   googleCredentials: str('GOOGLE_CREDENTIALS', './google-service-account.json'),
@@ -47,8 +62,19 @@ export const cfg = {
   maxInboundPerNumber: num('MAX_INBOUND_PER_NUMBER', 40),
   debounceMs: num('DEBOUNCE_MS', 4000),
 
+  // Baileys
   waAuthDir: str('WA_AUTH_DIR', './auth'),
   waPairingNumber: str('WA_PAIRING_NUMBER'),
+
+  // Cloud API resmi (atau BSP yang meneruskan format yang sama)
+  waApiBase: str('WA_API_BASE', 'https://graph.facebook.com/v23.0').replace(/\/+$/, ''),
+  waPhoneNumberId: str('WA_PHONE_NUMBER_ID'),
+  waToken: str('WA_TOKEN'),
+  waAppSecret: str('WA_APP_SECRET'),
+  waVerifyToken: str('WA_VERIFY_TOKEN'),
+  waLeadTemplate: str('WA_LEAD_TEMPLATE'),
+  waLeadTemplateLang: str('WA_LEAD_TEMPLATE_LANG', 'id'),
+  port: num('PORT', 3000),
 };
 
 export const HOUR = 3_600_000;

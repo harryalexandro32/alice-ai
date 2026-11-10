@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 
-import { catalogText, MODEL_CODES, SERIES, unknownModels } from './catalog/gfan';
+import { catalogText, MODEL_CODES, SERIES, unknownModels } from './catalog';
 
 const count = (id: string) =>
   new Set(SERIES.find((s) => s.id === id)?.tables.flatMap((t) => t.rows.map((r) => r[0]))).size;

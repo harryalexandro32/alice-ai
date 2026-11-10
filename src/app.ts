@@ -4,8 +4,8 @@
  * Dua hal yang diurus di sini karena keduanya soal cara orang mengetik di
  * WhatsApp, bukan soal isi percakapan:
  *
- *   - Pesan beruntun digabung. Orang mengirim "halo" / "mau tanya" / "exhaust
- *     16 inci ada?" sebagai tiga pesan; dibalas tiga kali itu spam.
+ *   - Pesan beruntun digabung. Orang mengirim "halo" / "mau tanya" / "yang 16
+ *     inci ada?" sebagai tiga pesan; dibalas tiga kali itu spam.
  *   - Satu nomor diproses berurutan, supaya dua pesan yang hampir bersamaan
  *     tidak menghasilkan dua salam.
  */
@@ -13,9 +13,44 @@
 import { cfg, MINUTE } from './config';
 import { handleHumanReply, handleInbound, setSender } from './flow';
 import { runFollowups } from './followup';
-import { deliverOutbox, setOutboxSender } from './sinks/outbox';
+import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
 import { openDb } from './store';
 import type { Transport, TransportInbound } from './transport/types';
+
+/**
+ * Ke mana ringkasan lead dikirim.
+ *
+ * Nomor sales boleh nomor bot itu sendiri (SALES_NUMBER=self, atau diisi nomor
+ * yang sama): sales membalas pelanggan dari aplikasi WhatsApp di nomor itu.
+ * Baileys bisa mengirim ke chat "diri sendiri". Cloud API tidak bisa — di sana
+ * notifikasinya dilewat, dan catatan lead-nya ada di Google Sheet serta di
+ * percakapan itu sendiri, yang memang tampil di aplikasi sales.
+ */
+export function makeSalesNotifier(transport: Transport): SalesNotifier {
+  let warned = false;
+  return async (text) => {
+    if (!cfg.salesNumber) {
+      console.log('[lead] SALES_NUMBER kosong, notifikasi WA dilewat');
+      return false;
+    }
+    const self = transport.selfPhone();
+    const target = cfg.salesNumber === 'self' ? self : cfg.salesNumber;
+    if (!target) throw new Error('nomor bot belum diketahui (belum tersambung)');
+
+    if (target === self && !transport.canMessageSelf) {
+      if (!warned) {
+        console.log(
+          `[lead] nomor sales = nomor bot, dan jalur ${transport.name} tidak bisa mengirimi diri sendiri. ` +
+            'Lead tetap tercatat di Google Sheet; percakapannya terlihat di aplikasi WhatsApp.'
+        );
+        warned = true;
+      }
+      return false;
+    }
+    await transport.send({ phone: target, address: '' }, text, { notify: true });
+    return true;
+  };
+}
 
 interface Pending {
   first: TransportInbound;
@@ -53,7 +88,7 @@ function flush(phone: string): void {
 export async function startApp(transport: Transport): Promise<void> {
   openDb(cfg.dbPath);
   setSender((to, text) => transport.send(to, text));
-  setOutboxSender((to, text) => transport.send(to, text));
+  setSalesNotifier(makeSalesNotifier(transport));
 
   await transport.start({
     onInbound(m) {
