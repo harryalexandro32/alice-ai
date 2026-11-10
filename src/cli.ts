@@ -11,7 +11,7 @@
 
 import { createInterface } from 'node:readline';
 
-import { biz } from './business';
+import { biz, initBiz } from './business';
 import { advance, localStamp, now } from './clock';
 import { cfg, HOUR, MINUTE, normPhone } from './config';
 import { handleHumanReply, handleInbound, setSender, type Sender } from './flow';
@@ -22,8 +22,10 @@ import { getContact, openDb } from './store';
 
 async function main() {
   openDb(':memory:');
+  initBiz();
 
-  const send: Sender = async (_to, text) => console.log(`\n🤖 BOT:\n${text}\n`);
+  const send: Sender = async (_to, text, image) =>
+    console.log(image ? `\n🤖 BOT [foto ${image}]:\n${text}\n` : `\n🤖 BOT:\n${text}\n`);
   setSender(send);
   setSalesNotifier(async (text) => {
     console.log(`\n📣 KE SALES:\n${text}\n`);

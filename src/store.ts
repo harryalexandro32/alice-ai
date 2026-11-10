@@ -172,6 +172,14 @@ export function followupCandidates(): Contact[] {
   return rows.map((r) => toContact(r) as Contact);
 }
 
+/** Kontak terbaru, untuk daftar lead di dashboard. */
+export function recentContacts(n: number): Contact[] {
+  const rows = db
+    .prepare('SELECT * FROM contacts ORDER BY last_inbound_at DESC LIMIT ?')
+    .all(n) as unknown as Row[];
+  return rows.map((r) => toContact(r) as Contact);
+}
+
 export function outboxAdd(kind: OutboxRow['kind'], payload: unknown, at: number): void {
   db.prepare('INSERT INTO outbox (kind, payload, created_at) VALUES (?, ?, ?)').run(
     kind,

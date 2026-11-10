@@ -8,6 +8,7 @@
  * begitu pelanggan atau manusia bicara.
  */
 
+import { refreshBiz } from './business';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
 import { contactName, missingFields, type Sender } from './flow';
@@ -40,6 +41,7 @@ export function followupDueAt(lastInbound: number): number {
 }
 
 export async function runFollowups(send: Sender): Promise<number> {
+  refreshBiz();
   const t = now();
   let sent = 0;
 

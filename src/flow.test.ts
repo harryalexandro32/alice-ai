@@ -14,7 +14,9 @@ import { handleHumanReply, handleInbound, setBrain, setSender } from './flow';
 import { followupDueAt, runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
 import { getContact, openDb } from './store';
-import { HANDOFF, NON_TEXT } from './texts';
+import { handoffText, NON_TEXT } from './texts';
+
+const HANDOFF = handoffText();
 import type { Transport } from './transport/types';
 
 const GREETING = biz.greeting;
@@ -30,9 +32,12 @@ let brainCalls: BrainInput[] = [];
 let next: (i: BrainInput) => BrainResult | null = () => null;
 let sheetFails = 0;
 
-const R = (reply: string, fields: Record<string, string> = {}, intent: BrainResult['intent'] = 'info'): BrainResult => ({
-  reply, fields, intent,
-});
+const R = (
+  reply: string,
+  fields: Record<string, string> = {},
+  intent: BrainResult['intent'] = 'info',
+  photos: string[] = []
+): BrainResult => ({ reply, fields, intent, photos });
 
 function fresh(): void {
   openDb(':memory:');
@@ -53,7 +58,8 @@ function fresh(): void {
   brainCalls = [];
   sheetFails = 0;
   next = () => R('Baik.');
-  setSender(async (_to, text) => void sent.push(text));
+  biz.photos = [];
+  setSender(async (_to, text, image) => void sent.push(image ? `[gambar:${image.split(/[\\/]/).pop()}] ${text}` : text));
   setSalesNotifier(async (text) => {
     sales.push(text);
     return true;
@@ -294,6 +300,20 @@ const tests: [string, () => Promise<void>][] = [
     assert.deepEqual(sent, [GREETING]);
   }],
 
+  ['foto: dikirim setelah teks, hanya yang ada, dan tidak diulang', async () => {
+    biz.photos = [{ id: 'f0000000a', file: 'f0000000a.jpg', label: 'GFAF-40A tampak depan', tags: 'GFAF-40A' }];
+    await say('halo');
+    next = () => R('Ini fotonya ya, Pak.', {}, 'info', ['f0000000a']);
+    await say('minta foto GFAF-40A');
+    assert.deepEqual(sent.slice(1), ['Ini fotonya ya, Pak.', '[gambar:f0000000a.jpg] GFAF-40A tampak depan']);
+    await say('yang tadi berapa watt');
+    assert.equal(sent.filter((t) => t.startsWith('[gambar')).length, 1, 'foto yang sama tidak dikirim ulang');
+    next = () => R('Harganya Rp 900.000', {}, 'info', ['f0000000a']);
+    await say('foto lagi dong', '+6281377770003');
+    assert.ok(!sent.some((t) => t.startsWith('[gambar') && sent.indexOf(t) > 3), 'balasan yang dibuang tidak membawa foto');
+    assert.deepEqual(parseBrain('{"reply":"ok","photos":["f0000000a","karangan","f0000000a",7]}')?.photos, ['f0000000a']);
+  }],
+
   ['lewat jatah harian: bot diam', async () => {
     cfg.maxInboundPerNumber = 3;
     for (let i = 0; i < 6; i++) await say(`pesan ${i}`);
@@ -364,8 +384,8 @@ const tests: [string, () => Promise<void>][] = [
     const p = parseBrain(
       '```json\n{"reply":"Halo","fields":{"name":"null","city":" Bandung ","need":null,"admin":"ya"},"intent":"hapus semua"}\n```'
     );
-    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other' });
-    assert.deepEqual(parseBrain('{"reply":"Hai"}'), { reply: 'Hai', fields: {}, intent: 'other' });
+    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [] });
+    assert.deepEqual(parseBrain('{"reply":"Hai"}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [] });
     assert.equal(checkReply('GFAF-40A: 130 W, 2880 m³/h, 62 dB.'), null);
     assert.equal(checkReply('Tegangan 220/380 V, berat 8.5 kg.'), null);
     assert.ok(checkReply('Sekitar Rp750.000'));

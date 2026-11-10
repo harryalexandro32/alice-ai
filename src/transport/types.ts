@@ -22,6 +22,8 @@ export interface TransportHandlers {
 export interface SendOptions {
   /** Notifikasi ke sales, bukan balasan ke pelanggan (boleh memakai template). */
   notify?: boolean;
+  /** Path file foto. Kalau ada, teksnya menjadi keterangan foto. */
+  image?: string;
 }
 
 export interface Transport {
@@ -29,6 +31,8 @@ export interface Transport {
   start(handlers: TransportHandlers): Promise<void>;
   /** `address` kosong = turunkan dari `phone`. */
   send(to: { phone: string; address: string }, text: string, opts?: SendOptions): Promise<void>;
+  /** Tampilkan "sedang mengetik…" ke lawan bicara, kalau jalurnya bisa. */
+  typing?(to: { phone: string; address: string }): Promise<void>;
   /** Nomor bot sendiri ("+62…"), atau null kalau belum diketahui. */
   selfPhone(): string | null;
   /**

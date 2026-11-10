@@ -21,12 +21,15 @@ import makeWASocket, {
   useMultiFileAuthState,
   type WASocket,
 } from '@whiskeysockets/baileys';
+import { readFileSync } from 'node:fs';
+
 import qrcode from 'qrcode-terminal';
 
 import { cfg } from '../config';
-import type { Transport, TransportHandlers } from './types';
+import type { SendOptions, Transport, TransportHandlers } from './types';
 
-const MIN_GAP_MS = 1500;
+/** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
+const MIN_GAP_MS = 1200;
 const MAX_RETRY_MS = 60_000;
 
 let sock: WASocket | null = null;
@@ -204,18 +207,19 @@ async function connect(): Promise<void> {
   });
 }
 
-async function sendNow(jid: string, text: string): Promise<void> {
+async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<void> {
   const s = sock;
   if (!s) throw new Error('WhatsApp belum tersambung');
 
   const wait = Math.max(0, lastSentAt + MIN_GAP_MS - Date.now());
-  // "sedang mengetik…" selama jeda: irama balasan jadi wajar, bukan 20 milidetik.
-  await s.sendPresenceUpdate('composing', jid).catch(() => {});
-  await new Promise((r) => setTimeout(r, Math.max(wait, 800)));
+  if (wait) await new Promise((r) => setTimeout(r, wait));
   lastSentAt = Date.now();
 
   lastSentText.set(jid, text);
-  const res = await s.sendMessage(jid, { text });
+  const res = await s.sendMessage(
+    jid,
+    opts?.image ? { image: readFileSync(opts.image), caption: text } : { text }
+  );
   if (res?.key.id) {
     sentIds.add(res.key.id);
     if (sentIds.size > 2000) sentIds.delete(sentIds.values().next().value as string);
@@ -231,10 +235,14 @@ export const baileysTransport: Transport = {
     handlers = h;
     await connect();
   },
-  send(to, text) {
+  async typing(to) {
+    const jid = to.address || `${to.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    await sock?.sendPresenceUpdate('composing', jid).catch(() => {});
+  },
+  send(to, text, opts) {
     const jid = to.address || `${to.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
     // Satu antrean: dua kiriman bersamaan tidak boleh saling menyalip jedanya.
-    const job = sendChain.then(() => sendNow(jid, text));
+    const job = sendChain.then(() => sendNow(jid, text, opts));
     sendChain = job.catch(() => {});
     return job;
   },

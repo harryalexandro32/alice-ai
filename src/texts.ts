@@ -1,7 +1,7 @@
 /**
  * Kalimat tetap mesin. Tidak ada nama klien di sini: merek, sapaan, dan nama
- * field semuanya datang dari profil bisnis. (Salam pembuka sepenuhnya milik
- * profil — lihat Business.greeting.)
+ * field semuanya dibaca dari profil bisnis saat dipakai (profil bisa berubah
+ * lewat dashboard). Salam pembuka sepenuhnya milik profil — Business.greeting.
  */
 
 import { biz } from './business';
@@ -10,7 +10,7 @@ import type { LeadField } from './business/types';
 export const NON_TEXT =
   'Mohon maaf, boleh diketik saja pertanyaannya? 🙏 Biar bisa langsung kami bantu.';
 
-export const HANDOFF =
+export const handoffText = (): string =>
   `Terima kasih, pertanyaan ${biz.honorific} sudah kami teruskan ke tim ${biz.brand}. ` +
   'Tim kami akan segera menghubungi ya 🙏';
 

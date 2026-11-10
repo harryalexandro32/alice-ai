@@ -19,7 +19,9 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { readFileSync, statSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { basename, extname } from 'node:path';
 
 import { cfg, HOUR, normPhone } from '../config';
 import type { Transport, TransportHandlers } from './types';
@@ -186,10 +188,12 @@ function onRequest(req: IncomingMessage, res: ServerResponse): void {
 }
 
 async function graph(path: string, init?: RequestInit): Promise<any> {
+  // Unggahan berkas (FormData) menentukan content-type-nya sendiri.
+  const json = !(init?.body instanceof FormData);
   const res = await fetch(`${cfg.waApiBase}/${path}`, {
     ...init,
-    headers: { authorization: `Bearer ${cfg.waToken}`, 'content-type': 'application/json' },
-    signal: AbortSignal.timeout(20_000),
+    headers: { authorization: `Bearer ${cfg.waToken}`, ...(json ? { 'content-type': 'application/json' } : {}) },
+    signal: AbortSignal.timeout(30_000),
   });
   const data = (await res.json().catch(() => ({}))) as any;
   if (!res.ok) {
@@ -203,6 +207,27 @@ async function graph(path: string, init?: RequestInit): Promise<any> {
     throw new Error(`Cloud API ${res.status} (${err.code ?? '?'}): ${err.message ?? 'tanpa pesan'}${hint}`);
   }
   return data;
+}
+
+const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+
+/** Id media hasil unggah, per file + waktu ubahnya. Meta menyimpannya 30 hari. */
+const mediaIds = new Map<string, { id: string; at: number }>();
+
+async function uploadImage(path: string): Promise<string> {
+  const key = `${path}:${statSync(path).mtimeMs}`;
+  const hit = mediaIds.get(key);
+  if (hit && Date.now() - hit.at < 20 * 24 * HOUR) return hit.id;
+
+  const type = MIME[extname(path).slice(1).toLowerCase()] ?? 'image/jpeg';
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', type);
+  form.append('file', new Blob([readFileSync(path)], { type }), basename(path));
+  const data = await graph(`${cfg.waPhoneNumberId}/media`, { method: 'POST', body: form });
+  if (!data?.id) throw new Error('unggah foto: tidak ada id media');
+  mediaIds.set(key, { id: data.id as string, at: Date.now() });
+  return data.id as string;
 }
 
 export function cloudPort(): number | null {
@@ -249,8 +274,15 @@ export const cloudTransport: Transport = {
 
   async send(to, text, opts) {
     const number = digits(to.address || to.phone);
-    const body =
-      opts?.notify && cfg.waLeadTemplate
+    const body = opts?.image
+      ? {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: number,
+          type: 'image',
+          image: { id: await uploadImage(opts.image), caption: text },
+        }
+      : opts?.notify && cfg.waLeadTemplate
         ? {
             messaging_product: 'whatsapp',
             to: number,

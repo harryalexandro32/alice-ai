@@ -8,7 +8,9 @@
  */
 
 import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
-import { biz } from './business';
+import { join } from 'node:path';
+
+import { biz, mediaDir, refreshBiz } from './business';
 import type { LeadField } from './business/types';
 import { cfg, HOUR } from './config';
 import { now } from './clock';
@@ -17,9 +19,10 @@ import {
   addMessage, contactByAddress, countInboundSince, createContact, getContact, outboxAdd,
   pausedUntil, recentMessages, setPause, updateContact, type Contact,
 } from './store';
-import { askMissing, HANDOFF, NON_TEXT } from './texts';
+import { askMissing, handoffText, NON_TEXT } from './texts';
 
-export type Sender = (to: { phone: string; address: string }, text: string) => Promise<void>;
+/** `image` = path file foto; kalau ada, `text` menjadi keterangannya. */
+export type Sender = (to: { phone: string; address: string }, text: string, image?: string) => Promise<void>;
 
 let send: Sender = async () => {};
 let brain: Brain = llmBrain;
@@ -87,6 +90,8 @@ function awaitsCustomer(c: Contact): boolean {
 }
 
 export async function handleInbound(m: Inbound): Promise<void> {
+  // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
+  refreshBiz();
   // Nomor sales itu penerima notifikasi, bukan calon pelanggan.
   if (cfg.salesNumber && cfg.salesNumber === m.phone) return;
   // Mode uji: selain nomor yang didaftarkan, tidak ada yang dibalas maupun
@@ -169,11 +174,28 @@ export async function handleInbound(m: Inbound): Promise<void> {
       } else if (missing.length) {
         out = null; // salam yang baru dikirim sudah memintanya
       } else {
-        out = HANDOFF;
+        out = handoffText();
       }
       handoff = true;
     }
     if (out) c = await reply(c, out);
+
+    // Foto hanya menyertai balasan LLM yang lolos pagar, dan foto yang sama
+    // tidak dikirim ulang ke orang yang baru saja menerimanya.
+    if (result && !rejected) {
+      const recent = new Set(recentMessages(c.phone, 20).filter((t) => t.dir === 'out').map((t) => t.text));
+      for (const id of result.photos) {
+        const p = biz.photos.find((x) => x.id === id);
+        const mark = `[foto:${id}] ${p?.label ?? ''}`;
+        if (!p || recent.has(mark)) continue;
+        try {
+          await send({ phone: c.phone, address: c.address }, p.label, join(mediaDir(), p.file));
+          addMessage(c.phone, 'out', mark, now());
+        } catch (e) {
+          console.error(`[alur] ${c.phone}: foto ${id} gagal terkirim: ${e instanceof Error ? e.message : e}`);
+        }
+      }
+    }
 
     // Lead lengkap -> kabari sekali. Butuh manusia sebelum lengkap -> kabari
     // juga sekali, dengan data seadanya, supaya tidak ada yang menunggu.

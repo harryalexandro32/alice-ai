@@ -10,7 +10,10 @@
  *     tidak menghasilkan dua salam.
  */
 
+import { startAdmin } from './admin/server';
+import { initBiz } from './business';
 import { cfg, MINUTE } from './config';
+import { humanPause } from './pace';
 import { handleHumanReply, handleInbound, setSender } from './flow';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
@@ -87,8 +90,23 @@ function flush(phone: string): void {
 
 export async function startApp(transport: Transport): Promise<void> {
   openDb(cfg.dbPath);
-  setSender((to, text) => transport.send(to, text));
+  initBiz();
+
+  // Balasan ke pelanggan menunggu dulu dengan irama manusia (lihat pace.ts).
+  // Notifikasi ke sales dan follow-up tidak: keduanya bukan balasan.
+  setSender(async (to, text, image) => {
+    await humanPause(to.address || to.phone, text.length, async () => transport.typing?.(to));
+    await transport.send(to, text, image ? { image } : undefined);
+  });
   setSalesNotifier(makeSalesNotifier(transport));
+
+  if (cfg.adminPassword) {
+    await startAdmin().catch((e) =>
+      console.error(`[dashboard] tidak bisa dinyalakan: ${e instanceof Error ? e.message : e}`)
+    );
+  } else {
+    console.log('[dashboard] mati — isi ADMIN_PASSWORD di .env untuk menyalakannya');
+  }
 
   await transport.start({
     onInbound(m) {

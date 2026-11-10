@@ -38,6 +38,13 @@ export const cfg = {
   transport: transport as 'baileys' | 'cloud',
   tz: str('BOT_TZ', 'Asia/Jakarta'),
   dbPath: str('DB_PATH', `./data/${business}.db`),
+  /** Tempat profil hasil dashboard dan foto: <dataRoot>/<bisnis>/. */
+  dataRoot: str('DATA_DIR', './data'),
+
+  // Dashboard pemilik. Tanpa kata sandi, dashboard tidak dinyalakan.
+  adminPassword: str('ADMIN_PASSWORD'),
+  adminPort: num('ADMIN_PORT', 3100),
+  adminHost: str('ADMIN_HOST', '127.0.0.1'),
 
   llmApiKey: str('LLM_API_KEY'),
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),

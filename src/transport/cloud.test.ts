@@ -6,7 +6,10 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { cfg } from '../config';
 import { cloudPort, cloudTransport, stopCloud } from './cloud';
@@ -20,7 +23,13 @@ const graph = createServer((req, res) => {
   let raw = '';
   req.on('data', (c) => (raw += c));
   req.on('end', () => {
-    calls.push({ method: req.method ?? '', url: req.url ?? '', auth: req.headers.authorization, body: raw ? JSON.parse(raw) : undefined });
+    let body: any = raw || undefined;
+    try {
+      body = raw ? JSON.parse(raw) : undefined;
+    } catch {
+      // unggahan berkas (multipart) dibiarkan mentah
+    }
+    calls.push({ method: req.method ?? '', url: req.url ?? '', auth: req.headers.authorization, body });
     res.setHeader('content-type', 'application/json');
     if (failNext) {
       res.writeHead(failNext.status);
@@ -28,6 +37,8 @@ const graph = createServer((req, res) => {
       failNext = null;
     } else if (req.method === 'GET') {
       res.end(JSON.stringify({ display_phone_number: '+62 812-5555-0000', verified_name: 'Toko Uji' }));
+    } else if (req.url?.endsWith('/media')) {
+      res.end(JSON.stringify({ id: 'MEDIA1' }));
     } else {
       res.end(JSON.stringify({ messages: [{ id: `wamid.BOT${calls.length}` }] }));
     }
@@ -128,6 +139,20 @@ graph.listen(0, '127.0.0.1', async () => {
     });
     await cloudTransport.send({ phone: '+6281211110001', address: '6281211110001' }, 'balasan biasa');
     assert.equal(calls.at(-1)?.body.type, 'text', 'balasan ke pelanggan tidak pernah memakai template lead');
+
+    // Foto: diunggah sekali, lalu dikirim sebagai pesan gambar berketerangan.
+    const img = join(mkdtempSync(join(tmpdir(), 'bot-img-')), 'f0000000a.jpg');
+    writeFileSync(img, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+    await cloudTransport.send({ phone: '+6281211110001', address: '6281211110001' }, 'GFAF-40A tampak depan', { image: img });
+    assert.equal(calls.at(-2)?.url, '/v23.0/PID1/media');
+    assert.match(String(calls.at(-2)?.body), /name="messaging_product"[\s\S]*whatsapp[\s\S]*filename="f0000000a.jpg"/);
+    assert.deepEqual(calls.at(-1)?.body, {
+      messaging_product: 'whatsapp', recipient_type: 'individual', to: '6281211110001',
+      type: 'image', image: { id: 'MEDIA1', caption: 'GFAF-40A tampak depan' },
+    });
+    const before = calls.length;
+    await cloudTransport.send({ phone: '+6281211110001', address: '6281211110001' }, 'lagi', { image: img });
+    assert.equal(calls.length, before + 1, 'unggahan kedua memakai id yang sudah ada');
 
     // Di luar jendela 24 jam: galatnya jelas, bukan diam.
     failNext = { status: 400, body: { error: { code: 131047, message: 'Re-engagement message' } } };

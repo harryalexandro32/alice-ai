@@ -6,10 +6,12 @@
  */
 
 import { checkReply, llmBrain } from './brain';
-import { biz } from './business';
+import { biz, initBiz } from './business';
 import { llmEnabled, llmUsageToday } from './llm/provider';
 
 (async () => {
+  // Yang diukur adalah profil yang sedang dipakai, termasuk perubahan dari dashboard.
+  initBiz();
   if (!llmEnabled()) {
     console.error('LLM_API_KEY kosong — eval butuh LLM sungguhan.');
     process.exit(1);

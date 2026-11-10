@@ -24,11 +24,28 @@ Di dalam mode latihan: `/maju 23j` (majukan jam + jalankan follow-up), `/manusia
 ## Perintah
 
 ```bash
-npm test          # katalog + penyedia LLM + jalur Cloud API (server tiruan) + 21 alur
+npm test          # katalog, penyedia LLM, jalur Cloud API, dashboard, dan 23 alur
 npm run typecheck
 npm run eval      # ukur jawaban ke LLM sungguhan (butuh key)
 npm start         # nyambung ke WhatsApp sesuai TRANSPORT
 ```
+
+## Dashboard pemilik
+
+Isi `ADMIN_PASSWORD` di `.env` (minimal 8 karakter). Lalu:
+
+```bash
+npm start        # bot + dashboard
+npm run admin    # dashboard saja, tanpa WhatsApp
+```
+
+Buka `http://localhost:3100/admin`. Dari sana pemilik mengubah identitas dan nama admin, salam,
+data yang dikumpulkan, data produk, panduan rekomendasi, foto, dan jeda balasan, lalu mencobanya di
+tab **Uji coba**. **Simpan & terapkan** berlaku pada pesan berikutnya tanpa menyalakan ulang bot —
+tidak ada model yang dilatih; yang berubah adalah data profil di `data/<id>/profile.json`.
+
+Hanya yang diubah yang disimpan; sisanya tetap mengikuti bawaan di `src/business/<id>/profile.ts`.
+Dashboard bawaannya hanya bisa dibuka dari komputer itu sendiri (`ADMIN_HOST`).
 
 ## Jalur WhatsApp
 
