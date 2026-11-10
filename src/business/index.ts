@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import { cfg } from '../config';
 import { gfan } from './gfan/profile';
-import { EDITABLE, type Business, type Editable, type LeadField, type Photo } from './types';
+import { EDITABLE, type Business, type Editable, type LeadField } from './types';
 
 const REGISTRY: Record<string, Business> = { gfan };
 
@@ -34,6 +34,24 @@ const profileFile = (): string => join(dataDir(), 'profile.json');
 
 let enabled = false;
 let loadedMtime = 0;
+
+/** Pakai bibit + perubahan ini sebagai profil yang berlaku (tanpa menyimpan). */
+export function applyOverrides(overrides: Partial<Editable>): void {
+  apply(overrides);
+}
+
+/**
+ * Ganti seluruh perubahan lokal dengan `overrides` — dipakai saat menarik
+ * profil dari penyimpanan bersama, yang merupakan sumber kebenarannya.
+ */
+export function replaceOverrides(overrides: Partial<Editable>): void {
+  mkdirSync(dataDir(), { recursive: true });
+  const tmp = `${profileFile()}.tmp`;
+  writeFileSync(tmp, JSON.stringify(overrides, null, 2));
+  renameSync(tmp, profileFile());
+  loadedMtime = statSync(profileFile()).mtimeMs;
+  apply(overrides);
+}
 
 function apply(overrides: Partial<Editable>): void {
   Object.assign(biz, seed);
@@ -140,10 +158,6 @@ export function saveBiz(changes: Partial<Editable>): void {
   renameSync(tmp, profileFile());
   loadedMtime = statSync(profileFile()).mtimeMs;
   apply(next);
-}
-
-export function savePhotos(photos: Photo[]): void {
-  saveBiz({ photos });
 }
 
 /** Bagian profil yang ditampilkan dashboard. */

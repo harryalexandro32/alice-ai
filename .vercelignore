@@ -1,0 +1,10 @@
+# Tidak pernah ikut ke Vercel: kredensial WhatsApp, rahasia, dan data bot.
+auth
+data
+.env
+.env.*
+!.env.example
+google-service-account.json
+catalog-pdf
+docs
+*.test.ts

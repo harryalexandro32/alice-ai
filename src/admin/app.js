@@ -260,14 +260,20 @@ async function load() {
   profile = s.profile;
   $('login').classList.remove('on');
   $('brandName').textContent = profile.brand;
-  $('brandSub').textContent = 'profil: ' + s.status.business;
-  $('chipLlm').textContent = s.status.llm ? 'LLM: ' + s.status.llm : 'LLM belum diatur';
-  $('chipLlm').className = 'chip ' + (s.status.llm ? 'ok' : 'warn');
-  $('chipWa').textContent = 'jalur: ' + s.status.transport;
-  $('envInfo').textContent =
-    'Sekarang — nomor sales: ' + (s.status.sales || 'belum diatur') + ' · Google Sheet: ' + (s.status.sheet ? 'siap' : 'belum diatur') +
-    (s.status.onlyNumbers ? ' · MODE UJI: hanya ' + s.status.onlyNumbers + ' nomor yang dibalas' : ' · membalas semua nomor') +
-    ' · panggilan LLM hari ini: ' + s.status.usage.calls + ' dari ' + s.status.usage.limit;
+  $('brandSub').textContent = 'profil: ' + s.business;
+  const st = s.status;
+  // Dashboard online hanya tahu keadaan bot dari laporan terakhirnya.
+  const mins = st && st.reportedAt ? Math.round((Date.now() - st.reportedAt) / 60000) : null;
+  $('chipLlm').textContent = s.testReady ? 'uji coba siap' : 'LLM belum diatur';
+  $('chipLlm').className = 'chip ' + (s.testReady ? 'ok' : 'warn');
+  $('chipWa').textContent = !st ? 'bot belum pernah melapor' : mins === null ? 'jalur: ' + st.transport
+    : 'bot melapor ' + (mins < 1 ? 'baru saja' : mins + ' menit lalu');
+  $('chipWa').className = 'chip ' + (!st || (mins !== null && mins > 40) ? 'warn' : 'ok');
+  $('envInfo').textContent = !st
+    ? 'Bot belum pernah melapor ke dashboard ini. Nyalakan bot dengan penyimpanan bersama yang sama.'
+    : 'Menurut bot — jalur: ' + st.transport + ' · nomor sales: ' + (st.sales || 'belum diatur') + ' · Google Sheet: ' + (st.sheet ? 'siap' : 'belum diatur') +
+      (st.onlyNumbers ? ' · MODE UJI: hanya ' + st.onlyNumbers + ' nomor yang dibalas' : ' · membalas semua nomor') +
+      ' · panggilan LLM hari ini: ' + st.usage.calls + ' dari ' + st.usage.limit;
   fillInputs();
   renderFields();
   renderPhotos();

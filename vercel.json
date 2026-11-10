@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30,
+      "includeFiles": "src/admin/{page.html,app.js}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/((?!robots.txt).*)",
+      "destination": "/api/index"
+    }
+  ],
+  "regions": [
+    "sin1"
+  ]
+}

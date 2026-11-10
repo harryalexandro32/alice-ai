@@ -87,3 +87,19 @@ src/
   transport/            baileys.ts, cloud.ts — keduanya memenuhi types.ts
   app.ts                gabung pesan beruntun, urutan per nomor, putaran 5 menit
 ```
+
+## Dashboard online (Vercel)
+
+Dashboard bisa di-hosting terpisah dari bot: `api/index.ts` + `vercel.json` menjalankan penangan
+yang sama sebagai fungsi Vercel, dengan Vercel Blob (privat) sebagai penyimpanan bersama.
+
+- Dashboard menulis `<bisnis>/profile.json` dan foto ke Blob.
+- Bot dengan `BLOB_READ_WRITE_TOKEN` yang sama menarik profil **tepat sebelum membalas** (plus tiap
+  10 menit), mengunduh foto ke `data/<bisnis>/media/`, dan mengirim salinan lead + statusnya paling
+  sering tiap 15 menit.
+- Bot itu sendiri tidak bisa jalan di Vercel selama memakai Baileys (butuh proses yang hidup terus).
+
+Deploy ulang setelah mengubah kode: `npx vercel deploy --prod`. Env di Vercel: `ADMIN_PASSWORD`,
+`LLM_API_KEY` (untuk tab Uji coba), `BUSINESS`, dan `BLOB_READ_WRITE_TOKEN` (otomatis dari store).
+Saat pindah ke server klien: kosongkan `BLOB_READ_WRITE_TOKEN`, dan dashboard kembali jalan di
+samping bot dengan data lokal.

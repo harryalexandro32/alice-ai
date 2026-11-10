@@ -8,11 +8,16 @@
 import { initBiz } from '../business';
 import { cfg } from '../config';
 import { openDb } from '../store';
+import { remoteEnabled } from '../remote';
 import { startAdmin } from './server';
+import { localStore } from './store-local';
+import { blobStore } from './stores';
 
 openDb(cfg.dbPath);
 initBiz();
-startAdmin().catch((e) => {
+// Dengan penyimpanan bersama diatur, dashboard lokal ini mengedit data yang sama
+// dengan dashboard online.
+startAdmin(remoteEnabled() ? blobStore() : localStore()).catch((e) => {
   console.error(`[dashboard] gagal: ${e instanceof Error ? e.message : e}`);
   process.exit(1);
 });

@@ -46,6 +46,10 @@ export const cfg = {
   adminPort: num('ADMIN_PORT', 3100),
   adminHost: str('ADMIN_HOST', '127.0.0.1'),
 
+  // Penyimpanan bersama untuk dashboard yang di-hosting terpisah (Vercel Blob).
+  blobToken: str('BLOB_READ_WRITE_TOKEN'),
+  blobAccess: (str('BLOB_ACCESS', 'private') === 'public' ? 'public' : 'private') as 'public' | 'private',
+
   llmApiKey: str('LLM_API_KEY'),
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),
   llmModel: str('LLM_MODEL', 'deepseek-chat'),

@@ -26,12 +26,17 @@ export type Sender = (to: { phone: string; address: string }, text: string, imag
 
 let send: Sender = async () => {};
 let brain: Brain = llmBrain;
+/** Dijalankan sebelum tiap giliran — dipakai untuk menarik profil terbaru. */
+let beforeTurn: () => Promise<void> = async () => {};
 
 export function setSender(fn: Sender): void {
   send = fn;
 }
 export function setBrain(fn: Brain): void {
   brain = fn;
+}
+export function setBeforeTurn(fn: () => Promise<void>): void {
+  beforeTurn = fn;
 }
 
 export interface Inbound {
@@ -91,6 +96,7 @@ function awaitsCustomer(c: Contact): boolean {
 
 export async function handleInbound(m: Inbound): Promise<void> {
   // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
+  await beforeTurn();
   refreshBiz();
   // Nomor sales itu penerima notifikasi, bukan calon pelanggan.
   if (cfg.salesNumber && cfg.salesNumber === m.phone) return;

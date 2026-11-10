@@ -14,6 +14,7 @@ import { cfg } from '../config';
 import { pickDelayMs, typingMs } from '../pace';
 import { openDb } from '../store';
 import { setAdminBrain, startAdmin, stopAdmin } from './server';
+import { localStore } from './store-local';
 
 const PASSWORD = 'kata-sandi-uji-123';
 const PNG = Buffer.from(
@@ -44,7 +45,7 @@ const PNG = Buffer.from(
     call('/admin/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
   try {
-    base = `http://127.0.0.1:${await startAdmin()}`;
+    base = `http://127.0.0.1:${await startAdmin(localStore())}`;
 
     // --- masuk ---
     assert.equal((await call('/admin')).status, 200);
@@ -62,6 +63,8 @@ const PNG = Buffer.from(
     const state = await call('/admin/api/state');
     assert.equal(state.body.profile.brand, 'GFAN Indonesia');
     assert.equal(state.body.profile.id, undefined, 'hanya kunci yang boleh diubah yang ditampilkan');
+    assert.equal(state.body.business, 'gfan');
+    assert.equal(state.body.status.reportedAt, null);
 
     // --- simpan profil: bot langsung ikut ---
     assert.ok(checkReply('GFAF-70A tersedia'), 'sebelum ditambah, GFAF-70A dianggap karangan');

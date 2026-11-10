@@ -11,10 +11,13 @@
  */
 
 import { startAdmin } from './admin/server';
+import { localStore } from './admin/store-local';
 import { initBiz } from './business';
 import { cfg, MINUTE } from './config';
 import { humanPause } from './pace';
-import { handleHumanReply, handleInbound, setSender } from './flow';
+import { remoteEnabled } from './remote';
+import { pullProfile, startSync } from './sync';
+import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
 import { openDb } from './store';
@@ -100,8 +103,12 @@ export async function startApp(transport: Transport): Promise<void> {
   });
   setSalesNotifier(makeSalesNotifier(transport));
 
-  if (cfg.adminPassword) {
-    await startAdmin().catch((e) =>
+  if (remoteEnabled()) {
+    // Dashboard-nya di-hosting terpisah; bot ini hanya mengikuti apa yang disimpan di sana.
+    await startSync();
+    setBeforeTurn(() => pullProfile());
+  } else if (cfg.adminPassword) {
+    await startAdmin(localStore()).catch((e) =>
       console.error(`[dashboard] tidak bisa dinyalakan: ${e instanceof Error ? e.message : e}`)
     );
   } else {
