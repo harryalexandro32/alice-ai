@@ -89,6 +89,8 @@ const PNG = Buffer.from(
     assert.match(knowledgeText(), /\nGFAF-70A \| 1 \| 1/);
     assert.match(systemPrompt(), /Jam buka: Senin–Sabtu/);
     assert.equal(state.body.profile.catalog.length, 6, 'tabel produk bawaan tampil di dashboard');
+    assert.equal(state.body.profile.products.length, 30, 'satu baris per model');
+    assert.deepEqual(state.body.profile.products[0], { name: 'GFC10-12B4', description: 'Ceiling Fan GFC — Model B4 (ceiling vent-type)', price: '', stock: '', photos: [], pdf: '' });
     assert.equal(state.body.profile.knowledge, undefined);
 
     // --- tabel produk: masukan dirapikan, yang salah ditolak ---
@@ -99,7 +101,7 @@ const PNG = Buffer.from(
     assert.match((await put({ catalog: [{ name: '', tables: [] }] })).body.error, /belum diberi nama/);
     assert.equal((await tbl([['UJI-1', '10 | W\n'], ['', ''], ['UJI-2']])).status, 200);
     assert.equal(
-      knowledgeText(),
+      knowledgeText().slice(knowledgeText().indexOf('### ')),
       '### Seri Uji\n- baris satu\n- baris dua\n\nSpek:\nModel | Daya\nUJI-1 | 10 W\nUJI-2 | \n\nJam buka: Senin–Sabtu 08.00–17.00.'
     );
     assert.equal(checkReply('UJI-1 tersedia'), null);
@@ -132,35 +134,77 @@ const PNG = Buffer.from(
     refreshBiz();
     assert.equal(biz.honorific, 'Kak');
 
-    // --- foto ---
-    const up = (data: Buffer, label = 'GFAF-40A tampak depan') =>
-      call(`/admin/api/photos?${new URLSearchParams({ label, tags: 'GFAF-40A' })}`, { method: 'POST', headers: { 'content-type': 'image/png' }, body: data });
-    assert.equal((await up(Buffer.from('<script>alert(1)</script>'))).status, 400, 'bukan gambar ditolak, apa pun content-type-nya');
-    assert.equal((await up(PNG, '')).status, 400);
-    const added = await up(PNG);
-    assert.equal(added.status, 200);
-    const photo = added.body.photos[0];
+    // --- berkas: foto dan PDF, dipasang ke baris produk ---
+    const up = (data: Buffer, name = 'depan.png') =>
+      call(`/admin/api/files?${new URLSearchParams({ name })}`, { method: 'POST', headers: { 'content-type': 'image/png' }, body: data });
+    assert.equal((await up(Buffer.from('<script>alert(1)</script>'))).status, 400, 'bukan gambar/PDF ditolak, apa pun content-type-nya');
+    const photo = (await up(PNG)).body.file;
     assert.match(photo.file, /^f[0-9a-f]{8}\.png$/);
-    assert.ok(existsSync(join(mediaDir(), photo.file)));
-    assert.match(systemPrompt(), new RegExp(`\\[${photo.id}\\] GFAF-40A tampak depan \\(terkait: GFAF-40A\\)`));
+    const pdf = (await up(Buffer.from('%PDF-1.4\n%isi'), '../../Brosur <b>GFAF</b>.pdf')).body.file;
+    assert.match(pdf.file, /^d[0-9a-f]{8}\.pdf$/, 'nama berkas dibuat sendiri, bukan dari pengunggah');
+    const stray = (await up(PNG, 'tidak-jadi.png')).body.file;
+    assert.ok(existsSync(join(mediaDir(), photo.file)) && existsSync(join(mediaDir(), pdf.file)));
     assert.equal((await call(`/admin/media/${photo.file}`)).status, 200);
+    assert.equal((await call(`/admin/media/${pdf.file}`)).res.headers.get('content-type'), 'application/pdf');
     assert.equal((await call(`/admin/media/${photo.file}`, {}, false)).status, 401);
     assert.equal((await call('/admin/media/..%2F..%2Fprofile.json')).status, 404);
     assert.equal((await call('/admin/media/f00000000.png')).status, 404);
-    const patched = await call(`/admin/api/photos/${photo.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Exhaust 16 inci', tags: '' }) });
-    assert.equal(patched.body.photos[0].label, 'Exhaust 16 inci');
+
+    // Menyimpan daftar produk: lampiran harus berkas yang ada dan jenisnya benar;
+    // berkas yang tidak dirujuk baris mana pun dibuang.
+    assert.match((await put({ products: [{ name: '', price: 'Rp 1' }] })).body.error, /belum diberi nama/);
+    const prod = await put({
+      products: [
+        { name: 'GFAF-40A', description: 'Exhaust 16" | industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id, pdf.id, 'f99999999'], pdf: pdf.id },
+        { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: photo.id },
+        { name: '', description: '', price: '', stock: '', photos: [], pdf: '' },
+      ],
+      questions: ['Ukuran kamarnya berapa × berapa?', '  ', 'Dipakai untuk apa?'],
+      logo: 'f99999999',
+    });
+    assert.match(prod.body.error, /Logo/);
+    const prod2 = await put({
+      products: [
+        { name: 'GFAF-40A', description: 'Exhaust 16" | industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id, pdf.id, 'f99999999'], pdf: pdf.id },
+        { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: photo.id },
+        { name: '', description: '', price: '', stock: '', photos: [], pdf: '' },
+      ],
+      questions: ['Ukuran kamarnya berapa × berapa?', '  ', 'Dipakai untuk apa?'],
+    });
+    assert.equal(prod2.status, 200);
+    assert.deepEqual(biz.products, [
+      { name: 'GFAF-40A', description: 'Exhaust 16" industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id], pdf: pdf.id },
+      { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: '' },
+    ]);
+    assert.deepEqual(biz.files.map((f) => f.id), [photo.id, pdf.id], 'berkas yang tidak dipakai dihapus dari daftar');
+    assert.ok(!existsSync(join(mediaDir(), stray.file)), '…dan dari disk');
+    assert.match(systemPrompt(), new RegExp(`GFAF-40A \\| Exhaust 16" industri \\| Rp 450.000 \\| ada \\| ${photo.id} \\| ${pdf.id}`));
+    assert.match(systemPrompt(), /GFAF-50A \| - \| - \| - \| - \| -/);
+    assert.match(systemPrompt(), /PERTANYAAN KEBUTUHAN\n- Ukuran kamarnya berapa × berapa\?\n- Dipakai untuk apa\?/);
+
+    // Logo: harus gambar yang ada; selama dipakai tidak ikut dibuang.
+    const logo = (await up(PNG, 'logo.png')).body.file;
+    assert.equal((await put({ logo: logo.id })).status, 200);
+    assert.match((await put({ logo: pdf.id })).body.error, /Logo/);
+    assert.deepEqual(biz.files.map((f) => f.id), [photo.id, pdf.id, logo.id]);
 
     // --- uji coba: memakai pagar yang sama dengan bot sungguhan ---
-    setAdminBrain(async (i) => ({ reply: i.text.includes('harga') ? 'Harganya Rp 500.000' : 'Ini fotonya ya', fields: { name: 'Budi' }, intent: 'info', photos: [photo.id] }));
+    setAdminBrain(async (i) => ({
+      reply: i.text.includes('harga') ? 'Harganya Rp 500.000' : i.text.includes('40A') ? 'GFAF-40A Rp 450.000 ya' : 'Ini fotonya ya',
+      fields: { name: 'Budi' }, intent: 'info', photos: [photo.id], docs: [pdf.id],
+    }));
     const test = (text: string) => call('/admin/api/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
     const t1 = await test('minta foto');
     assert.equal(t1.body.rejected, null);
     assert.equal(t1.body.photos[0].file, photo.file);
-    assert.equal((await test('harga berapa')).body.rejected, 'menyebut harga');
+    assert.equal(t1.body.docs[0].file, pdf.file);
+    assert.equal((await test('harga berapa')).body.rejected, 'menyebut harga', 'harga di luar daftar produk ditolak');
+    assert.equal((await test('40A berapa')).body.rejected, null, 'harga yang tertulis di daftar produk boleh');
 
-    assert.equal((await call(`/admin/api/photos/${photo.id}`, { method: 'DELETE' })).status, 200);
-    assert.ok(!existsSync(join(mediaDir(), photo.file)));
-    assert.equal(biz.photos.length, 0);
+    // Melepas lampiran dari produk = berkasnya ikut dihapus.
+    assert.equal((await put({ products: [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: '' }] })).status, 200);
+    assert.ok(!existsSync(join(mediaDir(), photo.file)) && !existsSync(join(mediaDir(), pdf.file)));
+    assert.deepEqual(biz.files.map((f) => f.id), [logo.id]);
 
     // --- permintaan dari situs lain ditolak ---
     const cross = await call('/admin/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json', origin: 'https://situs-lain.example' }, body: '{"alias":"X"}' });

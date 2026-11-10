@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard Alice Bot</title>
+<title>Alice AI</title>
 <style>
   :root {
     --bg: #f6f6f7; --card: #ffffff; --ink: #1d1f20; --muted: #5c6166; --faint: #8a8f94; --line: #d9dbde; --line-soft: #ebecee;
@@ -19,10 +19,16 @@
 
   /* ---- kerangka ---- */
   .topbar { position: sticky; top: 0; z-index: 10; height: var(--topbar); background: #fff; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; padding: 0 20px; }
-  .mark { width: 22px; height: 22px; border-radius: 5px; background: var(--orange); flex: none; }
-  .brand { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .brand-sub { color: var(--faint); font-size: 13px; white-space: nowrap; }
+  .mark { width: 24px; height: 24px; border-radius: 6px; background: var(--orange); flex: none; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; }
+  .logo { height: 28px; max-width: 120px; object-fit: contain; flex: none; display: none; }
+  .has-logo .logo { display: block; }
+  .has-logo .topbar .mark { display: none; }
+  .brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
+  .brand-sub { color: var(--faint); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar .spacer { flex: 1; }
+  .lang { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; flex: none; }
+  .lang button { background: #fff; border: 0; padding: 4px 9px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .lang button.on { background: var(--blue); color: #fff; }
   .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: calc(100% - var(--topbar)); }
   aside { background: #fff; border-right: 1px solid var(--line); padding: 14px 10px 20px; position: sticky; top: var(--topbar); height: calc(100vh - var(--topbar)); overflow-y: auto; }
   .nav-group { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; }
@@ -50,8 +56,6 @@
   .btn.small { padding: 4px 10px; font-size: 13px; }
   .btn.danger { background: #fff; color: var(--danger); border-color: var(--line); }
   .btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
-  .link { background: none; border: 0; padding: 0; color: var(--blue); cursor: pointer; }
-  .link:hover { text-decoration: underline; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; }
   .card > .ch { padding: 16px 20px 0; }
   .card > .cb { padding: 14px 20px 18px; }
@@ -62,12 +66,15 @@
   label.f { display: block; margin-bottom: 14px; }
   label.f > span { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
   label.f > small { display: block; color: var(--muted); margin-top: 4px; }
-  input[type=text], input[type=number], input[type=password], textarea { width: 100%; border: 1px solid #b6b9bd; border-radius: var(--radius); padding: 7px 10px; background: #fff; }
-  input:focus, textarea:focus { outline: 2px solid #9cc0f5; outline-offset: 0; border-color: var(--blue); }
+  input[type=text], input[type=number], input[type=password], textarea, select { width: 100%; border: 1px solid #b6b9bd; border-radius: var(--radius); padding: 7px 10px; background: #fff; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid #9cc0f5; outline-offset: 0; border-color: var(--blue); }
   textarea { resize: vertical; line-height: 1.5; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .check { display: flex; gap: 9px; align-items: flex-start; margin-bottom: 12px; }
   .check input { margin-top: 3px; }
+  .logo-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .logo-box { width: 132px; height: 60px; border: 1px dashed #a9adb2; border-radius: var(--radius); display: grid; place-items: center; background: #fafafb; color: var(--faint); font-size: 12px; overflow: hidden; }
+  .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
   /* ---- tabel ---- */
   .scroll { overflow-x: auto; }
@@ -88,28 +95,34 @@
   table.grid thead input[type=text] { font-weight: 600; color: #36393a; font-size: 12.5px; }
   table.grid input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: #fff; }
   table.grid td.first input { font-weight: 600; }
+  table.grid td.wide { width: 40%; }
   table.grid .hc { display: flex; align-items: center; }
-  table.grid .x { background: none; border: 0; color: var(--faint); cursor: pointer; padding: 4px 8px; font-size: 15px; line-height: 1; border-radius: 4px; }
-  table.grid .x:hover { color: var(--danger); background: var(--danger-soft); }
+  table.grid .x, .x { background: none; border: 0; color: var(--faint); cursor: pointer; padding: 4px 8px; font-size: 15px; line-height: 1; border-radius: 4px; }
+  .x:hover { color: var(--danger); background: var(--danger-soft); }
   table.grid td.act, table.grid th.act { width: 1%; white-space: nowrap; text-align: center; padding: 2px 4px; }
-  table.grid td.pad { padding: 6px 10px; }
   table.grid td.center { text-align: center; padding: 0 10px; }
-  table.grid tr.new td { background: #fbfcff; }
-  .thumbs { display: flex; gap: 4px; align-items: center; padding: 3px 8px; min-width: 96px; }
-  .thumbs img { width: 30px; height: 30px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); display: block; cursor: zoom-in; }
-  .thumbs .add { width: 30px; height: 30px; border: 1px dashed #a9adb2; border-radius: 4px; background: #fff; color: var(--blue); cursor: pointer; font-size: 17px; line-height: 1; }
+  .thumbs { display: flex; gap: 4px; align-items: center; padding: 3px 8px; }
+  .thumbs .th { position: relative; flex: none; }
+  .thumbs img { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); display: block; cursor: zoom-in; background: #f0f1f2; }
+  .thumbs .th button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; background: #1d1f20; color: #fff; font-size: 11px; line-height: 16px; padding: 0; cursor: pointer; display: none; }
+  .thumbs .th:hover button, .thumbs .th button:focus { display: block; }
+  .thumbs .add { width: 32px; height: 32px; flex: none; border: 1px dashed #a9adb2; border-radius: 4px; background: #fff; color: var(--blue); cursor: pointer; font-size: 17px; line-height: 1; }
   .thumbs .add:hover { border-color: var(--blue); background: var(--blue-soft); }
-  td.photo img { width: 72px; height: 54px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); display: block; margin: 5px 8px; cursor: zoom-in; background: #f0f1f2; }
+  .pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 150px; }
+  .pdf a { color: var(--blue); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-size: 13px; }
+  .pdf a:hover { text-decoration: underline; }
+  .pdf select { border: 0; background: transparent; padding: 7px 4px; color: var(--muted); font-size: 13px; min-width: 140px; }
 
-  /* ---- data produk ---- */
-  details.series { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
-  details.series > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
-  details.series > summary::-webkit-details-marker { display: none; }
-  details.series > summary::before { content: "▸"; color: var(--faint); font-size: 12px; width: 10px; }
-  details.series[open] > summary::before { content: "▾"; }
-  details.series[open] > summary { border-bottom: 1px solid var(--line-soft); }
-  details.series > summary .count { font-weight: 400; color: var(--muted); font-size: 13px; }
-  details.series > summary .spacer { flex: 1; }
+  /* ---- data teknis ---- */
+  details.series, details.fold { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
+  details.fold { margin-bottom: 16px; }
+  details > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▸"; color: var(--faint); font-size: 12px; width: 10px; }
+  details[open] > summary::before { content: "▾"; }
+  details[open] > summary { border-bottom: 1px solid var(--line-soft); }
+  details > summary .count { font-weight: 400; color: var(--muted); font-size: 13px; }
+  details.fold > .fold-body { padding: 14px 16px 6px; background: #fafafb; border-radius: 0 0 var(--radius) var(--radius); }
   .series-body { padding: 14px 16px 16px; }
   .tblhead { display: flex; gap: 8px; align-items: center; margin: 16px 0 6px; }
   .tblhead input { max-width: 320px; font-weight: 600; }
@@ -131,6 +144,7 @@
   .msg.note { align-self: center; background: none; color: var(--muted); font-size: 12px; text-align: center; max-width: 100%; }
   .msg.bad { background: var(--warn-soft); border: 1px solid #efd9a8; color: var(--warn); }
   .msg img { display: block; max-width: 180px; border-radius: 6px; margin-top: 6px; }
+  .msg a.doc { display: block; margin-top: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--blue); text-decoration: none; background: #fafafb; }
   .send { display: flex; gap: 8px; margin-top: 10px; }
 
   .toast { position: fixed; right: 20px; bottom: 20px; background: #1d1f20; color: #fff; padding: 10px 16px; border-radius: var(--radius); opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; max-width: 360px; z-index: 30; }
@@ -139,7 +153,7 @@
   .login { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
   .login.on { display: flex; }
   .login form { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 28px; width: 100%; max-width: 380px; }
-  .login .mark { width: 30px; height: 30px; border-radius: 7px; margin-bottom: 14px; }
+  .login .mark { width: 34px; height: 34px; border-radius: 8px; margin-bottom: 14px; font-size: 19px; }
   .login h2 { margin: 0 0 4px; font-size: 20px; }
   .login p { color: var(--muted); margin: 0 0 18px; }
   .err { color: var(--danger); min-height: 20px; margin: 8px 0 0; font-size: 13px; }
@@ -158,7 +172,7 @@
     .content { padding: 16px 16px 60px; }
     .row, .tiles { grid-template-columns: 1fr; }
     .brand-sub, .topbar .chip { display: none; }
-    .topbar { padding: 0 14px; }
+    .topbar { padding: 0 14px; gap: 8px; }
   }
 </style>
 </head>
@@ -166,150 +180,170 @@
 
 <div class="login" id="login">
   <form id="loginForm">
-    <div class="mark"></div>
-    <h2>Dashboard Alice Bot</h2>
-    <p>Masuk untuk mengatur cara bot menjawab.</p>
-    <label class="f"><span>Kata sandi</span><input type="password" id="pw" autocomplete="current-password" required></label>
-    <button class="btn" style="width:100%">Masuk</button>
+    <div class="mark">A</div>
+    <h2>Alice AI</h2>
+    <p data-en="Sign in to manage how the bot answers.">Masuk untuk mengatur cara bot menjawab.</p>
+    <label class="f"><span data-en="Password">Kata sandi</span><input type="password" id="pw" autocomplete="current-password" required></label>
+    <button class="btn" style="width:100%" data-en="Sign in">Masuk</button>
     <p class="err" id="loginErr"></p>
   </form>
 </div>
 
 <div class="topbar">
-  <div class="mark"></div>
-  <div class="brand" id="brandName">Dashboard Alice Bot</div>
-  <div class="brand-sub" id="brandSub">memuat…</div>
+  <div class="mark">A</div>
+  <img class="logo" id="logoTop" alt="">
+  <div class="brand">Alice AI</div>
+  <div class="brand-sub" id="brandSub"></div>
   <div class="spacer"></div>
   <span class="chip" id="chipLlm"></span>
   <span class="chip" id="chipWa"></span>
-  <button class="btn ghost small" id="logout">Keluar</button>
+  <div class="lang" id="lang" role="group" aria-label="Bahasa / Language"><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
+  <button class="btn ghost small" id="logout" data-en="Sign out">Keluar</button>
 </div>
 
 <div class="app">
   <aside>
     <nav id="nav">
       <div class="nav-group">Bot</div>
-      <button data-tab="identitas" class="on">Identitas</button>
-      <button data-tab="perilaku">Perilaku</button>
-      <button data-tab="rekomendasi">Rekomendasi</button>
+      <button data-tab="identitas" class="on" data-en="Identity">Identitas</button>
+      <button data-tab="perilaku" data-en="Behaviour">Perilaku</button>
+      <button data-tab="rekomendasi" data-en="Recommendations">Rekomendasi</button>
       <div class="nav-group">Data</div>
-      <button data-tab="produk">Data produk</button>
-      <button data-tab="foto">Foto</button>
-      <button data-tab="data">Data pelanggan</button>
-      <div class="nav-group">Pantau</div>
-      <button data-tab="lead">Lead</button>
-      <button data-tab="biaya">Pemakaian &amp; biaya</button>
-      <button data-tab="uji">Uji coba</button>
+      <button data-tab="produk" data-en="Products">Produk</button>
+      <button data-tab="data" data-en="Customer data">Data pelanggan</button>
+      <div class="nav-group" data-en="Monitor">Pantau</div>
+      <button data-tab="lead" data-en="Leads">Lead</button>
+      <button data-tab="biaya" data-en="Usage &amp; cost">Pemakaian &amp; biaya</button>
+      <button data-tab="uji" data-en="Test chat">Uji coba</button>
     </nav>
   </aside>
 
   <main>
     <div class="pagehead">
       <div>
-        <h1 id="title">Identitas</h1>
+        <h1 id="title"></h1>
         <p id="desc"></p>
       </div>
-      <button class="btn" id="save" disabled>Simpan &amp; terapkan</button>
+      <button class="btn" id="save" disabled></button>
     </div>
 
     <div class="content">
 
       <section id="tab-identitas" class="on">
         <div class="card">
-          <div class="ch"><h2>Siapa yang menjawab</h2></div>
+          <div class="ch"><h2 data-en="Who answers">Siapa yang menjawab</h2></div>
           <div class="cb">
             <div class="row">
-              <label class="f"><span>Nama bisnis</span><input type="text" data-key="brand"></label>
-              <label class="f"><span>Nama admin (alias)</span><input type="text" data-key="alias" placeholder="mis. Rina"><small>Kosongkan kalau admin tidak perlu punya nama.</small></label>
+              <label class="f"><span data-en="Business name">Nama bisnis</span><input type="text" data-key="brand"></label>
+              <label class="f"><span data-en="Admin name (alias)">Nama admin (alias)</span><input type="text" data-key="alias" placeholder="mis. Rina" data-en-ph="e.g. Rina"><small data-en="Leave empty if the admin does not need a name.">Kosongkan kalau admin tidak perlu punya nama.</small></label>
             </div>
             <div class="row">
-              <label class="f"><span>Peran</span><input type="text" data-key="persona"><small>Mis. “admin penjualan GFAN Indonesia”.</small></label>
-              <label class="f"><span>Sapaan ke pelanggan</span><input type="text" data-key="honorific"><small>Mis. “Bapak/Ibu” atau “Kak”.</small></label>
+              <label class="f"><span data-en="Role">Peran</span><input type="text" data-key="persona"><small data-en="E.g. “sales admin of GFAN Indonesia”. Written in the bot's language.">Mis. “admin penjualan GFAN Indonesia”.</small></label>
+              <label class="f"><span data-en="How customers are addressed">Sapaan ke pelanggan</span><input type="text" data-key="honorific"><small data-en="E.g. “Bapak/Ibu” or “Kak”.">Mis. “Bapak/Ibu” atau “Kak”.</small></label>
             </div>
-            <label class="f" style="margin:0"><span>Tentang bisnis</span><textarea rows="3" data-key="about"></textarea><small>Satu-dua kalimat: bisnis ini apa dan menjual apa.</small></label>
+            <label class="f" style="margin:0"><span data-en="About the business">Tentang bisnis</span><textarea rows="3" data-key="about"></textarea><small data-en="One or two sentences: what the business is and what it sells.">Satu-dua kalimat: bisnis ini apa dan menjual apa.</small></label>
           </div>
         </div>
         <div class="card">
-          <div class="ch"><h2>Salam pembuka</h2><p class="help">Dikirim sekali, saat seseorang chat untuk pertama kali. Sebaiknya sudah meminta semua data di halaman “Data pelanggan”.</p></div>
+          <div class="ch"><h2>Logo</h2><p class="help" data-en="Shown at the top of this dashboard. JPG, PNG or WebP, up to 4 MB. Applied after you save.">Tampil di bagian atas dashboard ini. JPG, PNG, atau WebP, maksimal 4 MB. Berlaku setelah disimpan.</p></div>
+          <div class="cb">
+            <div class="logo-row">
+              <div class="logo-box" id="logoBox"></div>
+              <button class="btn ghost small" type="button" id="logoPick" data-en="Upload logo">Unggah logo</button>
+              <button class="btn danger small" type="button" id="logoClear" data-en="Remove">Hapus</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><h2 data-en="Greeting">Salam pembuka</h2><p class="help" data-en="Sent once, when someone messages for the first time. It should already ask for everything on the “Customer data” page.">Dikirim sekali, saat seseorang chat untuk pertama kali. Sebaiknya sudah meminta semua data di halaman “Data pelanggan”.</p></div>
           <div class="cb"><textarea rows="7" data-key="greeting"></textarea></div>
         </div>
       </section>
 
       <section id="tab-data">
         <div class="card">
-          <div class="ch"><h2>Data yang dikumpulkan dari pelanggan</h2><p class="help">Begitu semuanya terisi, ringkasannya dikirim ke sales dan dicatat di Google Sheet. Urutan baris = urutan kolom di Sheet.</p></div>
+          <div class="ch"><h2 data-en="Data collected from customers">Data yang dikumpulkan dari pelanggan</h2><p class="help" data-en="Once everything is filled in, a summary goes to sales and is logged to Google Sheets. Row order = column order in the Sheet.">Begitu semuanya terisi, ringkasannya dikirim ke sales dan dicatat di Google Sheet. Urutan baris = urutan kolom di Sheet.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="fields"></table></div></div>
-          <div class="cardfoot"><button class="btn ghost small" id="addField" type="button">+ Baris</button><span>“Kunci” = nama kolom di sistem: huruf kecil tanpa spasi. Centang “Nama” pada baris yang berisi nama orangnya.</span></div>
+          <div class="cardfoot"><button class="btn ghost small" id="addField" type="button" data-en="+ Row">+ Baris</button><span data-en="“Key” = the column name in the system: lowercase, no spaces. Tick “Name” on the row that holds the person's name.">“Kunci” = nama kolom di sistem: huruf kecil tanpa spasi. Centang “Nama” pada baris yang berisi nama orangnya.</span></div>
         </div>
         <div class="card">
-          <div class="ch"><h2>Kalimat follow-up</h2><p class="help">Ujung pesan pengingat saat data pelanggan sudah lengkap tapi ia diam.</p></div>
+          <div class="ch"><h2 data-en="Follow-up sentence">Kalimat follow-up</h2><p class="help" data-en="The end of the reminder message when the customer's data is complete but they have gone quiet.">Ujung pesan pengingat saat data pelanggan sudah lengkap tapi ia diam.</p></div>
           <div class="cb"><input type="text" data-key="followupClosing"></div>
         </div>
       </section>
 
       <section id="tab-produk">
-        <div id="catalog"></div>
-        <p style="margin:0 0 18px"><button class="btn ghost" id="addSeries" type="button">+ Kelompok produk</button></p>
         <div class="card">
-          <div class="ch"><h2>Pengetahuan lain</h2><p class="help">Yang tidak berbentuk tabel: tanya-jawab umum, jam buka, cara pesan, dan sebagainya. Tulis apa adanya.</p></div>
-          <div class="cb">
-            <textarea rows="7" data-key="notes" placeholder="mis. Jam buka: Senin–Sabtu 08.00–17.00."></textarea>
-            <label class="check" style="margin:14px 0 0"><input type="checkbox" data-key="guardCodes"><span><b>Tolak kode produk yang tidak ada di data ini.</b> Balasan yang menyebut kode produk karangan tidak dikirim.</span></label>
+          <div class="ch"><h2 data-en="Product list">Daftar produk</h2><p class="help" data-en="One row per product. Fill in price and stock so the bot can answer them; leave them empty and the bot hands those questions to your team. Photos and the PDF are what the bot can send to customers on WhatsApp. You can paste rows straight from Excel.">Satu baris per produk. Isi harga dan stok supaya bot bisa menjawabnya; kalau dikosongkan, bot menyerahkan pertanyaan itu ke tim Anda. Foto dan PDF adalah yang bisa dikirim bot ke pelanggan lewat WhatsApp. Baris bisa ditempel langsung dari Excel.</p></div>
+          <div class="cb"><div class="scroll"><table class="grid" id="products"></table></div></div>
+          <div class="cardfoot"><button class="btn ghost small" id="addProduct" type="button" data-en="+ Product">+ Produk</button><span id="knowLen"></span></div>
+        </div>
+
+        <details class="fold" id="detailFold">
+          <summary><span data-en="Detailed technical data (optional)">Data teknis rinci (opsional)</span> <span class="count" id="detailCount"></span></summary>
+          <div class="fold-body">
+            <p class="help" style="margin-bottom:12px" data-en="Specification tables the bot can quote exactly (watts, airflow, dimensions…). The bot does not read the contents of PDFs: anything it should be able to answer in chat must be written here or in the product list. Delete a group if the PDF alone is enough.">Tabel spesifikasi yang bisa dikutip bot dengan persis (watt, aliran udara, ukuran…). Bot tidak membaca isi PDF: apa pun yang harus bisa dijawabnya di chat perlu tertulis di sini atau di daftar produk. Hapus kelompoknya kalau PDF saja sudah cukup.</p>
+            <div id="catalog"></div>
+            <p style="margin:0 0 12px"><button class="btn ghost small" id="addSeries" type="button" data-en="+ Group">+ Kelompok</button></p>
           </div>
-          <div class="cardfoot" id="knowLen"></div>
+        </details>
+
+        <div class="card">
+          <div class="ch"><h2 data-en="Other knowledge">Pengetahuan lain</h2><p class="help" data-en="Anything that is not a table: common questions, opening hours, how to order. Written in the bot's language.">Yang tidak berbentuk tabel: tanya-jawab umum, jam buka, cara pesan, dan sebagainya. Tulis apa adanya.</p></div>
+          <div class="cb">
+            <textarea rows="6" data-key="notes" placeholder="mis. Jam buka: Senin–Sabtu 08.00–17.00."></textarea>
+            <label class="check" style="margin:14px 0 0"><input type="checkbox" data-key="guardCodes"><span data-en="<b>Reject product codes that are not in this data.</b> Replies that mention a made-up product code are not sent."><b>Tolak kode produk yang tidak ada di data ini.</b> Balasan yang menyebut kode produk karangan tidak dikirim.</span></label>
+          </div>
         </div>
         <div class="card">
-          <div class="ch"><h2>Yang harus dijawab manusia</h2><p class="help">Untuk topik-topik ini bot bilang “tim kami yang akan menginfokan” dan mengabari sales.</p></div>
+          <div class="ch"><h2 data-en="What a human must answer">Yang harus dijawab manusia</h2><p class="help" data-en="For these topics the bot says “our team will get back to you” and notifies sales.">Untuk topik-topik ini bot bilang “tim kami yang akan menginfokan” dan mengabari sales.</p></div>
           <div class="cb">
             <div class="row">
-              <label class="f"><span>Topik</span><input type="text" data-key="handoffTopics"></label>
-              <label class="f"><span>Sebutan di notifikasi</span><input type="text" data-key="handoffLabel"></label>
+              <label class="f"><span data-en="Topics">Topik</span><input type="text" data-key="handoffTopics"></label>
+              <label class="f"><span data-en="Label in the notification">Sebutan di notifikasi</span><input type="text" data-key="handoffLabel"></label>
             </div>
-            <label class="check" style="margin:0"><input type="checkbox" data-key="forbidPrices"><span><b>Bot tidak boleh menyebut harga.</b> Matikan hanya kalau harga sudah ditulis di data produk.</span></label>
+            <label class="check" style="margin:0"><input type="checkbox" data-key="forbidPrices"><span data-en="<b>The bot may only quote prices written in the product list.</b> Replies with any other amount are not sent."><b>Bot hanya boleh menyebut harga yang tertulis di daftar produk.</b> Balasan dengan nominal lain tidak dikirim.</span></label>
           </div>
         </div>
       </section>
 
       <section id="tab-rekomendasi">
         <div class="card">
-          <div class="ch"><h2>Cara bot menganalisis dan menyarankan</h2><p class="help">Tulis seperti Anda mengajari karyawan baru: rumusnya, angka acuannya, dan produk mana untuk keadaan apa. Bot mengikuti panduan ini saat pelanggan menceritakan kebutuhannya — mis. menyebut ukuran ruangan.</p></div>
-          <div class="cb"><textarea rows="22" data-key="advice"></textarea></div>
+          <div class="ch"><h2 data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</h2><p class="help" data-en="Before recommending a product, the bot asks these — only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini — hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p></div>
+          <div class="cb"><div class="scroll"><table class="grid" id="questions"></table></div></div>
+          <div class="cardfoot"><button class="btn ghost small" id="addQuestion" type="button" data-en="+ Question">+ Pertanyaan</button></div>
         </div>
-      </section>
-
-      <section id="tab-foto">
         <div class="card">
-          <div class="ch"><h2>Foto <span class="chip" id="photoCount"></span></h2><p class="help">Bot memilih foto dari <b>keterangannya</b>, jadi tulis dengan jelas apa isinya. Isi baris paling atas untuk menambah foto. JPG, PNG, atau WebP, maksimal 4 MB. Foto langsung tersimpan dan langsung bisa dipakai bot.</p></div>
-          <div class="cb"><div class="scroll"><table class="grid" id="photos"></table></div></div>
+          <div class="ch"><h2 data-en="How the bot analyses and recommends">Cara bot menganalisis dan menyarankan</h2><p class="help" data-en="Write it the way you would teach a new employee: the formula, the reference numbers, and which product fits which situation.">Tulis seperti Anda mengajari karyawan baru: rumusnya, angka acuannya, dan produk mana untuk keadaan apa.</p></div>
+          <div class="cb"><textarea rows="20" data-key="advice"></textarea></div>
         </div>
-        <datalist id="codes"></datalist>
       </section>
 
       <section id="tab-perilaku">
         <div class="card">
-          <div class="ch"><h2>Jeda sebelum membalas</h2><p class="help">Tiap balasan menunggu sekian detik yang diacak di antara dua angka ini, dan tidak pernah hampir sama dua kali berturut-turut. Tulisan “sedang mengetik…” muncul di detik-detik terakhir.</p></div>
+          <div class="ch"><h2 data-en="Delay before replying">Jeda sebelum membalas</h2><p class="help" data-en="Each reply waits a random number of seconds between these two values, never nearly the same twice in a row. “typing…” appears in the last few seconds.">Tiap balasan menunggu sekian detik yang diacak di antara dua angka ini, dan tidak pernah hampir sama dua kali berturut-turut. Tulisan “sedang mengetik…” muncul di detik-detik terakhir.</p></div>
           <div class="cb">
             <div class="row">
-              <label class="f" style="margin:0"><span>Paling cepat (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMin"></label>
-              <label class="f" style="margin:0"><span>Paling lama (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMax"></label>
+              <label class="f" style="margin:0"><span data-en="Fastest (seconds)">Paling cepat (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMin"></label>
+              <label class="f" style="margin:0"><span data-en="Slowest (seconds)">Paling lama (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMax"></label>
             </div>
           </div>
         </div>
         <div class="card">
-          <div class="ch"><h2>Diatur di berkas <code>.env</code></h2><p class="help">Waktu follow-up, lama bot diam setelah Anda membalas sendiri, nomor sales, dan sambungan WhatsApp diatur di <code>.env</code> dan baru berlaku setelah bot dinyalakan ulang.</p></div>
+          <div class="ch"><h2 data-en="Set in the <code>.env</code> file">Diatur di berkas <code>.env</code></h2><p class="help" data-en="Follow-up timing, how long the bot stays quiet after you reply yourself, the sales number and the WhatsApp connection are set in <code>.env</code> and only apply after the bot is restarted.">Waktu follow-up, lama bot diam setelah Anda membalas sendiri, nomor sales, dan sambungan WhatsApp diatur di <code>.env</code> dan baru berlaku setelah bot dinyalakan ulang.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="envInfo"></table></div></div>
         </div>
       </section>
 
       <section id="tab-uji">
         <div class="card">
-          <div class="ch"><h2>Coba bicara dengan bot</h2><p class="help">Memakai profil yang <b>sudah disimpan</b>, tanpa mengirim apa pun ke WhatsApp. Simpan dulu perubahan Anda, lalu uji di sini.</p></div>
+          <div class="ch"><h2 data-en="Talk to the bot">Coba bicara dengan bot</h2><p class="help" data-en="Uses the profile that is <b>already saved</b>, without sending anything to WhatsApp. Save your changes first, then test here. The bot itself always answers in Indonesian.">Memakai profil yang <b>sudah disimpan</b>, tanpa mengirim apa pun ke WhatsApp. Simpan dulu perubahan Anda, lalu uji di sini.</p></div>
           <div class="cb">
-            <div class="chat" id="chat"><div class="msg note">Ketik seperti calon pelanggan.</div></div>
+            <div class="chat" id="chat"></div>
             <form class="send" id="sendForm">
               <input type="text" id="sendText" placeholder="mis. gudang 10 x 20 tinggi 6 meter, cocoknya yang mana?" autocomplete="off">
-              <button class="btn">Kirim</button>
-              <button class="btn ghost" type="button" id="resetChat">Ulang</button>
+              <button class="btn" data-en="Send">Kirim</button>
+              <button class="btn ghost" type="button" id="resetChat" data-en="Reset">Ulang</button>
             </form>
           </div>
         </div>
@@ -317,7 +351,7 @@
 
       <section id="tab-lead">
         <div class="card">
-          <div class="ch"><h2>Percakapan terbaru</h2><p class="help">100 kontak terakhir. Kalau dashboard ini online, daftarnya diperbarui bot tiap ±15 menit. Catatan lengkapnya ada di Google Sheet.</p></div>
+          <div class="ch"><h2 data-en="Recent conversations">Percakapan terbaru</h2><p class="help" data-en="The last 100 contacts. When this dashboard is online, the bot refreshes the list about every 15 minutes. The full record is in Google Sheets.">100 kontak terakhir. Kalau dashboard ini online, daftarnya diperbarui bot tiap ±15 menit. Catatan lengkapnya ada di Google Sheet.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="leads"></table></div></div>
         </div>
       </section>
@@ -325,9 +359,9 @@
       <section id="tab-biaya">
         <div class="tiles" id="usageTiles"></div>
         <div class="card">
-          <div class="ch"><h2>Pemakaian per hari</h2><p class="help" id="usageRate"></p></div>
+          <div class="ch"><h2 data-en="Usage per day">Pemakaian per hari</h2><p class="help" id="usageRate"></p></div>
           <div class="cb"><div class="scroll"><table class="list" id="usage"></table></div></div>
-          <div class="cardfoot">Biaya di sini adalah <b>perkiraan</b> dari jumlah token × tarif di atas. Tagihan resminya ada di akun penyedia LLM. Uji coba di dashboard online tidak ikut terhitung.</div>
+          <div class="cardfoot" data-en="The cost here is an <b>estimate</b>: tokens × the rates above. The official bill is in your LLM provider account. Test chats on the online dashboard are not counted.">Biaya di sini adalah <b>perkiraan</b> dari jumlah token × tarif di atas. Tagihan resminya ada di akun penyedia LLM. Uji coba di dashboard online tidak ikut terhitung.</div>
         </div>
       </section>
 
@@ -335,7 +369,7 @@
   </main>
 </div>
 
-<input type="file" id="rowFile" accept="image/jpeg,image/png,image/webp" hidden>
+<input type="file" id="pickFile" hidden>
 <div class="viewer" id="viewer"><img alt=""></div>
 <div class="toast" id="toast"></div>
 <script src="/admin/app.js"></script>

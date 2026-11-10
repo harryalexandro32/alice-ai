@@ -13,7 +13,7 @@
  *   - Mati kecuali ADMIN_PASSWORD diisi.
  *   - Sesi lewat cookie HttpOnly + SameSite=Strict yang ditandatangani.
  *   - Percobaan masuk yang salah dibatasi.
- *   - Unggahan: hanya JPEG/PNG/WebP, dicek dari isi berkasnya, nama berkas
+ *   - Unggahan: hanya JPEG/PNG/WebP/PDF, dicek dari isi berkasnya, nama berkas
  *     dibuat sendiri (tidak pernah memakai nama dari pengunggah).
  */
 
@@ -24,16 +24,16 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 import { checkReply, llmBrain, type Brain } from '../brain';
-import { biz, editableView, validate } from '../business';
-import type { Photo } from '../business/types';
+import { biz, editableView, fileById, referencedFiles, validate } from '../business';
+import type { MediaFile } from '../business/types';
 import { cfg } from '../config';
 import { llmEnabled } from '../llm/provider';
 import type { AdminStore } from './stores';
 
 const SESSION_MS = 12 * 3_600_000;
 /** Di bawah batas badan permintaan fungsi Vercel (4,5 MB). */
-const MAX_PHOTO_BYTES = 4_000_000;
-const MAX_PHOTOS = 60;
+const MAX_FILE_BYTES = 4_000_000;
+const MAX_FILES = 400;
 const COOKIE = 'admin_session';
 
 let brain: Brain = llmBrain;
@@ -87,7 +87,8 @@ function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
   });
 }
 
-function imageExt(b: Buffer): 'jpg' | 'png' | 'webp' | null {
+function fileExt(b: Buffer): 'jpg' | 'png' | 'webp' | 'pdf' | null {
+  if (b.length > 5 && b.toString('latin1', 0, 5) === '%PDF-') return 'pdf';
   if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
   if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
   if (b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'webp';
@@ -96,7 +97,7 @@ function imageExt(b: Buffer): 'jpg' | 'png' | 'webp' | null {
 
 const TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8',
-  jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf',
 };
 
 /** Berkas halaman: di samping file ini (lokal) atau di akar proyek (Vercel). */
@@ -198,6 +199,16 @@ export function createAdminHandler(store: AdminStore) {
       }
       await store.save(changes);
       console.log(`[dashboard] profil disimpan: ${Object.keys(changes).join(', ')}`);
+      // Berkas yang tidak lagi dipakai produk mana pun (atau logo) dibuang.
+      if ('products' in changes || 'logo' in changes) {
+        const used = referencedFiles();
+        const orphans = biz.files.filter((f) => !used.has(f.id));
+        if (orphans.length) {
+          await store.save({ files: biz.files.filter((f) => used.has(f.id)) });
+          for (const f of orphans) await store.delPhoto(f.file).catch(() => {});
+          console.log(`[dashboard] ${orphans.length} berkas tak terpakai dihapus`);
+        }
+      }
       return json(200, { ok: true, profile: editableView() });
     }
 
@@ -224,57 +235,44 @@ export function createAdminHandler(store: AdminStore) {
       const asked = [text, ...history.filter((h) => h.dir === 'in').map((h) => h.text)].join('\n');
       return json(200, {
         ...result,
-        photos: result.photos.map((id) => biz.photos.find((p) => p.id === id)).filter(Boolean),
+        photos: result.photos.map(fileById).filter(Boolean),
+        docs: result.docs.map(fileById).filter(Boolean),
         rejected: checkReply(result.reply, asked),
       });
     }
 
-    if (path === '/admin/api/photos' && method === 'POST') {
-      if (biz.photos.length >= MAX_PHOTOS) return json(400, { error: `Maksimal ${MAX_PHOTOS} foto.` });
+    // Unggah foto atau PDF. Berkasnya baru "dipakai" setelah daftar produk (atau
+    // logo) yang merujuknya disimpan; yang tidak pernah dirujuk dibuang saat itu.
+    if (path === '/admin/api/files' && method === 'POST') {
+      if (biz.files.length >= MAX_FILES) return json(400, { error: `Maksimal ${MAX_FILES} berkas.` });
       let data: Buffer;
       try {
-        data = await readBody(req, MAX_PHOTO_BYTES);
+        data = await readBody(req, MAX_FILE_BYTES);
       } catch {
-        return json(413, { error: 'Foto terlalu besar (maksimal 4 MB).' });
+        return json(413, { error: 'Berkas terlalu besar (maksimal 4 MB).' });
       }
-      const ext = imageExt(data);
-      if (!ext) return json(400, { error: 'Hanya JPG, PNG, atau WebP.' });
-      const text = label(url.searchParams.get('label'), 120);
-      if (!text) return json(400, { error: 'Isi keterangan fotonya dulu.' });
-      const id = `f${randomBytes(4).toString('hex')}`;
-      const photo: Photo = { id, file: `${id}.${ext}`, label: text, tags: label(url.searchParams.get('tags'), 160) };
-      await store.putPhoto(photo.file, data, TYPES[ext] as string);
-      await store.save({ photos: [...biz.photos, photo] });
-      console.log(`[dashboard] foto ditambah: ${photo.label}`);
-      return json(200, { ok: true, photos: biz.photos });
+      const ext = fileExt(data);
+      if (!ext) return json(400, { error: 'Hanya JPG, PNG, WebP, atau PDF.' });
+      const id = `${ext === 'pdf' ? 'd' : 'f'}${randomBytes(4).toString('hex')}`;
+      const file: MediaFile = { id, file: `${id}.${ext}`, name: label(url.searchParams.get('name'), 120) || `berkas.${ext}` };
+      await store.putPhoto(file.file, data, TYPES[ext] as string);
+      await store.save({ files: [...biz.files, file] });
+      console.log(`[dashboard] berkas ditambah: ${file.name}`);
+      return json(200, { ok: true, file, files: biz.files });
     }
 
-    const one = path.match(/^\/admin\/api\/photos\/(f[0-9a-f]{8})$/);
-    if (one) {
-      const photo = biz.photos.find((p) => p.id === one[1]);
-      if (!photo) return json(404, { error: 'Foto tidak ditemukan.' });
-      if (method === 'PATCH') {
-        const body = JSON.parse((await readBody(req, 2000)).toString('utf8')) as { label?: string; tags?: string };
-        const text = label(body.label, 120);
-        if (!text) return json(400, { error: 'Keterangan tidak boleh kosong.' });
-        await store.save({ photos: biz.photos.map((p) => (p.id === photo.id ? { ...p, label: text, tags: label(body.tags, 160) } : p)) });
-        return json(200, { ok: true, photos: biz.photos });
-      }
-      if (method === 'DELETE') {
-        await store.save({ photos: biz.photos.filter((p) => p.id !== photo.id) });
-        await store.delPhoto(photo.file).catch(() => {});
-        return json(200, { ok: true, photos: biz.photos });
-      }
-    }
-
-    // Berkas foto: hanya yang terdaftar di profil, jadi tidak ada jalan keluar folder.
-    const media = path.match(/^\/admin\/media\/(f[0-9a-f]{8}\.(jpg|png|webp))$/);
+    // Berkas unggahan: hanya yang terdaftar di profil, jadi tidak ada jalan keluar folder.
+    const media = path.match(/^\/admin\/media\/([fd][0-9a-f]{8}\.(jpg|png|webp|pdf))$/);
     if (media && method === 'GET') {
-      const photo = biz.photos.find((p) => p.file === media[1]);
-      const data = photo ? await store.getPhoto(photo.file) : null;
+      const f = biz.files.find((x) => x.file === media[1]);
+      const data = f ? await store.getPhoto(f.file) : null;
       if (!data) return json(404, { error: 'Tidak ada.' });
-      // Nama berkas unik per foto, jadi aman disimpan peramban (tidak di perantara).
-      res.writeHead(200, { 'content-type': TYPES[media[2] as string] as string, 'cache-control': 'private, max-age=86400' });
+      // Nama berkas unik per unggahan, jadi aman disimpan peramban (tidak di perantara).
+      res.writeHead(200, {
+        'content-type': TYPES[media[2] as string] as string,
+        'cache-control': 'private, max-age=86400',
+        ...(media[2] === 'pdf' ? { 'content-disposition': 'inline; filename="dokumen.pdf"' } : {}),
+      });
       return void res.end(data);
     }
 

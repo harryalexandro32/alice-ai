@@ -236,7 +236,11 @@ async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<v
     await markRead(jid);
     res = await s.sendMessage(
       jid,
-      opts?.image ? { image: readFileSync(opts.image), caption: text } : { text }
+      !opts?.image
+        ? { text }
+        : opts.image.toLowerCase().endsWith('.pdf')
+          ? { document: readFileSync(opts.image), mimetype: 'application/pdf', fileName: opts.fileName ?? 'dokumen.pdf', caption: text }
+          : { image: readFileSync(opts.image), caption: text }
     );
   } catch (e) {
     onSendError(e);

@@ -39,13 +39,13 @@ async function pullOnce(): Promise<void> {
   const overrides = JSON.parse(text) as Partial<Editable>;
   // Foto dulu, baru profil: bot tidak boleh sempat "tahu" foto yang berkasnya
   // belum ada di sini.
-  for (const p of overrides.photos ?? []) {
-    if (!/^f[0-9a-f]{8}\.(jpg|png|webp)$/.test(p.file)) continue;
+  for (const p of overrides.files ?? []) {
+    if (!/^[fd][0-9a-f]{8}\.(jpg|png|webp|pdf)$/.test(p.file)) continue;
     const local = join(mediaDir(), p.file);
     if (existsSync(local)) continue;
     const data = await blob().getBytes(remotePath.media(p.file));
     if (data) writeFileSync(local, data);
-    else console.error(`[sinkron] foto ${p.file} belum ada di penyimpanan bersama`);
+    else console.error(`[sinkron] berkas ${p.file} belum ada di penyimpanan bersama`);
   }
   replaceOverrides(overrides);
   lastProfile = text;

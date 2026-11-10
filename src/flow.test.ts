@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 
 import { makeSalesNotifier } from './app';
-import { checkReply, parseBrain, type BrainInput, type BrainResult } from './brain';
+import { checkReply, parseBrain, systemPrompt, type BrainInput, type BrainResult } from './brain';
 import { biz } from './business';
 import { advance, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
@@ -36,8 +36,11 @@ const R = (
   reply: string,
   fields: Record<string, string> = {},
   intent: BrainResult['intent'] = 'info',
-  photos: string[] = []
-): BrainResult => ({ reply, fields, intent, photos });
+  photos: string[] = [],
+  docs: string[] = []
+): BrainResult => ({ reply, fields, intent, photos, docs });
+
+const SEED_PRODUCTS = biz.products;
 
 function fresh(): void {
   openDb(':memory:');
@@ -58,8 +61,11 @@ function fresh(): void {
   brainCalls = [];
   sheetFails = 0;
   next = () => R('Baik.');
-  biz.photos = [];
-  setSender(async (_to, text, image) => void sent.push(image ? `[gambar:${image.split(/[\\/]/).pop()}] ${text}` : text));
+  biz.files = [];
+  biz.products = SEED_PRODUCTS;
+  setSender(async (_to, text, image, fileName) =>
+    void sent.push(image ? `[${fileName ? 'pdf' : 'gambar'}:${fileName ?? image.split(/[\\/]/).pop()}] ${text}` : text)
+  );
   setSalesNotifier(async (text) => {
     sales.push(text);
     return true;
@@ -301,17 +307,41 @@ const tests: [string, () => Promise<void>][] = [
   }],
 
   ['foto: dikirim setelah teks, hanya yang ada, dan tidak diulang', async () => {
-    biz.photos = [{ id: 'f0000000a', file: 'f0000000a.jpg', label: 'GFAF-40A tampak depan', tags: 'GFAF-40A' }];
+    biz.files = [
+      { id: 'f0000000a', file: 'f0000000a.jpg', name: 'depan.jpg' },
+      { id: 'd0000000b', file: 'd0000000b.pdf', name: 'Industrial Fan - GFan.pdf' },
+      { id: 'f0000000c', file: 'f0000000c.jpg', name: 'tidak-terpasang.jpg' },
+    ];
+    biz.products = [{ name: 'GFAF-40A', description: 'Exhaust 16"', price: 'Rp 450.000', stock: 'ada', photos: ['f0000000a'], pdf: 'd0000000b' }];
     await say('halo');
     next = () => R('Ini fotonya ya, Pak.', {}, 'info', ['f0000000a']);
     await say('minta foto GFAF-40A');
-    assert.deepEqual(sent.slice(1), ['Ini fotonya ya, Pak.', '[gambar:f0000000a.jpg] GFAF-40A tampak depan']);
+    assert.deepEqual(sent.slice(1), ['Ini fotonya ya, Pak.', '[gambar:f0000000a.jpg] GFAF-40A']);
     await say('yang tadi berapa watt');
     assert.equal(sent.filter((t) => t.startsWith('[gambar')).length, 1, 'foto yang sama tidak dikirim ulang');
     next = () => R('Harganya Rp 900.000', {}, 'info', ['f0000000a']);
     await say('foto lagi dong', '+6281377770003');
     assert.ok(!sent.some((t) => t.startsWith('[gambar') && sent.indexOf(t) > 3), 'balasan yang dibuang tidak membawa foto');
     assert.deepEqual(parseBrain('{"reply":"ok","photos":["f0000000a","karangan","f0000000a",7]}')?.photos, ['f0000000a']);
+
+    // PDF: dikirim sebagai dokumen bernama produknya, sekali saja.
+    next = () => R('Ini brosurnya ya, Pak.', {}, 'info', [], ['d0000000b']);
+    await say('ada brosurnya?');
+    assert.equal(sent.at(-1), '[pdf:GFAF-40A.pdf] GFAF-40A');
+    await say('kirim lagi brosurnya');
+    assert.equal(sent.filter((t) => t.startsWith('[pdf')).length, 1, 'PDF yang sama tidak dikirim ulang');
+    // Foto tidak bisa menyamar jadi PDF, dan berkas yang tidak terpasang di produk tidak bisa dikirim.
+    const mixed = parseBrain('{"reply":"ok","photos":["d0000000b","f0000000c"],"docs":["f0000000a","d0000000b"]}');
+    assert.deepEqual([mixed?.photos, mixed?.docs], [[], ['d0000000b']]);
+
+    // Harga yang tertulis di daftar produk boleh disebut; yang lain tetap ditolak.
+    assert.equal(checkReply('GFAF-40A harganya Rp 450.000 ya, Pak.'), null);
+    assert.equal(checkReply('Harganya Rp450.000,-'), null, 'ejaan lain dari harga yang sama');
+    assert.equal(checkReply('Harganya Rp 400.000'), 'menyebut harga');
+    assert.equal(checkReply('sekitar 450 ribu'), 'menyebut harga');
+    assert.match(systemPrompt(), /harga dan stok yang TERTULIS di DAFTAR PRODUK/);
+    assert.match(systemPrompt(), /GFAF-40A \| Exhaust 16" \| Rp 450.000 \| ada \| f0000000a \| d0000000b/);
+    assert.match(systemPrompt(), /PERTANYAAN KEBUTUHAN\n- Ukuran ruangannya/);
   }],
 
   ['lewat jatah harian: bot diam', async () => {
@@ -384,8 +414,8 @@ const tests: [string, () => Promise<void>][] = [
     const p = parseBrain(
       '```json\n{"reply":"Halo","fields":{"name":"null","city":" Bandung ","need":null,"admin":"ya"},"intent":"hapus semua"}\n```'
     );
-    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [] });
-    assert.deepEqual(parseBrain('{"reply":"Hai"}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [] });
+    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [], docs: [] });
+    assert.deepEqual(parseBrain('{"reply":"Hai"}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [], docs: [] });
     assert.equal(checkReply('GFAF-40A: 130 W, 2880 m³/h, 62 dB.'), null);
     assert.equal(checkReply('Tegangan 220/380 V, berat 8.5 kg.'), null);
     assert.ok(checkReply('Sekitar Rp750.000'));

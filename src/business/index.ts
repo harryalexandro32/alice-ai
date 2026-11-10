@@ -14,9 +14,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSyn
 import { join } from 'node:path';
 
 import { cfg } from '../config';
-import { renderCatalog, validateCatalog } from './catalog';
+import { isPdf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
 import { gfan } from './gfan/profile';
-import { EDITABLE, type Business, type Editable, type LeadField } from './types';
+import { EDITABLE, type Business, type Editable, type LeadField, type MediaFile } from './types';
 
 const REGISTRY: Record<string, Business> = { gfan };
 
@@ -68,7 +68,7 @@ function apply(overrides: Partial<Editable>): void {
   }
 }
 
-let rendered: { catalog: unknown; notes: string; text: string } | null = null;
+let rendered: { products: unknown; catalog: unknown; notes: string; text: string } | null = null;
 
 /**
  * Satu-satunya sumber jawaban bot: tabel produk + catatan bebas, sebagai teks.
@@ -76,11 +76,23 @@ let rendered: { catalog: unknown; notes: string; text: string } | null = null;
  * panggilan ke panggilan (awalan prompt yang di-cache penyedia LLM).
  */
 export function knowledgeText(): string {
-  if (rendered?.catalog !== biz.catalog || rendered.notes !== biz.notes) {
-    const text = [renderCatalog(biz.catalog), biz.notes.trim()].filter(Boolean).join('\n\n');
-    rendered = { catalog: biz.catalog, notes: biz.notes, text };
+  if (rendered?.products !== biz.products || rendered.catalog !== biz.catalog || rendered.notes !== biz.notes) {
+    const text = [renderProducts(biz.products), renderCatalog(biz.catalog), biz.notes.trim()].filter(Boolean).join('\n\n');
+    rendered = { products: biz.products, catalog: biz.catalog, notes: biz.notes, text };
   }
   return rendered.text;
+}
+
+export const fileById = (id: string): MediaFile | undefined => biz.files.find((f) => f.id === id);
+
+/** Id berkas yang masih dipakai: lampiran produk dan logo. */
+export function referencedFiles(): Set<string> {
+  return new Set([...biz.products.flatMap((x) => [...x.photos, x.pdf]), biz.logo].filter(Boolean));
+}
+
+/** Nama produk yang memakai berkas ini — jadi keterangan saat dikirim. */
+export function productOfFile(id: string): string | null {
+  return biz.products.find((x) => x.pdf === id || x.photos.includes(id))?.name ?? null;
 }
 
 function read(): Partial<Editable> {
@@ -133,9 +145,20 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('honorific' in input) set('honorific', text(input.honorific, 30, 'Sapaan', true));
   if ('greeting' in input) set('greeting', text(input.greeting, 1500, 'Salam pembuka', true));
   if ('notes' in input) set('notes', text(input.notes, 30_000, 'Pengetahuan tambahan'));
+  if ('products' in input) set('products', validateProducts(input.products, biz.files));
+  if ('logo' in input) {
+    const id = String(input.logo ?? '');
+    const f = fileById(id);
+    if (id && (!f || isPdf(f))) throw new Error('Logo: berkas gambarnya tidak ditemukan');
+    set('logo', id);
+  }
+  if ('questions' in input) {
+    if (!Array.isArray(input.questions) || input.questions.length > 12) throw new Error('Pertanyaan kebutuhan: maksimal 12 baris');
+    set('questions', input.questions.map((q, i) => text(q, 200, `Pertanyaan baris ${i + 1}`)).filter(Boolean));
+  }
   if ('catalog' in input) {
     const catalog = validateCatalog(input.catalog);
-    if (renderCatalog(catalog).length > 60_000) throw new Error('Data produk terlalu besar (maksimal ±60.000 karakter)');
+    if (renderCatalog(catalog).length > 60_000) throw new Error('Data teknis terlalu besar (maksimal ±60.000 karakter)');
     set('catalog', catalog);
   }
   if ('advice' in input) set('advice', text(input.advice, 8000, 'Panduan rekomendasi'));

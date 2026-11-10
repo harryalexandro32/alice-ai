@@ -35,6 +35,17 @@ export const gfan: Business = {
     },
   ],
 
+  // Satu baris per model. Harga, stok, foto, dan PDF diisi pemilik lewat dashboard.
+  products: SERIES.flatMap((s) =>
+    [...new Set(s.tables.flatMap((t) => t.rows.map((r) => r[0] as string)))].map((code) => ({
+      name: code, description: s.name, price: '', stock: '', photos: [], pdf: '',
+    }))
+  ),
+  questions: [
+    'Ukuran ruangannya berapa × berapa meter, dan tingginya berapa?',
+    'Ruangannya dipakai untuk apa? (kamar, toilet, dapur, gudang, pabrik, …)',
+    'Mau dipasang di mana: plafon, dinding, atau lewat ducting?',
+  ],
   catalog: SERIES.map(({ name, facts, tables }) => ({ name, facts, tables })),
   notes: '',
 
@@ -65,7 +76,8 @@ export const gfan: Business = {
   forbidPrices: true,
   guardCodes: true,
   followupClosing: 'apakah masih ada yang bisa kami bantu soal kebutuhan kipas/ventilasinya?',
-  photos: [],
+  files: [],
+  logo: '',
   replyDelayMin: 8,
   replyDelayMax: 30,
 

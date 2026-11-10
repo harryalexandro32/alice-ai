@@ -100,9 +100,9 @@ export async function startApp(transport: Transport): Promise<void> {
 
   // Balasan ke pelanggan menunggu dulu dengan irama manusia (lihat pace.ts).
   // Notifikasi ke sales dan follow-up tidak: keduanya bukan balasan.
-  setSender(async (to, text, image) => {
+  setSender(async (to, text, image, fileName) => {
     await humanPause(to.address || to.phone, text.length, async () => transport.typing?.(to));
-    await transport.send(to, text, image ? { image } : undefined);
+    await transport.send(to, text, image ? { image, fileName } : undefined);
   });
   setSalesNotifier(makeSalesNotifier(transport));
 

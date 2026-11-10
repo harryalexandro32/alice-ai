@@ -22,8 +22,10 @@ export interface TransportHandlers {
 export interface SendOptions {
   /** Notifikasi ke sales, bukan balasan ke pelanggan (boleh memakai template). */
   notify?: boolean;
-  /** Path file foto. Kalau ada, teksnya menjadi keterangan foto. */
+  /** Path file foto atau PDF. Kalau ada, teksnya menjadi keterangannya. */
   image?: string;
+  /** Nama berkas yang dilihat penerima (untuk PDF). */
+  fileName?: string;
 }
 
 export interface Transport {

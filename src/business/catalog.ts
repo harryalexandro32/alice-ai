@@ -7,7 +7,51 @@
  * di tabel dashboard sama persis dengan yang diketahui bot.
  */
 
-import type { CatalogSection, CatalogTable } from './types';
+import type { CatalogSection, CatalogTable, MediaFile, Product } from './types';
+
+export const isPdf = (f: Pick<MediaFile, 'file'>): boolean => f.file.endsWith('.pdf');
+
+/**
+ * Daftar produk sebagai teks buat prompt. Kolom Foto dan PDF berisi id berkas
+ * yang boleh dilampirkan LLM; "-" berarti datanya belum ada.
+ */
+export function renderProducts(products: readonly Product[]): string {
+  if (!products.length) return '';
+  const v = (s: string): string => s || '-';
+  return (
+    'DAFTAR PRODUK — daftar ini LENGKAP: nama/kode yang tidak tertulis sebagai baris di sini tidak ada, ' +
+    'jangan menurunkan kode baru dari pola nama. ("-" = belum ada datanya)\nNama | Keterangan | Harga | Stok | Foto | PDF\n' +
+    products.map((x) => [x.name, v(x.description), v(x.price), v(x.stock), v(x.photos.join(', ')), v(x.pdf)].join(' | ')).join('\n')
+  );
+}
+
+export const PRODUCT_LIMITS = { rows: 300, name: 120, description: 600, price: 60, stock: 60, photos: 6 };
+
+/** Periksa daftar produk dari dashboard. Lampiran hanya boleh merujuk berkas yang ada. */
+export function validateProducts(input: unknown, files: readonly MediaFile[]): Product[] {
+  const L = PRODUCT_LIMITS;
+  if (!Array.isArray(input)) throw new Error('Daftar produk harus berupa daftar');
+  const images = new Set(files.filter((f) => !isPdf(f)).map((f) => f.id));
+  const pdfs = new Set(files.filter(isPdf).map((f) => f.id));
+  const rows = input
+    .map((raw: Record<string, unknown>): Product => ({
+      name: cell(raw?.name),
+      description: cell(raw?.description),
+      price: cell(raw?.price),
+      stock: cell(raw?.stock),
+      photos: [...new Set((Array.isArray(raw?.photos) ? raw.photos : []).filter((id): id is string => typeof id === 'string' && images.has(id)))].slice(0, L.photos),
+      pdf: typeof raw?.pdf === 'string' && pdfs.has(raw.pdf) ? raw.pdf : '',
+    }))
+    .filter((x) => x.name || x.description || x.price || x.stock || x.photos.length || x.pdf);
+  if (rows.length > L.rows) throw new Error(`Daftar produk: maksimal ${L.rows} baris`);
+  for (const [i, x] of rows.entries()) {
+    if (!x.name) throw new Error(`Daftar produk: baris ${i + 1} belum diberi nama`);
+    if (x.name.length > L.name) throw new Error(`Produk "${x.name.slice(0, 30)}…": nama terlalu panjang`);
+    if (x.description.length > L.description) throw new Error(`Produk "${x.name}": keterangan terlalu panjang (maksimal ${L.description} karakter)`);
+    if (x.price.length > L.price || x.stock.length > L.stock) throw new Error(`Produk "${x.name}": harga/stok terlalu panjang`);
+  }
+  return rows;
+}
 
 export const CATALOG_LIMITS = { sections: 40, tables: 6, columns: 16, rows: 200, cell: 120, facts: 3000 };
 
@@ -25,8 +69,9 @@ export function renderCatalog(sections: readonly CatalogSection[]): string {
 }
 
 /** Satu sel: satu baris teks, tanpa pemisah kolom. */
-const cell = (v: unknown): string =>
-  String(v ?? '').replace(/[\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim();
+function cell(v: unknown): string {
+  return String(v ?? '').replace(/[\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 /**
  * Periksa dan rapikan katalog dari dashboard. Melempar pesan yang bisa

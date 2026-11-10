@@ -30,18 +30,36 @@ export interface BrainResult {
   intent: Intent;
   /** Id foto yang dilampirkan (hanya yang benar-benar ada). */
   photos: string[];
+  /** Id PDF yang dilampirkan (hanya yang benar-benar ada). */
+  docs: string[];
 }
 
 export type Brain = (input: BrainInput) => Promise<BrainResult | null>;
 
 const MAX_PHOTOS = 3;
+const MAX_DOCS = 2;
 
 export function systemPrompt(): string {
   const labels = biz.leadFields.map((f) => f.label).join(', ');
   const shape = `{${biz.leadFields.map((f) => `"${f.key}": null`).join(', ')}}`;
-  const photos = biz.photos.length
-    ? biz.photos.map((p) => `- [${p.id}] ${p.label}${p.tags ? ` (terkait: ${p.tags})` : ''}`).join('\n')
-    : '(belum ada foto)';
+  // Harga/stok hanya dibahas kalau pemilik memang mengisinya; selama kosong,
+  // aturannya sama seperti bot yang tidak tahu harga sama sekali.
+  const priced = biz.products.some((p) => p.price || p.stock);
+  const priceRule = priced
+    ? ' Pengecualian: harga dan stok yang TERTULIS di DAFTAR PRODUK boleh kamu sebutkan, persis seperti tertulis; kalau kolomnya "-", kamu tidak tahu.' +
+      (biz.forbidPrices ? ' Jangan menyebut harga selain yang tertulis di sana.' : '')
+    : biz.forbidPrices
+      ? ' JANGAN PERNAH menyebut nominal rupiah.'
+      : '';
+  const attach = biz.products.some((p) => p.photos.length || p.pdf);
+  const ask = biz.questions.length
+    ? `- Kalau data untuk menganalisis belum cukup, tanyakan dulu yang kurang sebelum
+  merekomendasikan, memakai PERTANYAAN KEBUTUHAN di bawah: pilih yang belum
+  terjawab, paling banyak dua dalam satu balasan, dengan kalimatmu sendiri.
+  Jangan mengisi sendiri jawaban yang belum diberikan pelanggan (mis. tinggi
+  ruangan atau cara pasang), kecuali PANDUAN REKOMENDASI jelas mengizinkannya.`
+    : `- Kalau data untuk menganalisis belum cukup, tanyakan dulu yang kurang — satu
+  pertanyaan saja — sebelum merekomendasikan.`;
 
   return `Kamu ${biz.persona} yang membalas chat WhatsApp pelanggan. ${biz.about}
 Yang mengirim pesan adalah calon pelanggan.
@@ -74,28 +92,31 @@ ATURAN JAWABAN
 - Kalau jawabannya tidak ada di PENGETAHUAN, katakan terus terang datanya belum
   ada padamu dan tim kami akan membantu. Jangan menebak.
 - Kamu TIDAK tahu: ${biz.handoffTopics}. Untuk semua itu: sampaikan bahwa tim
-  kami yang akan menginfokan, dan set "intent" ke "handoff".${biz.forbidPrices ? ' JANGAN PERNAH menyebut nominal rupiah.' : ''}
+  kami yang akan menginfokan, dan set "intent" ke "handoff".${priceRule}
 - Kalau pelanggan minta bicara dengan orang/admin lain, atau komplain: sampaikan
   akan diteruskan ke tim, dan set "intent" ke "human".
 - Jangan menjanjikan apa pun atas nama perusahaan, dan jangan bilang sudah
-  mengirim penawaran atau dokumen.
+  mengirim penawaran atau dokumen${attach ? ' selain lampiran yang kamu isi di "photos"/"docs"' : ''}.
 ${(biz.extraRules ?? []).map((r) => `- ${r}`).join('\n')}
 
 MEMBERI REKOMENDASI
 - Kalau pelanggan menceritakan kebutuhannya (ruangan, ukuran, pemakaian),
   jangan hanya mendaftar produk: analisis, lalu sarankan pilihan yang spesifik
   beserta alasannya, mengikuti PANDUAN REKOMENDASI.
-- Kalau data untuk menganalisis belum cukup, tanyakan dulu yang kurang — satu
-  pertanyaan saja — sebelum merekomendasikan.
+${ask}
 - Hitungan harus benar. Tulis angkanya, jangan dikira-kira.
 
-FOTO
-- Kamu bisa melampirkan foto dari daftar FOTO YANG BISA DIKIRIM dengan mengisi
-  "photos" dengan id-nya (maksimal ${MAX_PHOTOS}).
-- Lampirkan kalau pelanggan meminta foto/gambar, atau saat kamu merekomendasikan
-  produk yang fotonya ada. Jangan melampirkan foto yang tidak berhubungan.
-- Jangan bilang mengirim foto kalau "photos" kosong. Kalau foto yang diminta
-  tidak ada di daftar, katakan tim kami yang akan mengirimkannya.
+LAMPIRAN (FOTO DAN PDF)
+- Kolom Foto dan PDF di DAFTAR PRODUK berisi id berkas yang bisa kamu lampirkan:
+  id foto ke "photos" (maksimal ${MAX_PHOTOS}), id PDF ke "docs" (maksimal ${MAX_DOCS}).
+- Lampirkan foto kalau pelanggan meminta foto/gambar, atau saat kamu
+  merekomendasikan produk yang fotonya ada.
+- Lampirkan PDF kalau pelanggan meminta brosur, katalog, atau spesifikasi
+  lengkap, atau saat kamu merekomendasikan produk yang PDF-nya ada.
+- Jangan melampirkan berkas produk lain yang tidak berhubungan, dan jangan
+  menulis id berkas di dalam "reply".
+- Jangan bilang mengirim foto atau brosur kalau "photos"/"docs" kosong. Kalau
+  yang diminta tidak ada (kolomnya "-"), katakan tim kami yang akan mengirimkannya.
 
 MENGUMPULKAN DATA
 - Bagian DATA PELANGGAN menunjukkan apa yang sudah diketahui.
@@ -113,7 +134,7 @@ KEAMANAN
 
 FORMAT KELUARAN
 Balas HANYA dengan satu objek json:
-{"reply": "...", "fields": ${shape}, "intent": "info", "photos": []}
+{"reply": "...", "fields": ${shape}, "intent": "info", "photos": [], "docs": []}
 - "reply": teks yang dikirim ke pelanggan.
 - "fields": isi HANYA yang disebutkan (atau dikoreksi) pelanggan di pesan
   terbaru; selain itu null.
@@ -121,15 +142,15 @@ ${biz.leadFields.map((f) => `  - "${f.key}" (${f.label})${f.hint ? `: ${f.hint}`
 - "intent": "info" (tanya produk/layanan), "handoff" (hal yang tidak kamu
   ketahui di atas), "human" (minta orang/komplain), atau "other".
 - "photos": daftar id foto, atau [].
+- "docs": daftar id PDF, atau [].
 
 PENGETAHUAN
 ${knowledgeText()}
 
 PANDUAN REKOMENDASI
-${biz.advice || '(belum ada panduan; sarankan berdasarkan data di PENGETAHUAN, dan untuk hitungan yang pasti serahkan ke tim)'}
-
-FOTO YANG BISA DIKIRIM
-${photos}`;
+${biz.advice || '(belum ada panduan; sarankan berdasarkan data di PENGETAHUAN, dan untuk hitungan yang pasti serahkan ke tim)'}${
+    biz.questions.length ? `\n\nPERTANYAAN KEBUTUHAN\n${biz.questions.map((q) => `- ${q}`).join('\n')}` : ''
+  }`;
 }
 
 function clean(v: unknown, max: number): string | null {
@@ -160,14 +181,16 @@ export function parseBrain(raw: string): BrainResult | null {
     if (v) fields[f.key] = v;
   }
 
-  // Hanya id yang benar-benar ada; model tidak bisa "mengirim" foto karangan.
-  const known = new Set(biz.photos.map((p) => p.id));
-  const photos = [
-    ...new Set((Array.isArray(obj.photos) ? obj.photos : []).filter((id): id is string => typeof id === 'string' && known.has(id))),
-  ].slice(0, MAX_PHOTOS);
+  // Hanya berkas yang benar-benar terpasang di sebuah produk; model tidak bisa
+  // "mengirim" lampiran karangan, dan foto tidak bisa menyamar jadi PDF.
+  const pick = (raw: unknown, known: Set<string>, max: number): string[] =>
+    [...new Set((Array.isArray(raw) ? raw : []).filter((id): id is string => typeof id === 'string' && known.has(id)))].slice(0, max);
+  const exists = new Set(biz.files.map((f) => f.id));
+  const photos = pick(obj.photos, new Set(biz.products.flatMap((p) => p.photos).filter((id) => exists.has(id))), MAX_PHOTOS);
+  const docs = pick(obj.docs, new Set(biz.products.map((p) => p.pdf).filter((id) => exists.has(id))), MAX_DOCS);
 
   const intent = (['info', 'handoff', 'human', 'other'] as const).find((i) => i === obj.intent) ?? 'other';
-  return { reply: reply.slice(0, 1500), fields, intent, photos };
+  return { reply: reply.slice(0, 1500), fields, intent, photos, docs };
 }
 
 /**
@@ -175,8 +198,18 @@ export function parseBrain(raw: string): BrainResult | null {
  * `asked` = teks yang diketik pelanggan belakangan ini.
  */
 export function checkReply(reply: string, asked = ''): string | null {
-  if (biz.forbidPrices && /\bRp\.?\s?\d|\d\s?(ribu|rb|juta|jt)\b|\bIDR\b/i.test(reply)) {
-    return 'menyebut harga';
+  if (biz.forbidPrices) {
+    // Harga boleh disebut hanya kalau angka itu memang tertulis di daftar
+    // produk. Daftar tanpa harga = semua nominal ditolak, seperti semula.
+    const squash = (s: string): string => s.toLowerCase().replace(/[\s.,]/g, '');
+    const listed = biz.products.map((p) => squash(p.price)).filter(Boolean);
+    const amounts = reply.match(/(?:\bRp\.?|\bIDR)\s?\d[\d.,]*(?:\s?(?:ribu|rb|juta|jt)\b)?|\d[\d.,]*\s?(?:ribu|rb|juta|jt)\b/gi) ?? [];
+    const bare = /\bIDR\b/i.test(reply) && !amounts.length;
+    const unlisted = amounts.some((a) => {
+      const n = squash(a).replace(/^(rp|idr)/, '');
+      return !listed.some((l) => l.replace(/^(rp|idr)/, '') === n);
+    });
+    if (unlisted || bare) return 'menyebut harga';
   }
   // Balasan tidak boleh melabeli pengirimnya sebagai mesin — dan karena kata
   // yang sama dipakai untuk menyangkal ("saya bukan bot"), sangkalan ikut

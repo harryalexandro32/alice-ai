@@ -21,14 +21,27 @@ export interface LeadField {
   isName?: boolean;
 }
 
-export interface Photo {
+/** Berkas yang diunggah lewat dashboard: foto (id "f…") atau PDF (id "d…"). */
+export interface MediaFile {
   id: string;
-  /** Nama file di data/<id>/media/. */
+  /** Nama file di data/<id>/media/, mis. "f1a2b3c4d.jpg" atau "d1a2b3c4d.pdf". */
   file: string;
-  /** Apa isi fotonya; ini yang dibaca LLM untuk memilih. */
-  label: string;
-  /** Kata kunci / kode produk terkait. */
-  tags: string;
+  /** Nama asli berkasnya, untuk ditampilkan. */
+  name: string;
+}
+
+/** Satu baris daftar produk. Yang rinci cukup ada di PDF-nya. */
+export interface Product {
+  name: string;
+  description: string;
+  /** Teks bebas, mis. "Rp 450.000". Kosong = bot tidak tahu, diserahkan ke tim. */
+  price: string;
+  /** Teks bebas, mis. "ada", "12 unit", "habis". Kosong = bot tidak tahu. */
+  stock: string;
+  /** Id foto (MediaFile) produk ini. */
+  photos: string[];
+  /** Id PDF (brosur/spesifikasi) yang bisa dikirim ke pelanggan, atau ''. */
+  pdf: string;
 }
 
 /** Satu tabel produk: baris = produk, kolom pertama = kode/modelnya. */
@@ -72,9 +85,12 @@ export interface Business {
   /** Data yang dikumpulkan dari tiap calon pelanggan, berurutan. */
   leadFields: LeadField[];
   /**
-   * Data produk dalam bentuk tabel. Bersama `notes`, ini satu-satunya sumber
-   * jawaban; teks yang dilihat LLM dirakit oleh knowledgeText().
+   * Daftar produk: nama, keterangan, harga, stok, foto, PDF. Bersama
+   * `catalog` dan `notes`, ini satu-satunya sumber jawaban; teks yang
+   * dilihat LLM dirakit oleh knowledgeText().
    */
+  products: Product[];
+  /** Data teknis rinci berbentuk tabel (opsional). */
   catalog: CatalogSection[];
   /** Pengetahuan lain yang tidak berbentuk tabel: FAQ, jam buka, dst. */
   notes: string;
@@ -84,14 +100,18 @@ export interface Business {
   handoffTopics: string;
   /** Sebutan singkatnya di notifikasi lead, mis. "harga/stok". */
   handoffLabel: string;
-  /** True = balasan yang menyebut nominal rupiah dibuang. */
+  /** True = balasan yang menyebut harga di luar daftar produk dibuang. */
   forbidPrices: boolean;
   /** True = kode produk yang tidak ada di `knowledge` dianggap karangan. */
   guardCodes: boolean;
   /** Ujung kalimat follow-up waktu data sudah lengkap. */
   followupClosing: string;
-  /** Foto yang boleh dikirim bot. */
-  photos: Photo[];
+  /** Berkas unggahan (foto dan PDF) yang dirujuk daftar produk dan logo. */
+  files: MediaFile[];
+  /** Id foto yang dipakai sebagai logo di dashboard, atau ''. */
+  logo: string;
+  /** Pertanyaan untuk memahami kebutuhan pelanggan sebelum menyarankan produk. */
+  questions: string[];
   /** Jeda sebelum membalas, detik. Diacak di antara keduanya tiap balasan. */
   replyDelayMin: number;
   replyDelayMax: number;
@@ -107,9 +127,9 @@ export interface Business {
 
 /** Kunci yang boleh diubah pemilik lewat dashboard. */
 export const EDITABLE = [
-  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'catalog', 'notes',
+  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'products', 'catalog', 'notes', 'questions',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'photos', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

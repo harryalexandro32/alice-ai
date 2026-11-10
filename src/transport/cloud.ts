@@ -209,7 +209,7 @@ async function graph(path: string, init?: RequestInit): Promise<any> {
   return data;
 }
 
-const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' };
 
 /** Id media hasil unggah, per file + waktu ubahnya. Meta menyimpannya 30 hari. */
 const mediaIds = new Map<string, { id: string; at: number }>();
@@ -279,8 +279,9 @@ export const cloudTransport: Transport = {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to: number,
-          type: 'image',
-          image: { id: await uploadImage(opts.image), caption: text },
+          ...(opts.image.toLowerCase().endsWith('.pdf')
+            ? { type: 'document', document: { id: await uploadImage(opts.image), caption: text, filename: opts.fileName ?? 'dokumen.pdf' } }
+            : { type: 'image', image: { id: await uploadImage(opts.image), caption: text } }),
         }
       : opts?.notify && cfg.waLeadTemplate
         ? {

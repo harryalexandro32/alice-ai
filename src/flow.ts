@@ -10,7 +10,7 @@
 import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
 import { join } from 'node:path';
 
-import { biz, mediaDir, refreshBiz } from './business';
+import { biz, fileById, mediaDir, productOfFile, refreshBiz } from './business';
 import type { LeadField } from './business/types';
 import { cfg, HOUR } from './config';
 import { now } from './clock';
@@ -21,8 +21,8 @@ import {
 } from './store';
 import { askMissing, handoffText, NON_TEXT } from './texts';
 
-/** `image` = path file foto; kalau ada, `text` menjadi keterangannya. */
-export type Sender = (to: { phone: string; address: string }, text: string, image?: string) => Promise<void>;
+/** `image` = path file foto atau PDF; kalau ada, `text` menjadi keterangannya. */
+export type Sender = (to: { phone: string; address: string }, text: string, image?: string, fileName?: string) => Promise<void>;
 
 let send: Sender = async () => {};
 let brain: Brain = llmBrain;
@@ -186,19 +186,21 @@ export async function handleInbound(m: Inbound): Promise<void> {
     }
     if (out) c = await reply(c, out);
 
-    // Foto hanya menyertai balasan LLM yang lolos pagar, dan foto yang sama
-    // tidak dikirim ulang ke orang yang baru saja menerimanya.
+    // Lampiran (foto, PDF) hanya menyertai balasan LLM yang lolos pagar, dan
+    // berkas yang sama tidak dikirim ulang ke orang yang baru saja menerimanya.
     if (result && !rejected) {
       const recent = new Set(recentMessages(c.phone, 20).filter((t) => t.dir === 'out').map((t) => t.text));
-      for (const id of result.photos) {
-        const p = biz.photos.find((x) => x.id === id);
-        const mark = `[foto:${id}] ${p?.label ?? ''}`;
-        if (!p || recent.has(mark)) continue;
+      for (const [kind, id] of [...result.photos.map((x) => ['foto', x] as const), ...result.docs.map((x) => ['pdf', x] as const)]) {
+        const f = fileById(id);
+        const label = productOfFile(id) ?? f?.name ?? '';
+        const mark = `[${kind}:${id}] ${label}`;
+        if (!f || recent.has(mark)) continue;
         try {
-          await send({ phone: c.phone, address: c.address }, p.label, join(mediaDir(), p.file));
+          const fileName = kind === 'pdf' ? `${label.replace(/[^\w .()-]+/g, ' ').trim() || 'brosur'}.pdf` : undefined;
+          await send({ phone: c.phone, address: c.address }, label, join(mediaDir(), f.file), fileName);
           addMessage(c.phone, 'out', mark, now());
         } catch (e) {
-          console.error(`[alur] ${c.phone}: foto ${id} gagal terkirim: ${e instanceof Error ? e.message : e}`);
+          console.error(`[alur] ${c.phone}: ${kind} ${id} gagal terkirim: ${e instanceof Error ? e.message : e}`);
         }
       }
     }

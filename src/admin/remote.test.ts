@@ -73,11 +73,13 @@ const PNG = Buffer.from(
 
     // --- pemilik menyimpan di dashboard online ---
     assert.equal((await call('/admin/api/profile', jsonInit('PUT', { alias: 'Alice', honorific: 'Kak' }))).status, 200);
-    const up = await call(`/admin/api/photos?${new URLSearchParams({ label: 'GFAF-40A tampak depan', tags: 'GFAF-40A' })}`, {
+    const up = await call(`/admin/api/files?${new URLSearchParams({ name: 'depan.png' })}`, {
       method: 'POST', headers: { 'content-type': 'image/png' }, body: PNG,
     });
     assert.equal(up.status, 200);
-    const photo = up.body.photos[0];
+    const photo = up.body.file;
+    const product = { name: 'GFAF-40A', description: '', price: '', stock: '', photos: [photo.id], pdf: '' };
+    assert.equal((await call('/admin/api/profile', jsonInit('PUT', { products: [product] }))).status, 200);
     assert.deepEqual([...files.keys()].sort(), [`gfan/media/${photo.file}`, 'gfan/profile.json']);
     assert.equal(JSON.parse(files.get('gfan/profile.json')!.toString()).alias, 'Alice');
     assert.equal((await fetch(`${base}/admin/media/${photo.file}`, { headers: { cookie } })).status, 200);
@@ -132,8 +134,8 @@ const PNG = Buffer.from(
     assert.equal(st.transport, 'baileys');
     assert.ok(Date.now() - st.reportedAt < 5000);
 
-    // Hapus foto: hilang dari penyimpanan bersama juga.
-    await call(`/admin/api/photos/${photo.id}`, { method: 'DELETE' });
+    // Foto dilepas dari produk: hilang dari penyimpanan bersama juga.
+    await call('/admin/api/profile', jsonInit('PUT', { products: [{ ...product, photos: [] }] }));
     assert.ok(!files.has(`gfan/media/${photo.file}`));
 
     console.log('dashboard online + sinkron bot: OK');
