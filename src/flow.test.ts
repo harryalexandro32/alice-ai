@@ -46,6 +46,7 @@ function fresh(): void {
   cfg.followupMaxTotal = 2;
   cfg.humanPauseHours = 12;
   cfg.maxInboundPerNumber = 40;
+  cfg.onlyNumbers = [];
   sent = [];
   sales = [];
   rows = [];
@@ -282,6 +283,15 @@ const tests: [string, () => Promise<void>][] = [
     await say(null);
     await say(null);
     assert.deepEqual(sent.slice(1), [NON_TEXT], 'pemberitahuan tidak diulang');
+  }],
+
+  ['mode uji ONLY_NUMBERS: nomor lain tidak dibalas dan tidak dicatat', async () => {
+    cfg.onlyNumbers = [A];
+    await say('halo', '+6281377770002');
+    assert.equal(sent.length, 0);
+    assert.equal(getContact('+6281377770002'), undefined);
+    await say('halo');
+    assert.deepEqual(sent, [GREETING]);
   }],
 
   ['lewat jatah harian: bot diam', async () => {

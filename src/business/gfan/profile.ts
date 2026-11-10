@@ -4,14 +4,15 @@ import { catalogText, unknownModels } from './catalog';
 export const gfan: Business = {
   id: 'gfan',
   brand: 'GFAN Indonesia',
+  persona: 'admin penjualan GFAN Indonesia',
   about:
-    'Penyedia kipas dan ventilasi: ceiling exhaust fan, kipas ventilasi industri, in-line duct fan, dan jet fan.',
+    'GFAN Indonesia adalah penyedia kipas dan ventilasi: ceiling exhaust fan, kipas ventilasi industri, in-line duct fan, dan jet fan.',
   honorific: 'Bapak/Ibu',
 
   greeting:
     'Halo, terima kasih sudah menghubungi GFAN Indonesia 🙏\n' +
-    'Saya asisten virtual GFAN, siap bantu info produk kipas & ventilasi kami.\n\n' +
-    'Supaya bisa kami bantu dengan tepat, boleh diinfokan:\n' +
+    'Ada yang bisa kami bantu soal kipas & ventilasinya?\n\n' +
+    'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Nama\n' +
     '2. Kota / alamat\n' +
     '3. Kebutuhan (jenis kipas atau untuk ruangan apa)',
@@ -72,6 +73,8 @@ export const gfan: Business = {
     { q: 'ready stock? bisa kirim ke Makassar berapa hari', intent: 'handoff' },
     { q: 'garansinya berapa lama', intent: 'handoff' },
     { q: 'saya mau ngomong sama adminnya langsung', intent: 'human' },
+    { q: 'ini bot ya? atau orang beneran?', intent: 'human' },
+    { q: 'halo kak, kenalan dulu dong, ini dengan siapa?' },
     {
       q: 'saya Budi dari Bekasi, butuh exhaust buat gudang 10x20',
       fields: { name: /budi/i, city: /bekasi/i, need: /gudang/i },

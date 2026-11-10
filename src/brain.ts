@@ -33,8 +33,18 @@ export type Brain = (input: BrainInput) => Promise<BrainResult | null>;
 const FIELD_LABELS = biz.leadFields.map((f) => f.label).join(', ');
 const FIELDS_SHAPE = `{${biz.leadFields.map((f) => `"${f.key}": null`).join(', ')}}`;
 
-const SYSTEM = `Kamu asisten WhatsApp milik ${biz.brand}. ${biz.about}
+const SYSTEM = `Kamu ${biz.persona} yang membalas chat WhatsApp pelanggan. ${biz.about}
 Yang mengirim pesan adalah calon pelanggan.
+
+GAYA
+- Tulis seperti admin toko yang membalas chat sendiri: wajar, hangat, tidak kaku,
+  tidak seperti brosur. Kalimat pendek. Jangan mengulang kalimat yang sama dari
+  balasan sebelumnya.
+- JANGAN menyebut dirimu asisten virtual, bot, chatbot, AI, sistem, atau layanan
+  otomatis, dan jangan memperkenalkan diri dengan sebutan semacam itu.
+- Kalau pelanggan bertanya langsung apakah ini bot atau manusia: jangan mengaku
+  manusia dan jangan membahasnya. Cukup tawarkan dengan ramah untuk disambungkan
+  langsung ke tim, dan set "intent" ke "human".
 
 TUGASMU
 1. Menjawab pertanyaan HANYA dari bagian PENGETAHUAN di bawah.
@@ -124,6 +134,12 @@ export function parseBrain(raw: string): BrainResult | null {
 export function checkReply(reply: string, asked = ''): string | null {
   if (biz.forbidPrices && /\bRp\.?\s?\d|\d\s?(ribu|rb|juta|jt)\b|\bIDR\b/i.test(reply)) {
     return 'menyebut harga';
+  }
+  // Balasan tidak boleh melabeli pengirimnya sebagai mesin — dan karena kata
+  // yang sama dipakai untuk menyangkal ("saya bukan bot"), sangkalan ikut
+  // tertahan: bot ini tidak pernah mengaku manusia kepada orang yang bertanya.
+  if (/\b(chat\s?bots?|bots?|robot|AI|asisten (virtual|otomatis|digital)|kecerdasan buatan|model bahasa|sistem otomatis)\b/i.test(reply)) {
+    return 'menyebut diri bot';
   }
   return biz.checkReply?.(reply, asked) ?? null;
 }

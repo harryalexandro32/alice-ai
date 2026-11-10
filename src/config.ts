@@ -59,6 +59,12 @@ export const cfg = {
   sheetTab: str('SHEET_TAB', 'Leads'),
   googleCredentials: str('GOOGLE_CREDENTIALS', './google-service-account.json'),
 
+  // Mode uji: kalau diisi, bot HANYA melayani nomor-nomor ini. Dipakai waktu
+  // mencoba di nomor yang sudah punya pelanggan sungguhan.
+  onlyNumbers: str('ONLY_NUMBERS')
+    .split(',')
+    .map((s) => normPhone(s))
+    .filter((s): s is string => Boolean(s)),
   maxInboundPerNumber: num('MAX_INBOUND_PER_NUMBER', 40),
   debounceMs: num('DEBOUNCE_MS', 4000),
 

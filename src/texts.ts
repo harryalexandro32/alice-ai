@@ -8,7 +8,7 @@ import { biz } from './business';
 import type { LeadField } from './business/types';
 
 export const NON_TEXT =
-  'Mohon maaf, saat ini saya baru bisa membaca pesan teks 🙏 Boleh diketik pertanyaannya?';
+  'Mohon maaf, boleh diketik saja pertanyaannya? 🙏 Biar bisa langsung kami bantu.';
 
 export const HANDOFF =
   `Terima kasih, pertanyaan ${biz.honorific} sudah kami teruskan ke tim ${biz.brand}. ` +

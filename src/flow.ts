@@ -89,6 +89,12 @@ function awaitsCustomer(c: Contact): boolean {
 export async function handleInbound(m: Inbound): Promise<void> {
   // Nomor sales itu penerima notifikasi, bukan calon pelanggan.
   if (cfg.salesNumber && cfg.salesNumber === m.phone) return;
+  // Mode uji: selain nomor yang didaftarkan, tidak ada yang dibalas maupun
+  // dicatat — pelanggan sungguhan di nomor itu tidak boleh ikut jadi bahan uji.
+  if (cfg.onlyNumbers.length && !cfg.onlyNumbers.includes(m.phone)) {
+    console.log(`[alur] ${m.phone}: di luar ONLY_NUMBERS, dilewat`);
+    return;
+  }
 
   const at = now();
   const existing = getContact(m.phone);

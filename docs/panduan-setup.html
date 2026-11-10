@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Panduan Setup Bot WhatsApp</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1c2430; margin: 0; }
+  h1 { font-size: 22pt; margin: 0 0 4px; color: #0b3d2e; letter-spacing: -0.3px; }
+  .sub { color: #5b6675; margin: 0 0 18px; font-size: 10.5pt; }
+  h2 { font-size: 15pt; color: #0b3d2e; margin: 26px 0 8px; padding-bottom: 5px; border-bottom: 2px solid #0f7a5a; break-after: avoid; }
+  h2.newpage { break-before: page; margin-top: 0; }
+  h3 { font-size: 11.5pt; margin: 18px 0 6px; color: #12202e; break-after: avoid; }
+  p { margin: 6px 0; }
+  ol, ul { margin: 6px 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  code { font-family: Consolas, monospace; font-size: 9.5pt; background: #eef2f4; padding: 1px 4px; border-radius: 3px; }
+  pre { font-family: Consolas, monospace; font-size: 9.5pt; background: #12202e; color: #e8eef2; padding: 9px 12px; border-radius: 5px; margin: 8px 0; white-space: pre-wrap; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 9.8pt; break-inside: avoid; }
+  th, td { border: 1px solid #cfd8dd; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #e6f2ee; color: #0b3d2e; }
+  .box { border-left: 4px solid #0f7a5a; background: #f0f7f4; padding: 8px 12px; margin: 10px 0; break-inside: avoid; }
+  .warn { border-left-color: #c2410c; background: #fdf3ec; }
+  .box b:first-child { display: block; margin-bottom: 2px; }
+  .step { break-inside: avoid; }
+  .toc { margin: 0 0 6px; padding-left: 20px; }
+  .muted { color: #5b6675; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+
+<h1>Panduan Setup Bot WhatsApp</h1>
+<p class="sub">Asisten penjualan GFAN Indonesia · repo <code>Desktop\gfan-wa-bot</code> · disusun 10 November 2026</p>
+
+<ol class="toc">
+  <li><b>Bagian 1 — Coba sekarang lewat Baileys</b> di nomor WhatsApp Business Anda (±15 menit)</li>
+  <li><b>Bagian 2 — Pindah ke WhatsApp Cloud API resmi</b>, termasuk Coexistence</li>
+</ol>
+
+<div class="box">
+  <b>Status saat panduan ini ditulis</b>
+  Alur bot, tanya-jawab katalog ke DeepSeek, dan kode kedua jalur sudah lulus uji otomatis.
+  Yang <b>belum pernah</b> dijalankan: sambungan ke WhatsApp sungguhan, di jalur mana pun. Percobaan di
+  Bagian 1 adalah uji nyata yang pertama — kalau ada langkah yang hasilnya berbeda dari yang tertulis,
+  itu informasi penting, bukan salah Anda.
+</div>
+
+<!-- ================================================================== -->
+<h2>Bagian 1 — Coba sekarang lewat Baileys</h2>
+
+<p>Baileys membuat bot menjadi <b>perangkat tertaut</b> di nomor Anda, sama seperti WhatsApp Web. Aplikasi
+WhatsApp Business di HP tetap bisa dipakai seperti biasa.</p>
+
+<div class="box warn">
+  <b>Tiga hal yang perlu diketahui sebelum menautkan</b>
+  <ul>
+    <li><b>Bot membalas semua chat pribadi yang masuk</b> ke nomor itu — termasuk pelanggan dan kenalan
+      yang sudah ada. Karena itu isi <code>ONLY_NUMBERS</code> dulu (Langkah 1), supaya selama percobaan
+      bot hanya membalas HP uji Anda.</li>
+    <li><b>Ini jalur tidak resmi.</b> WhatsApp bisa membatasi atau memblokir nomor yang terdeteksi memakai
+      klien tidak resmi. Untuk percobaan singkat risikonya kecil, tapi bukan nol — jalur produksinya
+      Cloud API (Bagian 2).</li>
+    <li><b>Bot hanya hidup selama jendela terminalnya terbuka</b> dan laptop menyala.</li>
+  </ul>
+</div>
+
+<h3>Yang disiapkan</h3>
+<ul>
+  <li>HP dengan WhatsApp Business (nomor yang akan jadi bot).</li>
+  <li><b>HP kedua dengan nomor lain</b>, untuk berperan sebagai calon pembeli. Bot mengabaikan pesan dari
+    nomornya sendiri.</li>
+  <li>Laptop ini. Key DeepSeek sudah ada di <code>.env</code>.</li>
+</ul>
+
+<div class="step">
+<h3>Langkah 1 — Isi nomor uji di <code>.env</code></h3>
+<p>Buka <code>C:\Users\harry\Desktop\gfan-wa-bot\.env</code> dengan Notepad. Dua baris ini sudah disiapkan;
+tinggal isi nomor HP kedua:</p>
+<pre>SALES_NUMBER=self
+ONLY_NUMBERS=62812xxxxxxx</pre>
+<p><code>SALES_NUMBER=self</code> berarti ringkasan lead dikirim ke nomor bot sendiri. Format nomor: awalan
+<code>62</code>, tanpa <code>+</code>, tanpa spasi. Beberapa nomor uji dipisah koma.</p>
+</div>
+
+<div class="step">
+<h3>Langkah 2 — Jalankan bot</h3>
+<p>Buka terminal (PowerShell) lalu:</p>
+<pre>cd C:\Users\harry\Desktop\gfan-wa-bot
+npm start</pre>
+<p>Beberapa baris status muncul (bisnis, LLM, notifikasi sales), lalu sebuah <b>kode QR</b> di terminal.
+Kalau QR-nya terpotong, perbesar jendela terminal atau kecilkan hurufnya (Ctrl + scroll).</p>
+</div>
+
+<div class="step">
+<h3>Langkah 3 — Tautkan dari HP</h3>
+<ol>
+  <li>Buka <b>WhatsApp Business</b> di HP.</li>
+  <li>Android: titik tiga <b>⋮</b> → <b>Perangkat tertaut</b>. iPhone: <b>Pengaturan</b> → <b>Perangkat tertaut</b>.</li>
+  <li>Ketuk <b>Tautkan perangkat</b>, lalu pindai QR di terminal.</li>
+</ol>
+<p>QR berganti tiap ±20 detik; pindai yang paling bawah. Di terminal harus muncul:</p>
+<pre>[wa] tersambung sebagai 62812…:… — SIAP</pre>
+<p class="muted">Tanpa kamera: isi <code>WA_PAIRING_NUMBER=62812…</code> (nomor bot) di <code>.env</code>, jalankan ulang,
+lalu di HP pilih <b>Tautkan dengan nomor telepon</b> dan ketik kode 8 digit yang tampil di terminal.</p>
+</div>
+
+<div class="step">
+<h3>Langkah 4 — Chat dari HP kedua</h3>
+<p>Kirim <code>halo</code> ke nomor bot. Dalam beberapa detik bot membalas salam yang meminta nama, kota, dan
+kebutuhan. Di terminal terlihat <code>[wa] diproses: +62812…</code>.</p>
+</div>
+
+<div class="step">
+<h3>Langkah 5 — Jalankan lima skenario ini</h3>
+<table>
+  <tr><th style="width:38%">Ketik dari HP kedua</th><th>Yang seharusnya terjadi</th></tr>
+  <tr><td><code>exhaust fan 16 inci ada? berapa watt?</code></td><td>Menjawab dengan model dan angka dari katalog (GFAF-40A, 130 W).</td></tr>
+  <tr><td><code>saya Budi dari Bekasi, buat gudang</code></td><td>Bot mencatat datanya. Di HP bot, chat <b>“Anda” / pesan ke diri sendiri</b> menerima ringkasan <b>Lead lengkap</b>.</td></tr>
+  <tr><td><code>harganya berapa? ready stock?</code></td><td>Bot tidak menyebut harga; bilang tim sales yang menginfokan. Ringkasan <b>Perlu dibantu</b> masuk ke chat diri sendiri.</td></tr>
+  <tr><td><code>ada jet fan GZ-400?</code></td><td>Bot bilang model itu tidak ada dan menyebut yang tersedia (GZ-200, GZ-250, GZ-300).</td></tr>
+  <tr><td>Dari <b>HP bot</b>, balas sendiri chat itu, lalu kirim pesan lagi dari HP kedua</td><td>Terminal: <code>[wa] manusia membalas</code>. Bot <b>diam</b> untuk kontak itu selama 12 jam.</td></tr>
+</table>
+<p class="muted">Skenario terakhir adalah yang paling penting untuk dicatat hasilnya: deteksi “pemilik membalas dari HP”
+baru teruji lewat simulasi.</p>
+</div>
+
+<div class="step">
+<h3>Langkah 6 — Uji follow-up tanpa menunggu 23 jam</h3>
+<p>Hentikan bot (Ctrl + C), ubah sementara tiga baris di <code>.env</code>, lalu <code>npm start</code> lagi:</p>
+<pre>FOLLOWUP_AFTER_HOURS=0.05
+FOLLOWUP_START_HOUR=0
+FOLLOWUP_END_HOUR=24</pre>
+<p>Dari nomor yang <b>belum pernah dibalas manusia</b> (atau setelah mengulang dari nol, lihat di bawah), kirim
+<code>halo</code> lalu diamkan. Bot memeriksa tiap 5 menit, jadi pengingat datang dalam ±5–10 menit.
+Setelah selesai, kembalikan ke <code>23</code>, <code>8</code>, dan <code>20</code>.</p>
+</div>
+
+<div class="step">
+<h3>Mengulang, berhenti, dan melepas</h3>
+<table>
+  <tr><th style="width:38%">Mau apa</th><th>Caranya</th></tr>
+  <tr><td>Mengulang dari nol (disapa lagi, jeda “manusia” hilang)</td><td>Hentikan bot, hapus file <code>data\gfan.db</code>, jalankan lagi.</td></tr>
+  <tr><td>Menghentikan bot</td><td>Ctrl + C di terminal. Tautannya tetap tersimpan; <code>npm start</code> berikutnya tidak perlu QR.</td></tr>
+  <tr><td>Melepas bot dari nomor</td><td>Di HP: Perangkat tertaut → pilih perangkatnya → <b>Keluar</b>. Lalu hapus folder <code>auth</code>.</td></tr>
+  <tr><td>Melayani semua orang</td><td>Kosongkan <code>ONLY_NUMBERS=</code> dan jalankan ulang. Lakukan hanya kalau memang siap.</td></tr>
+</table>
+<div class="box warn">
+  <b>Folder <code>auth</code> setara akses penuh ke nomor itu.</b>
+  Siapa pun yang memegangnya bisa mengirim pesan sebagai Anda tanpa memindai apa pun. Jangan disalin,
+  dikirim, atau ditaruh di drive bersama. Folder ini dan <code>.env</code> tidak ikut git.
+</div>
+</div>
+
+<h3>Kalau ada yang macet</h3>
+<table>
+  <tr><th style="width:38%">Gejala</th><th>Biasanya</th></tr>
+  <tr><td>Bot tidak membalas</td><td>Lihat baris terakhir di terminal. <code>di luar ONLY_NUMBERS</code> = nomor pengirim belum didaftarkan. <code>dilewat (…)</code> selalu menyebut alasannya.</td></tr>
+  <tr><td><code>SESI DIREBUT (440)</code></td><td>Ada <code>npm start</code> kedua yang masih jalan. Tutup semua terminal, nyalakan satu saja.</td></tr>
+  <tr><td><code>SESI DICABUT</code></td><td>Tautan dilepas dari HP. Hapus folder <code>auth</code>, jalankan ulang, pindai QR lagi.</td></tr>
+  <tr><td>Balasan “kami teruskan ke tim” untuk semua pertanyaan</td><td>LLM tidak terjangkau. Cari baris <code>[llm]</code> di terminal (key salah, saldo habis, atau internet).</td></tr>
+  <tr><td>Ringkasan lead tidak muncul di chat diri sendiri</td><td>Cari baris <code>[outbox]</code> di terminal. Lead tidak hilang; dicoba lagi tiap 5 menit.</td></tr>
+  <tr><td>Pesan di grup tidak dibalas</td><td>Memang begitu: grup dan status diabaikan.</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 class="newpage">Bagian 2 — Pindah ke WhatsApp Cloud API resmi</h2>
+
+<p>Kodenya sudah siap (<code>TRANSPORT=cloud</code>). Yang di bawah ini pekerjaan di sisi Meta dan server.
+Sumber: dokumentasi Meta (<i>Get started</i> Cloud API dan <i>Onboarding WhatsApp Business app users</i>),
+dibaca 10 November 2026. Dasbor Meta sering berganti nama menu — kalau letaknya berbeda, cari nama yang ditebalkan.</p>
+
+<h3>Dua jalur, dan mana yang berlaku</h3>
+<table>
+  <tr><th style="width:34%"></th><th>A. Cloud API langsung</th><th>B. Coexistence</th></tr>
+  <tr><td>Nomor masih bisa dipakai di aplikasi WA Business?</td><td><b>Tidak</b> — nomor khusus API</td><td><b>Ya</b></td></tr>
+  <tr><td>Siapa yang bisa mendaftarkan</td><td>Siapa saja, lewat app Meta sendiri</td><td><b>Hanya Solution Partner / Tech Provider</b></td></tr>
+  <tr><td>Bisa dikerjakan hari ini</td><td>Ya</td><td>Butuh partner, atau jadi Tech Provider dulu</td></tr>
+</table>
+<p>Klien minta Coexistence, jadi tujuan akhirnya <b>B</b>. Tetapi <b>A dengan nomor tes Meta</b> layak dikerjakan
+dulu: gratis, selesai dalam ±1 jam, dan membuktikan bot + webhook + server berjalan di jalur resmi sebelum
+nomor klien disentuh.</p>
+
+<h2>Jalur A — Cloud API langsung (mulai dengan nomor tes)</h2>
+
+<div class="step">
+<h3>A1. Akun dan app Meta</h3>
+<ol>
+  <li>Punya <b>Meta Business portfolio</b> di business.facebook.com (gratis).</li>
+  <li>developers.facebook.com → <b>Create app</b> → use case <b>“Connect with customers through WhatsApp”</b> → pilih portfolio tadi.</li>
+  <li>Buka <b>WhatsApp → API Setup</b>. Meta memberi satu <b>nomor tes</b> dan satu akun WhatsApp Business.
+    Catat <b>Phone number ID</b> dan <b>WhatsApp Business Account ID</b>.</li>
+  <li>Di kolom <b>To</b>, tambahkan nomor HP Anda sebagai penerima tes (maksimal 5), verifikasi kodenya,
+    lalu kirim pesan contoh. Pesan <code>hello_world</code> harus sampai di HP.</li>
+</ol>
+</div>
+
+<div class="step">
+<h3>A2. Server dengan HTTPS publik</h3>
+<p>Meta memanggil webhook lewat internet, jadi bot harus punya alamat <code>https://…</code>.</p>
+<ul>
+  <li><b>Produksi:</b> VPS kecil + domain + reverse proxy ber-TLS (Caddy paling ringkas) ke <code>localhost:3000</code>.</li>
+  <li><b>Uji cepat dari laptop:</b> terowongan, misalnya <code>cloudflared tunnel --url http://localhost:3000</code>.
+    Alamatnya berganti tiap dijalankan — cukup untuk mencoba, bukan untuk produksi.</li>
+</ul>
+</div>
+
+<div class="step">
+<h3>A3. Isi <code>.env</code> dan jalankan</h3>
+<pre>TRANSPORT=cloud
+WA_PHONE_NUMBER_ID=&lt;Phone number ID dari A1&gt;
+WA_TOKEN=&lt;token sementara dari "Generate access token"&gt;
+WA_APP_SECRET=&lt;App settings → Basic → App secret&gt;
+WA_VERIFY_TOKEN=&lt;karang sendiri, mis. 32 karakter acak&gt;
+PORT=3000</pre>
+<p>Lalu <code>npm start</code>. Log yang benar: <code>[cloud] nomor: …</code> diikuti
+<code>[cloud] webhook mendengarkan di port 3000 (/webhook) — SIAP</code>. Kalau baris nomor diganti
+PERINGATAN, token atau Phone number ID-nya salah.</p>
+</div>
+
+<div class="step">
+<h3>A4. Daftarkan webhook</h3>
+<p><b>WhatsApp → Configuration → Webhook → Edit</b>:</p>
+<ul>
+  <li><b>Callback URL:</b> <code>https://&lt;domain&gt;/webhook</code></li>
+  <li><b>Verify token:</b> sama persis dengan <code>WA_VERIFY_TOKEN</code></li>
+</ul>
+<p>Klik <b>Verify and save</b> (bot harus sedang jalan). Lalu di <b>Webhook fields</b>, <b>Subscribe</b> ke <code>messages</code>.</p>
+</div>
+
+<div class="step">
+<h3>A5. Coba</h3>
+<p>Dari HP yang terdaftar di A1, kirim <code>halo</code> ke nomor tes. Bot membalas salam, dan di log muncul
+<code>[cloud] diproses: dari=628…</code>. Kalau log kosong, webhook belum sampai: periksa A4.</p>
+</div>
+
+<div class="step">
+<h3>A6. Token permanen</h3>
+<p>Token dari tombol <i>Generate</i> mati dalam ±24 jam. Buat yang permanen:</p>
+<ol>
+  <li><b>Business settings → Users → System users → Add</b> (peran Admin).</li>
+  <li><b>Assign assets</b>: app-nya (<i>Manage app</i>) dan akun WhatsApp-nya (<i>Manage WhatsApp Business accounts</i>).</li>
+  <li><b>Generate token</b> → pilih app → centang <code>business_management</code>,
+    <code>whatsapp_business_messaging</code>, <code>whatsapp_business_management</code>.</li>
+  <li>Taruh di <code>WA_TOKEN</code>, jalankan ulang bot.</li>
+</ol>
+</div>
+
+<div class="step">
+<h3>A7. Pindah ke nomor asli (hanya kalau TIDAK memakai Coexistence)</h3>
+<ol>
+  <li><b>WhatsApp Manager → Phone numbers → Add phone number.</b> Nomornya tidak boleh sedang terdaftar di
+    aplikasi WhatsApp; akun di aplikasi harus dihapus dulu, dan setelah itu nomor tidak bisa dipakai di
+    aplikasi lagi. <i>Inilah bedanya dengan Coexistence.</i></li>
+  <li>Verifikasi lewat SMS/telepon. Nama tampilan ditinjau Meta.</li>
+  <li>Ganti <code>WA_PHONE_NUMBER_ID</code> dengan ID nomor baru.</li>
+  <li>Pastikan app berlangganan ke akun WhatsApp-nya: <code>POST /&lt;WABA_ID&gt;/subscribed_apps</code>
+    (lewat dasbor biasanya sudah otomatis).</li>
+  <li>Tambahkan <b>metode pembayaran</b>, selesaikan <b>verifikasi bisnis</b>, dan ubah app ke mode
+    <b>Live</b> (butuh URL kebijakan privasi).</li>
+</ol>
+</div>
+
+<h2>Jalur B — Coexistence</h2>
+
+<h3>Syarat nomor klien</h3>
+<ul>
+  <li>Terdaftar di <b>WhatsApp Business App</b>, versi <b>2.24.17</b> atau lebih baru.</li>
+  <li>Sudah dipakai aktif. Panduan pihak ketiga yang dikirim klien menyebut minimal 7 hari; dokumen Meta
+    tidak menyebut angkanya.</li>
+  <li>Punya Meta Business portfolio.</li>
+</ul>
+
+<div class="step">
+<h3>B1. Tentukan partnernya</h3>
+<p>Meta hanya mengizinkan pendaftaran Coexistence lewat <b>Solution Partner</b> atau <b>Tech Provider</b>.</p>
+<table>
+  <tr><th style="width:30%">Pilihan</th><th>Yang perlu dipastikan</th></tr>
+  <tr><td><b>Pakai BSP yang sudah ada</b></td><td>
+    (1) Mendukung <i>Connect a WhatsApp Business App number</i>.<br>
+    (2) Memberi akses API + webhook mentah berformat Cloud API, <b>termasuk <code>smb_message_echoes</code></b> —
+    tanpa ini bot tidak tahu kapan sales membalas dari aplikasi.<br>
+    (3) Biayanya di atas tarif Meta.</td></tr>
+  <tr><td><b>Menjadi Tech Provider sendiri</b></td><td>Butuh verifikasi bisnis, App Review, dan Embedded Signup
+    versi 4 ke atas. Makan waktu berminggu-minggu, tapi sekali jadi bisa dipakai untuk <b>semua klien
+    berikutnya</b> — layak kalau bot ini memang akan direplikasi ke banyak bisnis.</td></tr>
+</table>
+<p class="muted">Kalau bentuk API partner berbeda dari Meta (URL atau header lain), <code>src/transport/cloud.ts</code>
+perlu penyesuaian kecil; alur bot tidak berubah.</p>
+</div>
+
+<div class="step">
+<h3>B2. Onboarding</h3>
+<ol>
+  <li>Dari dasbor partner, buka alur <b>Embedded Signup</b>.</li>
+  <li>Pilih <b>“Connect a WhatsApp Business App number”</b>, masukkan nomor klien.</li>
+  <li>Di HP klien: buka WA Business → pindai QR yang muncul → setujui berbagi riwayat chat.</li>
+  <li>Partner punya <b>24 jam</b> untuk menyinkronkan riwayat; kalau tidak, nomornya harus dilepas lagi.</li>
+</ol>
+</div>
+
+<div class="step">
+<h3>B3. Sambungkan bot</h3>
+<ol>
+  <li>Dari partner, ambil Phone number ID, token, App Secret (atau padanannya), dan base URL API.</li>
+  <li>Isi <code>.env</code> seperti A3. Isi <code>WA_API_BASE</code> kalau base URL-nya bukan graph.facebook.com.</li>
+  <li>Daftarkan webhook <code>https://&lt;domain&gt;/webhook</code> dan berlangganan ke field
+    <b><code>messages</code></b> dan <b><code>smb_message_echoes</code></b>.</li>
+</ol>
+</div>
+
+<div class="step">
+<h3>B4. Uji tiga hal</h3>
+<ol>
+  <li>HP lain chat ke nomor klien → bot membalas.</li>
+  <li>Sales membalas dari aplikasi → log <code>[cloud] manusia membalas dari aplikasi</code>, bot diam untuk kontak itu.</li>
+  <li>Balasan bot terlihat di aplikasi WA Business klien.</li>
+</ol>
+</div>
+
+<div class="box warn">
+  <b>Yang berubah bagi klien setelah Coexistence</b>
+  <ul>
+    <li><b>WhatsApp Web/Desktop dilepas saat onboarding</b>; WhatsApp untuk Windows dan WearOS tidak didukung.</li>
+    <li>Aplikasi harus tetap dipakai: perangkat utama yang tidak aktif ±14 hari memutus sambungan.</li>
+    <li>Mati: pesan menghilang, sekali-lihat, lokasi langsung. Daftar siaran jadi hanya-baca. Grup tidak tersinkron.</li>
+    <li>Menurut dokumen Meta, alat bisnis di aplikasi (katalog, balasan cepat, label, pesan di luar jam kerja)
+      tidak didukung lewat jalur ini — pastikan apakah klien mengandalkannya.</li>
+    <li>Pesan dari aplikasi tetap gratis; pesan lewat API mengikuti tarif Cloud API.</li>
+    <li>Pelanggan yang chat <b>sebelum</b> onboarding hanya bisa dibalas API dengan template.</li>
+  </ul>
+</div>
+
+<h2>Aturan Cloud API yang memengaruhi bot</h2>
+<table>
+  <tr><th style="width:27%">Aturan</th><th>Akibatnya di bot ini</th></tr>
+  <tr><td><b>Jendela 24 jam</b></td><td>Teks bebas hanya boleh dalam 24 jam sejak pesan terakhir pelanggan. Follow-up bawaannya
+    jam ke-23, dan di jalur <code>cloud</code> yang jatuh malam hari <b>dimajukan</b> ke sore. Follow-up setelah
+    24 jam butuh template marketing berbayar.</td></tr>
+  <tr><td><b>Nomor sales = nomor bot</b></td><td>Cloud API tidak bisa mengirimi dirinya sendiri, jadi tidak ada notifikasi WA.
+    Dengan Coexistence percakapannya sudah tampil di aplikasi sales, dan tiap lead tercatat di Google Sheet.</td></tr>
+  <tr><td><b>Nomor sales berbeda</b></td><td>Teks biasa hanya sampai kalau sales mengirim pesan ke nomor bot dalam 24 jam terakhir.
+    Supaya selalu sampai: buat template <b>utility</b> satu variabel (mis. <code>lead_baru</code>, isi
+    <code>Lead baru: {{1}}</code>) dan isi <code>WA_LEAD_TEMPLATE=lead_baru</code>.</td></tr>
+  <tr><td><b>Versi Graph API</b></td><td>Bawaan <code>v23.0</code>. Ganti lewat <code>WA_API_BASE</code> kalau Meta menghentikan versi lama.</td></tr>
+</table>
+
+<h3>Kalau macet di jalur Cloud API</h3>
+<table>
+  <tr><th style="width:42%">Gejala</th><th>Biasanya</th></tr>
+  <tr><td><i>Verify and save</i> gagal</td><td>Bot belum jalan, URL tidak sampai ke port bot, atau verify token berbeda.</td></tr>
+  <tr><td><code>webhook DITOLAK: tanda tangan tidak cocok</code></td><td><code>WA_APP_SECRET</code> bukan milik app yang mengirim webhook.</td></tr>
+  <tr><td>Chat masuk tapi log kosong</td><td>Field <code>messages</code> belum di-subscribe, atau app belum berlangganan ke akun WhatsApp-nya.</td></tr>
+  <tr><td><code>Cloud API 400 (131047)</code></td><td>Di luar jendela 24 jam — butuh template.</td></tr>
+  <tr><td><code>Cloud API 401 (190)</code></td><td>Token kedaluwarsa — pakai token System User.</td></tr>
+  <tr><td>Nomor tes tidak membalas ke HP tertentu</td><td>HP itu belum ditambahkan sebagai penerima tes.</td></tr>
+</table>
+
+</body>
+</html>

@@ -31,6 +31,8 @@ export interface EvalCase {
 export interface Business {
   id: string;
   brand: string;
+  /** Peran yang dibawakan saat membalas, mis. "admin penjualan GFAN Indonesia". */
+  persona: string;
   /** Satu-dua kalimat: bisnis ini apa dan menjual apa. */
   about: string;
   /** Sapaan ke pelanggan: "Bapak/Ibu", "Kak", … */
