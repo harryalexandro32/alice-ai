@@ -315,6 +315,7 @@ async function connect(): Promise<void> {
       const media = mediaOf(m.message as Record<string, unknown> | null);
       handlers.onInbound({
         phone, address: jid, text, waId: m.key.id ?? null,
+        ...(m.pushName ? { profileName: m.pushName } : {}),
         ...(media ? { media } : {}),
         ...(media === 'foto'
           ? {

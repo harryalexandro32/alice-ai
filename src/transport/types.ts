@@ -13,6 +13,8 @@ export interface TransportInbound {
   address: string;
   /** Null = bukan teks. Untuk foto/video/dokumen: keterangannya, kalau ada. */
   text: string | null;
+  /** Nama profil WhatsApp pengirim, kalau ia mengisinya dan membagikannya. */
+  profileName?: string;
   /** Diisi kalau pesannya membawa foto, suara, dan sejenisnya. */
   media?: MediaKind;
   /** Hanya untuk foto: unduh isinya (baru dipanggil kalau memang akan dianalisis). */

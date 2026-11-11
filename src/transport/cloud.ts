@@ -63,9 +63,16 @@ interface WaChange {
   value?: {
     metadata?: { phone_number_id?: string };
     messages?: WaMessage[];
+    contacts?: { wa_id?: string; profile?: { name?: string } }[];
     message_echoes?: WaEcho[];
     statuses?: { id?: string; status?: string; recipient_id?: string; errors?: { code?: number; title?: string }[] }[];
   };
+}
+
+/** Nama profil pengirim, dari daftar kontak yang menyertai webhook. */
+function profileOf(contacts: { wa_id?: string; profile?: { name?: string } }[] | undefined, from: string | undefined): string | null {
+  const hit = (contacts ?? []).find((c) => c.wa_id && from && digits(c.wa_id) === digits(from)) ?? (contacts?.length === 1 ? contacts[0] : undefined);
+  return hit?.profile?.name?.trim() || null;
 }
 
 function textOf(m: WaMessage): string | null {
@@ -115,6 +122,7 @@ function process_(body: { entry?: { changes?: WaChange[] }[] }): void {
             address: digits(m.from),
             text: textOf(m),
             waId: m.id ?? null,
+            ...(profileOf(v.contacts, m.from) ? { profileName: profileOf(v.contacts, m.from) as string } : {}),
             ...(MEDIA[m.type ?? ''] ? { media: MEDIA[m.type ?? ''] } : {}),
             ...(m.type === 'image' && m.image?.id
               ? {

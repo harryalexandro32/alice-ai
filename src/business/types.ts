@@ -107,6 +107,12 @@ export interface Business {
   honorific: string;
   /** Pesan pertama. Harus sudah meminta semua leadFields. */
   greeting: string;
+  /**
+   * Pesan pertama kalau nama profil WhatsApp pelanggan tampak seperti nama
+   * orang: {nama} diganti nama itu, dan cukup memastikannya — tidak menanyakan
+   * nama dari awal. Kosong = selalu pakai `greeting`.
+   */
+  greetingKnown: string;
   /** Data yang dikumpulkan dari tiap calon pelanggan, berurutan. */
   leadFields: LeadField[];
   /**
@@ -166,7 +172,7 @@ export interface Business {
 
 /** Kunci yang boleh diubah pemilik lewat dashboard. */
 export const EDITABLE = [
-  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'products', 'catalog', 'notes', 'questions',
+  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
   'files', 'logo', 'stopAfterHuman', 'botSwitch', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];

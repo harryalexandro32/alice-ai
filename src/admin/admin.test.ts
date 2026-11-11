@@ -271,6 +271,11 @@ const PNG = Buffer.from(
       const leads = await call('/admin/api/leads');
       assert.ok('reportedAt' in leads.body);
 
+      // Salam untuk nama yang sudah diketahui harus memuat {nama}.
+      assert.match((await put({ greetingKnown: 'Halo, betul?' })).body.error, /\{nama\}/);
+      assert.equal((await put({ greetingKnown: 'Halo Kak {nama}, betul?' })).status, 200);
+      assert.equal((await put({ greetingKnown: '' })).status, 200, 'boleh dikosongkan');
+
       // --- Pengaturan: penerima, rute, dan setelan yang menimpa .env ---
       const rec = await put({
         recipients: [

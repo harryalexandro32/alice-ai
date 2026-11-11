@@ -11,7 +11,8 @@ import { biz } from './business';
 import { advance, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
 import { recipientsFor, waTargets } from './notify';
-import { handleHumanReply, handleInbound, holdReason, setBrain, setSender } from './flow';
+import { greetingFor, handleHumanReply, handleInbound, holdReason, setBrain, setSender } from './flow';
+import { plausibleName } from './names';
 import { followupDueAt, runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
 import { getContact, openDb, recentAlerts } from './store';
@@ -449,6 +450,50 @@ const tests: [string, () => Promise<void>][] = [
     biz.notifyRoutes = {};
     assert.deepEqual(waTargets('lead'), [SALES]);
     assert.deepEqual(waTargets('wa-putus'), [SALES]);
+  }],
+
+  ['nama profil WhatsApp: nama orang dipastikan, julukan dan inisial diabaikan', async () => {
+    // Yang tampak nama orang (dirapikan huruf besar-kecilnya)…
+    for (const [raw, want] of [
+      ['Budi Santoso', 'Budi Santoso'], ['budi', 'Budi'], ['SITI AMINAH', 'Siti Aminah'], ['  Rina 🌸', 'Rina'], ["Nur'aini", "Nur'aini"],
+      ['Dedi S.', 'Dedi S.'], ['Muhammad Rizky Pratama', 'Muhammad Rizky Pratama'],
+    ] as const) assert.equal(plausibleName(raw), want, raw);
+    // …dan yang tidak jelas: bot bertanya seperti biasa.
+    for (const raw of ['J', 'A.', 'demonslayer', 'DemonSlayer', 'xXx_gamer_xXx', 'Budi123', 'Toko Maju Jaya', 'CS GFAN', 'Admin', '🔥🔥🔥', '.', 'aaaa', 'bcd',
+      'PT Sinar Abadi', 'King Slayer', '081234567890', 'user', '', null, undefined]) assert.equal(plausibleName(raw), null, String(raw));
+
+    const first = (profileName: string | undefined, phone: string, text = 'halo') => handleInbound({ phone, address: phone, text, waId: null, ...(profileName ? { profileName } : {}) });
+
+    // Nama orang: salamnya memastikan nama, tidak menanyakannya dari awal.
+    await first('budi santoso', '+6281377770021');
+    assert.match(sent.at(-1)!, /Dengan Bapak\/Ibu Budi Santoso, betul\?/);
+    assert.ok(!/1\. Nama/.test(sent.at(-1)!), 'tidak meminta nama lagi');
+    assert.equal(getContact('+6281377770021')?.wa_name, 'budi santoso');
+    assert.equal(getContact('+6281377770021')?.lead.name, undefined, 'belum dianggap terkonfirmasi sebelum orangnya menjawab');
+    // LLM diberi tahu nama profilnya, dan mengisi nama setelah pelanggan mengiyakan.
+    next = () => R('Baik Pak Budi. Kebutuhannya untuk ruangan apa?', { name: 'Budi Santoso', city: 'Bekasi' });
+    await first('budi santoso', '+6281377770021', 'iya betul, saya di Bekasi');
+    assert.equal(brainCalls.at(-1)!.profileName, 'budi santoso');
+    assert.equal(getContact('+6281377770021')?.lead.name, 'Budi Santoso');
+
+    // Julukan, inisial, atau tanpa nama: salam biasa.
+    for (const [name, phone] of [['demonslayer', '+6281377770022'], ['J', '+6281377770023'], [undefined, '+6281377770024']] as const) {
+      await first(name, phone);
+      assert.equal(sent.at(-1), GREETING, String(name));
+    }
+    // Julukan tetap diteruskan ke LLM apa adanya: ia yang menilai di percakapan berikutnya.
+    next = () => R('Boleh tahu dengan siapa saya bicara?');
+    await first('demonslayer', '+6281377770022', 'butuh exhaust');
+    assert.equal(brainCalls.at(-1)!.profileName, 'demonslayer');
+
+    // Salam khusus dikosongkan pemilik, atau profilnya tidak mengumpulkan nama: salam biasa.
+    const known = biz.greetingKnown;
+    biz.greetingKnown = '';
+    await first('Sari Dewi', '+6281377770025');
+    assert.equal(sent.at(-1), GREETING);
+    biz.greetingKnown = known;
+    assert.match(greetingFor({ wa_name: 'Sari Dewi', lead: {} }), /Sari Dewi/);
+    assert.equal(greetingFor({ wa_name: 'Sari Dewi', lead: { name: 'Sari' } }), GREETING, 'nama sudah ada: tidak perlu dipastikan lagi');
   }],
 
   ['tombol bot per pelanggan: dimatikan, lalu dikembalikan ke bot', async () => {

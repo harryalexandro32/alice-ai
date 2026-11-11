@@ -118,6 +118,7 @@ function flush(phone: string): void {
       address: p.first.address,
       text: p.texts.length ? p.texts.join('\n') : null,
       waId: p.first.waId,
+      ...(p.first.profileName ? { profileName: p.first.profileName } : {}),
       ...(p.media?.media ? { media: p.media.media, fetchMedia: p.media.fetchMedia } : {}),
     })
   );

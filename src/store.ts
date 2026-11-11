@@ -33,6 +33,8 @@ export interface Contact {
   handoff_sent_at: number | null;
   /** Ringkasan percakapan sejauh ini, ditulis LLM tiap giliran. */
   summary: string | null;
+  /** Nama profil WhatsApp-nya, apa adanya (belum tentu nama orang). */
+  wa_name: string | null;
 }
 
 export interface OutboxRow {
@@ -120,6 +122,7 @@ export function openDb(path: string): void {
   // Kolom yang ditambahkan belakangan (database lama tidak punya).
   const cols = (db.prepare('PRAGMA table_info(contacts)').all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes('summary')) db.exec('ALTER TABLE contacts ADD COLUMN summary TEXT');
+  if (!cols.includes('wa_name')) db.exec('ALTER TABLE contacts ADD COLUMN wa_name TEXT');
   // Percakapan yang sudah pernah dibalas admin sebelum tabel ini ada.
   db.exec(`
     INSERT OR IGNORE INTO human_seen (address, at)
@@ -158,7 +161,7 @@ export function createContact(phone: string, address: string, at: number): Conta
 
 const UPDATABLE = new Set<keyof Contact>([
   'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
-  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary',
+  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name',
 ]);
 
 export function updateContact(phone: string, patch: Partial<Contact>): Contact {

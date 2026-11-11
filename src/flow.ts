@@ -16,6 +16,7 @@ import type { LeadField } from './business/types';
 import { cfg, HOUR, MINUTE } from './config';
 import { now } from './clock';
 import { llmEnabled } from './llm/provider';
+import { plausibleName } from './names';
 import { deliverExternal, recipientPhones } from './notify';
 import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
@@ -54,6 +55,8 @@ export interface Inbound {
   /** Null = pesan bukan teks (gambar, stiker, suara). */
   text: string | null;
   waId?: string | null;
+  /** Nama profil WhatsApp pengirim, kalau ada. */
+  profileName?: string;
   /** Pesannya membawa foto, suara, dsb. */
   media?: MediaKind;
   /** Untuk foto: unduh isinya supaya bisa diamati LLM. */
@@ -144,6 +147,17 @@ const MAX_IMAGE_BYTES = 6_000_000;
 /** Ada otak yang bisa dipanggil: LLM sungguhan, atau tiruan yang dipasang tes. */
 const hasBrain = (): boolean => brain !== llmBrain || llmEnabled();
 
+/**
+ * Salam pembuka. Kalau nama profil WhatsApp-nya tampak seperti nama orang dan
+ * profil bisnisnya memang mengumpulkan nama, pakai salam yang memastikan nama
+ * itu; selain itu, salam biasa yang menanyakannya.
+ */
+export function greetingFor(c: Pick<Contact, 'wa_name' | 'lead'>): string {
+  const field = biz.leadFields.find((f) => f.isName);
+  const name = field && !c.lead[field.key] ? plausibleName(c.wa_name) : null;
+  return name && biz.greetingKnown.includes('{nama}') ? biz.greetingKnown.split('{nama}').join(name) : biz.greeting;
+}
+
 /** Jarak minimum antar kabar "butuh staf" untuk pelanggan yang sama. */
 const STAFF_NOTIFY_GAP = 30 * MINUTE;
 
@@ -185,8 +199,11 @@ export async function handleInbound(m: Inbound): Promise<void> {
     console.log(`[alur] ${m.phone}: pesan ganda, dilewat`);
     return;
   }
+  // Nama profil bisa baru muncul belakangan, atau diganti orangnya.
+  const waName = m.profileName?.replace(/\s+/g, ' ').trim().slice(0, 60) || null;
   // Pelanggan membalas: siklus follow-up yang sedang menunggu selesai.
   c = updateContact(m.phone, {
+    ...(waName && waName !== c.wa_name ? { wa_name: waName } : {}),
     address: m.address,
     last_inbound_at: at,
     last_dir: 'in',
@@ -203,7 +220,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
   }
 
   const isNew = !existing;
-  if (isNew) c = await reply(c, biz.greeting);
+  if (isNew) c = await reply(c, greetingFor(c));
 
   const text = m.text?.trim();
   // Foto, suara, dokumen, lokasi, kontak: bot tidak bisa melihat atau
@@ -247,7 +264,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
     let result: BrainResult | null = null;
     try {
       result = await brain({
-        text: said, known: c.lead, history, justGreeted: isNew, summary: c.summary,
+        text: said, known: c.lead, history, justGreeted: isNew, summary: c.summary, profileName: c.wa_name,
         ...(image
           ? { image, note: 'Pelanggan melampirkan foto, ikut di pesan ini. Amati fotonya (lihat FOTO DARI PELANGGAN) lalu jawab.' }
           : media

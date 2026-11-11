@@ -195,6 +195,11 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('about' in input) set('about', text(input.about, 600, 'Tentang bisnis', true));
   if ('honorific' in input) set('honorific', text(input.honorific, 30, 'Sapaan', true));
   if ('greeting' in input) set('greeting', text(input.greeting, 1500, 'Salam pembuka', true));
+  if ('greetingKnown' in input) {
+    const g = text(input.greetingKnown, 1500, 'Salam untuk nama yang sudah diketahui');
+    if (g && !g.includes('{nama}')) throw new Error('Salam untuk nama yang sudah diketahui harus memuat {nama}');
+    set('greetingKnown', g);
+  }
   if ('notes' in input) set('notes', text(input.notes, 30_000, 'Pengetahuan tambahan'));
   if ('products' in input) set('products', validateProducts(input.products, biz.files));
   if ('logo' in input) {

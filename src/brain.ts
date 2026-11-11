@@ -27,6 +27,8 @@ export interface BrainInput {
   note?: string;
   /** Foto kiriman pelanggan, untuk diamati model. */
   image?: { data: Buffer; mime: string };
+  /** Nama profil WhatsApp pelanggan, apa adanya — belum dikonfirmasi orangnya. */
+  profileName?: string | null;
 }
 
 export interface BrainResult {
@@ -264,7 +266,21 @@ export const llmBrain: Brain = async (input) => {
 
   const user =
     'DATA PELANGGAN\n' +
-    biz.leadFields.map((f) => `${f.label}: ${input.known[f.key] ?? '(belum ada)'}`).join('\n') +
+    biz.leadFields
+      .map((f) => {
+        const v = input.known[f.key];
+        if (v || !f.isName || !input.profileName) return `${f.label}: ${v ?? '(belum ada)'}`;
+        // Nama profil hanya petunjuk: yang menentukan tetap ucapan pelanggan.
+        return (
+          `${f.label}: (belum dikonfirmasi) — nama di profil WhatsApp-nya: "${input.profileName.slice(0, 60)}". ` +
+          `Kalau itu tampak nama orang sungguhan, JANGAN menanyakan nama dari awal: cukup pastikan dengan wajar ` +
+          `(mis. "dengan ${biz.honorific} …, betul?"), satu kali saja, dan di balasan tempat kamu baru memastikannya biarkan field ini null. ` +
+          `Baru di giliran berikutnya: kalau pelanggan mengiyakan, atau menjawab hal lain ` +
+          `tanpa mengoreksi namanya, isi "${f.key}" dengan nama itu; kalau ia menyebut nama lain, pakai yang ia sebut. ` +
+          'Kalau itu tampak bukan nama orang (inisial, julukan, nama usaha, emoji), abaikan dan tanyakan namanya seperti biasa.'
+        );
+      })
+      .join('\n') +
     `\nSALAM_BARU_DIKIRIM: ${
       input.justGreeted
         ? 'ya — pesan salam, ucapan terima kasih, dan permintaan semua data SUDAH terkirim tepat sebelum balasanmu. ' +
