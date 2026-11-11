@@ -1,29 +1,28 @@
 /**
- * Peringatan untuk pemilik: hal-hal yang butuh orang, bukan sekadar catatan log.
+ * Peringatan untuk pemilik dan staf: hal-hal yang butuh orang, bukan sekadar
+ * catatan log.
  *
  *   - bot tidak bisa menjawab pelanggan dan butuh staf (kurang pengetahuan,
- *     pelanggan minta orang, pelanggan mengirim foto/suara);
+ *     pelanggan minta orang, pelanggan mengirim sesuatu yang tidak terbaca);
  *   - WhatsApp terputus permanen, kiriman dijeda pengaman, LLM bermasalah.
  *
- * Tiap peringatan dicatat (tampil di dashboard, halaman Peringatan) dan dikirim
- * ke pemilik: lewat WhatsApp ke nomor sales selama WhatsApp-nya masih jalan,
- * dan lewat Telegram kalau diatur — satu-satunya jalur yang tetap sampai saat
- * WhatsApp-nya sendiri yang bermasalah.
+ * Tiap peringatan dicatat (tampil di dashboard, halaman "Peringatan & log")
+ * dan dikirim ke penerima yang diatur di dashboard (lihat notify.ts): lewat
+ * WhatsApp selama WhatsApp-nya masih jalan, plus Telegram dan email — dua
+ * jalur yang tetap sampai saat WhatsApp-nya sendiri yang bermasalah.
  */
 
 import { biz } from './business';
+import type { NotifyKind } from './business/types';
 import { now } from './clock';
-import { cfg, HOUR, MINUTE } from './config';
+import { HOUR, MINUTE } from './config';
+import { deliverExternal, waTargets } from './notify';
 import { addAlert, lastAlertAt } from './store';
 
-export type AlertKind =
-  | 'butuh-staf' // pelanggan menunggu jawaban manusia
-  | 'wa-putus' // sesi WhatsApp dicabut / direbut
-  | 'kiriman-dijeda' // pengaman nomor menahan kiriman
-  | 'llm' // LLM gagal berulang atau jatah harian habis
-  | 'bot-mati'; // proses bot berhenti (dicatat pengawas)
+export type AlertKind = Exclude<NotifyKind, 'lead'>;
 
-const TITLES: Record<AlertKind, string> = {
+export const ALERT_TITLES: Record<NotifyKind, string> = {
+  lead: 'Lead baru',
   'butuh-staf': 'Pelanggan butuh dibantu staf',
   'wa-putus': 'WhatsApp terputus',
   'kiriman-dijeda': 'Kiriman bot dijeda',
@@ -40,28 +39,10 @@ const QUIET: Record<AlertKind, number> = {
   'bot-mati': 10 * MINUTE,
 };
 
-let viaWhatsApp: ((text: string) => Promise<unknown>) | null = null;
-/** Dipasang app.ts: kirim teks ke nomor sales/pemilik lewat WhatsApp. */
-export function setAlertWhatsApp(fn: ((text: string) => Promise<unknown>) | null): void {
+let viaWhatsApp: ((phone: string, text: string) => Promise<unknown>) | null = null;
+/** Dipasang app.ts: kirim teks ke satu nomor ("self" = nomor bot sendiri) lewat WhatsApp. */
+export function setAlertWhatsApp(fn: ((phone: string, text: string) => Promise<unknown>) | null): void {
   viaWhatsApp = fn;
-}
-
-/** Telegram, kalau TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID diisi. Tidak pernah melempar. */
-export async function sendTelegram(text: string): Promise<boolean> {
-  if (!cfg.telegramToken || !cfg.telegramChat) return false;
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${cfg.telegramToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: cfg.telegramChat, text: text.slice(0, 3500), disable_web_page_preview: true }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) console.error(`[peringatan] Telegram menolak (${res.status})`);
-    return res.ok;
-  } catch (e) {
-    console.error(`[peringatan] Telegram gagal: ${e instanceof Error ? e.message : e}`);
-    return false;
-  }
 }
 
 /**
@@ -80,11 +61,13 @@ export function raiseAlert(kind: AlertKind, text: string, opts: { key?: string; 
     // Database belum terbuka (mis. gagal sangat awal): tetap tampil di log.
     console.error(`[peringatan] tidak tercatat: ${e instanceof Error ? e.message : e}`);
   }
-  const message = `⚠️ ${TITLES[kind]} — ${biz.brand}\n${text}`;
-  console.error(`[peringatan] ${TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
-  void sendTelegram(message);
+  const title = `⚠️ ${ALERT_TITLES[kind]} — ${biz.brand}`;
+  console.error(`[peringatan] ${ALERT_TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
+  void deliverExternal(kind, title, text);
   if (opts.whatsapp !== false && viaWhatsApp) {
-    void viaWhatsApp(message).catch((e) => console.error(`[peringatan] WA gagal: ${e instanceof Error ? e.message : e}`));
+    for (const phone of waTargets(kind)) {
+      void viaWhatsApp(phone, `${title}\n${text}`).catch((e) => console.error(`[peringatan] WA ke ${phone} gagal: ${e instanceof Error ? e.message : e}`));
+    }
   }
   return true;
 }

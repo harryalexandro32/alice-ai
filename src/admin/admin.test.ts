@@ -270,6 +270,44 @@ const PNG = Buffer.from(
       assert.equal((await call('/admin/api/alerts', {}, false)).status, 401);
       const leads = await call('/admin/api/leads');
       assert.ok('reportedAt' in leads.body);
+
+      // --- Pengaturan: penerima, rute, dan setelan yang menimpa .env ---
+      const rec = await put({
+        recipients: [
+          { name: ' Pak Harry ', role: 'owner', phone: '0811 0000 0001', email: 'owner@contoh.com', telegram: '123456' },
+          { name: 'Rina', role: 'apa saja', phone: 'self', email: '', telegram: '' },
+          { name: '', role: 'staff', phone: '', email: '', telegram: '' },
+        ],
+        notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner' },
+      });
+      assert.equal(rec.status, 200);
+      assert.deepEqual(biz.recipients, [
+        { name: 'Pak Harry', role: 'owner', phone: '+6281100000001', email: 'owner@contoh.com', telegram: '123456' },
+        { name: 'Rina', role: 'staff', phone: 'self', email: '', telegram: '' },
+      ]);
+      assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none' });
+      assert.match((await put({ recipients: [{ name: 'X', phone: '12' }] })).body.error, /nomor WhatsApp/);
+      assert.match((await put({ recipients: [{ name: 'X', email: 'bukan-email' }] })).body.error, /email/);
+      assert.match((await put({ recipients: [{ name: 'X', telegram: '@nama' }] })).body.error, /Telegram/);
+      assert.match((await put({ recipients: [{ name: 'X' }] })).body.error, /minimal satu jalur/);
+
+      const before = { after: cfg.followupAfterHours, vision: cfg.llmVision, only: [...cfg.onlyNumbers], perDay: cfg.waMaxPerDay };
+      const set = await put({ settings: { followupAfterHours: 20, waMaxPerDay: '', llmPriceIn: 0.25, llmVision: false, onlyNumbers: ['0812 1111 0001'], adminPassword: 'x', dbPath: 'y' } });
+      assert.equal(set.status, 200);
+      assert.deepEqual(biz.settings, { followupAfterHours: 20, llmPriceIn: 0.25, llmVision: false, onlyNumbers: ['+6281211110001'] }, 'hanya setelan yang dikenal; yang kosong tidak disimpan');
+      assert.equal(cfg.followupAfterHours, 20, 'langsung berlaku di bot');
+      assert.equal(cfg.llmVision, false);
+      assert.deepEqual(cfg.onlyNumbers, ['+6281211110001']);
+      assert.equal(cfg.waMaxPerDay, before.perDay, 'yang tidak diisi tetap ikut .env');
+      assert.equal(cfg.adminPassword, PASSWORD, 'kata sandi tidak bisa diubah dari sini');
+      assert.equal((await call('/admin/api/state')).body.status.effective.followupAfterHours, 20);
+      assert.match((await put({ settings: { followupAfterHours: 500 } })).body.error, /1–72/);
+      assert.match((await put({ settings: { followupStartHour: 20, followupEndHour: 8 } })).body.error, /jam selesai/);
+      assert.match((await put({ settings: { onlyNumbers: ['abc'] } })).body.error, /bukan nomor/);
+      // Dikosongkan = kembali ke .env.
+      assert.equal((await put({ settings: {} })).status, 200);
+      assert.deepEqual([cfg.followupAfterHours, cfg.llmVision, cfg.onlyNumbers], [before.after, before.vision, before.only]);
+      await put({ recipients: [], notifyRoutes: {} });
     }
 
     // --- permintaan dari situs lain ditolak ---

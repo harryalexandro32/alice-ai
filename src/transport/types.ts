@@ -15,6 +15,8 @@ export interface TransportInbound {
   text: string | null;
   /** Diisi kalau pesannya membawa foto, suara, dan sejenisnya. */
   media?: MediaKind;
+  /** Hanya untuk foto: unduh isinya (baru dipanggil kalau memang akan dianalisis). */
+  fetchMedia?: () => Promise<{ data: Buffer; mime: string } | null>;
   waId: string | null;
 }
 

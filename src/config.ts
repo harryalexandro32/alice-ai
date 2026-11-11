@@ -7,6 +7,10 @@ import 'dotenv/config';
 
 const str = (k: string, d = ''): string => process.env[k]?.trim() || d;
 const has = (k: string): boolean => Boolean(process.env[k]?.trim());
+const bool = (k: string, d: boolean): boolean => {
+  const raw = process.env[k]?.trim().toLowerCase();
+  return raw ? !['0', 'false', 'no', 'off', 'tidak'].includes(raw) : d;
+};
 const num = (k: string, d: number): number => {
   const raw = process.env[k]?.trim();
   const n = Number(raw);
@@ -54,6 +58,8 @@ export const cfg = {
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),
   llmModel: str('LLM_MODEL', 'deepseek-chat'),
   llmDailyLimit: num('LLM_DAILY_LIMIT', 1500),
+  // Foto dari pelanggan ikut dikirim ke LLM untuk diamati (model harus bisa membaca gambar).
+  llmVision: bool('LLM_VISION', true),
   // Tarif untuk menghitung perkiraan biaya di dashboard: USD per 1 juta token.
   // Bawaan = tarif jam sibuk deepseek-flash (dicek 2026-11-11); di luar jam
   // sibuk tarifnya separuh, jadi angka di dashboard adalah batas atas.
@@ -75,6 +81,13 @@ export const cfg = {
   // Peringatan untuk pemilik lewat Telegram (opsional; lihat src/alerts.ts).
   telegramToken: str('TELEGRAM_BOT_TOKEN'),
   telegramChat: str('TELEGRAM_CHAT_ID'),
+  // Email lewat SMTP (opsional). Rahasia: hanya di .env, tidak pernah di dashboard.
+  smtpHost: str('SMTP_HOST'),
+  smtpPort: num('SMTP_PORT', 465),
+  smtpUser: str('SMTP_USER'),
+  smtpPass: str('SMTP_PASS'),
+  smtpFrom: str('SMTP_FROM'),
+  alertEmailTo: str('ALERT_EMAIL_TO'),
 
   salesNumber: salesNumber(),
   sheetId: str('SHEET_ID'),
@@ -110,6 +123,43 @@ export const cfg = {
   waLeadTemplateLang: str('WA_LEAD_TEMPLATE_LANG', 'id'),
   port: num('PORT', 3000),
 };
+
+/**
+ * Pengaturan yang boleh diubah pemilik dari dashboard (Pengaturan). Nilai di
+ * .env adalah bawaannya; yang diisi di dashboard menimpanya selama bot jalan.
+ * [minimum, maksimum] untuk angka.
+ */
+export const TUNABLE = {
+  followupAfterHours: [1, 72], followupStartHour: [0, 23], followupEndHour: [1, 24], followupMaxTotal: [0, 5],
+  humanPauseHours: [1, 168], llmDailyLimit: [10, 100_000], maxInboundPerNumber: [5, 500],
+  waMaxPerMinute: [1, 30], waMaxPerHour: [10, 1000], waMaxPerDay: [50, 10_000],
+  llmPriceIn: [0, 100], llmPriceCached: [0, 100], llmPriceOut: [0, 100], usdIdr: [1000, 100_000],
+} as const satisfies Partial<Record<keyof typeof cfg, readonly [number, number]>>;
+
+export type TunableKey = keyof typeof TUNABLE;
+export interface Settings extends Partial<Record<TunableKey, number>> {
+  /** Foto dari pelanggan dianalisis LLM. */
+  llmVision?: boolean;
+  /** Mode uji: hanya nomor-nomor ini yang dilayani. Kosong = semua nomor. */
+  onlyNumbers?: string[];
+}
+
+const envDefaults = { ...cfg, onlyNumbers: [...cfg.onlyNumbers] };
+
+/** Pakai pengaturan dari dashboard di atas bawaan .env. Kunci yang tidak diisi kembali ke bawaan. */
+export function applySettings(s: Settings): void {
+  const c = cfg as unknown as Record<string, unknown>;
+  for (const k of Object.keys(TUNABLE) as TunableKey[]) c[k] = typeof s[k] === 'number' ? s[k] : envDefaults[k];
+  cfg.llmVision = typeof s.llmVision === 'boolean' ? s.llmVision : envDefaults.llmVision;
+  cfg.onlyNumbers = Array.isArray(s.onlyNumbers) ? s.onlyNumbers : envDefaults.onlyNumbers;
+}
+
+/** Nilai yang sedang berlaku, untuk ditampilkan dashboard. */
+export function effectiveSettings(): Required<Settings> {
+  const out = { llmVision: cfg.llmVision, onlyNumbers: cfg.onlyNumbers } as Record<string, unknown>;
+  for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = cfg[k];
+  return out as unknown as Required<Settings>;
+}
 
 export const HOUR = 3_600_000;
 export const MINUTE = 60_000;

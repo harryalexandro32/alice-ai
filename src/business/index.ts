@@ -13,10 +13,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { cfg } from '../config';
+import { applySettings, cfg, normPhone, TUNABLE, type Settings, type TunableKey } from '../config';
 import { isPdf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
 import { gfan } from './gfan/profile';
-import { EDITABLE, type BotSwitch, type Business, type Editable, type LeadField, type MediaFile } from './types';
+import {
+  EDITABLE, type BotSwitch, type Business, type Editable, type LeadField, type MediaFile, type NotifyKind, type Recipient, type Route,
+} from './types';
 
 const REGISTRY: Record<string, Business> = { gfan };
 
@@ -67,6 +69,7 @@ function apply(overrides: Partial<Editable>): void {
     biz.notes = legacy;
   }
   syncPdfTexts();
+  applySettings(biz.settings);
 }
 
 // Isi PDF yang boleh dibaca bot (MediaFile.read), per id berkas. Di mesin bot
@@ -215,6 +218,59 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('followupClosing' in input) set('followupClosing', text(input.followupClosing, 300, 'Kalimat follow-up', true));
   if ('forbidPrices' in input) set('forbidPrices', Boolean(input.forbidPrices));
   if ('stopAfterHuman' in input) set('stopAfterHuman', Boolean(input.stopAfterHuman));
+  if ('recipients' in input) {
+    if (!Array.isArray(input.recipients) || input.recipients.length > 20) throw new Error('Penerima notifikasi: maksimal 20 baris');
+    const rows = input.recipients
+      .map((raw: Record<string, unknown>, i: number): Recipient => {
+        const name = text(raw?.name ?? '', 40, `Nama penerima baris ${i + 1}`);
+        const who = name || `baris ${i + 1}`;
+        const phoneRaw = String(raw?.phone ?? '').trim();
+        const phone = !phoneRaw ? '' : phoneRaw.toLowerCase() === 'self' ? 'self' : normPhone(phoneRaw);
+        if (phone === null) throw new Error(`Penerima ${who}: nomor WhatsApp "${phoneRaw}" tidak sah`);
+        const email = String(raw?.email ?? '').trim();
+        if (email && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email)) throw new Error(`Penerima ${who}: alamat email tidak sah`);
+        const telegram = String(raw?.telegram ?? '').trim();
+        if (telegram && !/^-?\d{4,20}$/.test(telegram)) throw new Error(`Penerima ${who}: id chat Telegram harus berupa angka`);
+        return { name, role: raw?.role === 'owner' ? 'owner' : 'staff', phone, email: email.slice(0, 120), telegram };
+      })
+      .filter((r) => r.name || r.phone || r.email || r.telegram);
+    for (const r of rows) if (!r.phone && !r.email && !r.telegram) throw new Error(`Penerima ${r.name}: isi minimal satu jalur (WhatsApp, email, atau Telegram)`);
+    set('recipients', rows);
+  }
+  if ('notifyRoutes' in input) {
+    const raw = (input.notifyRoutes && typeof input.notifyRoutes === 'object' ? input.notifyRoutes : {}) as Record<string, unknown>;
+    const routes: Partial<Record<NotifyKind, Route>> = {};
+    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'llm', 'bot-mati'] as const) {
+      const v = raw[k];
+      if (v === 'owner' || v === 'staff' || v === 'both' || v === 'none') routes[k] = v;
+    }
+    set('notifyRoutes', routes);
+  }
+  if ('settings' in input) {
+    const raw = (input.settings && typeof input.settings === 'object' ? input.settings : {}) as Record<string, unknown>;
+    const out: Settings = {};
+    for (const k of Object.keys(TUNABLE) as TunableKey[]) {
+      const v = raw[k];
+      if (v === undefined || v === null || v === '') continue;
+      const n = Number(v);
+      const [min, max] = TUNABLE[k];
+      if (!Number.isFinite(n) || n < min || n > max) throw new Error(`Pengaturan ${k}: isi angka ${min}–${max}`);
+      out[k] = k.startsWith('llmPrice') ? n : Math.round(n);
+    }
+    if (out.followupStartHour !== undefined && out.followupEndHour !== undefined && out.followupEndHour <= out.followupStartHour) {
+      throw new Error('Jam follow-up: jam selesai harus setelah jam mulai');
+    }
+    if (typeof raw.llmVision === 'boolean') out.llmVision = raw.llmVision;
+    if (Array.isArray(raw.onlyNumbers)) {
+      const list = raw.onlyNumbers.map((x) => String(x).trim()).filter(Boolean);
+      const bad = list.find((x) => !normPhone(x));
+      if (bad) throw new Error(`Mode uji: "${bad}" bukan nomor yang sah`);
+      if (list.length > 50) throw new Error('Mode uji: maksimal 50 nomor');
+      // Daftar kosong berarti "layani semua nomor", walaupun .env mengisi ONLY_NUMBERS.
+      out.onlyNumbers = list.map((x) => normPhone(x) as string);
+    }
+    set('settings', out);
+  }
   if ('botSwitch' in input) {
     const raw = (input.botSwitch && typeof input.botSwitch === 'object' ? input.botSwitch : {}) as Record<string, Partial<BotSwitch>>;
     const entries = Object.entries(raw)

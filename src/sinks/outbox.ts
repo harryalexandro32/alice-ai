@@ -25,7 +25,10 @@ export interface LeadPayload {
  * Mengirim ringkasan lead ke sales. False = sengaja tidak dikirim (belum
  * diatur, atau jalurnya tidak bisa); melempar = gagal, coba lagi nanti.
  */
-export type SalesNotifier = (text: string) => Promise<boolean>;
+export type SalesNotifier = (text: string, kind?: 'lead' | 'butuh-staf') => Promise<boolean>;
+
+/** Lead yang sudah lengkap = "lead"; selebihnya pelanggan yang menunggu staf. */
+export const kindOf = (p: Pick<LeadPayload, 'kind'>): 'lead' | 'butuh-staf' => (p.kind === 'Lead lengkap' ? 'lead' : 'butuh-staf');
 
 const MAX_ATTEMPTS = 20;
 
@@ -75,7 +78,7 @@ async function deliverOnce(): Promise<void> {
     try {
       if (row.kind === 'sales') {
         if (!notify) throw new Error('pengirim notifikasi belum terpasang');
-        await notify(salesText(p));
+        await notify(salesText(p), kindOf(p));
       } else if (!sheetOn()) {
         console.log('[outbox] Sheet belum diatur, baris dilewat');
       } else {

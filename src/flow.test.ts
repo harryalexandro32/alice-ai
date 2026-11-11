@@ -10,6 +10,7 @@ import { checkReply, parseBrain, systemPrompt, type BrainInput, type BrainResult
 import { biz } from './business';
 import { advance, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
+import { recipientsFor, waTargets } from './notify';
 import { handleHumanReply, handleInbound, holdReason, setBrain, setSender } from './flow';
 import { followupDueAt, runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
@@ -66,6 +67,9 @@ function fresh(): void {
   biz.products = SEED_PRODUCTS;
   biz.stopAfterHuman = true;
   biz.botSwitch = {};
+  biz.recipients = [];
+  biz.notifyRoutes = {};
+  cfg.llmVision = true;
   setSender(async (_to, text, image, fileName) =>
     void sent.push(image ? `[${fileName ? 'pdf' : 'gambar'}:${fileName ?? image.split(/[\\/]/).pop()}] ${text}` : text)
   );
@@ -372,6 +376,79 @@ const tests: [string, () => Promise<void>][] = [
     assert.match(brainCalls.at(-1)!.note ?? '', /melampirkan foto yang TIDAK bisa kamu lihat/);
     assert.equal(brainCalls.at(-1)!.text, 'ini ruangan saya, cocok pakai yang mana?');
     assert.match(sent.at(-1)!, /tim kami cek fotonya/);
+  }],
+
+  ['foto dianalisis: fotonya sampai ke LLM, staf tidak perlu dikabari', async () => {
+    const JPG = { data: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), mime: 'image/jpeg' };
+    const photo = (text: string | null, fetchMedia: () => Promise<typeof JPG | null>) =>
+      handleInbound({ phone: A, address: A, text, waId: null, media: 'foto', fetchMedia });
+    await say('halo');
+    next = () => R('Dari fotonya ini kamar mandi kecil, plafonnya gypsum. Cocok GFC10-10A. Ukurannya berapa × berapa?', {}, 'info', [], [], 'Kirim foto kamar mandi kecil berplafon gypsum; disarankan GFC10-10A.');
+    await photo(null, async () => JPG);
+    assert.equal(brainCalls.at(-1)!.image?.mime, 'image/jpeg', 'fotonya ikut ke LLM');
+    assert.equal(brainCalls.at(-1)!.text, 'Pelanggan mengirim foto tanpa keterangan.');
+    assert.match(brainCalls.at(-1)!.note ?? '', /Amati fotonya/);
+    assert.match(sent.at(-1)!, /Dari fotonya ini kamar mandi kecil/);
+    assert.equal(sales.length, 0, 'bot menjawab sendiri: staf tidak dikabari');
+    assert.match(getContact(A)?.summary ?? '', /foto kamar mandi/, 'yang terlihat di foto tersimpan di ringkasan');
+    // Dengan keterangan: keterangannya jadi pertanyaannya.
+    await photo('ini cocok pakai yang mana?', async () => JPG);
+    assert.equal(brainCalls.at(-1)!.text, 'ini cocok pakai yang mana?');
+    assert.ok(brainCalls.at(-1)!.image);
+
+    // Foto gagal diunduh, terlalu besar, atau analisis dimatikan: kembali ke cara lama.
+    const n = brainCalls.length;
+    await photo(null, async () => { throw new Error('unduh gagal'); });
+    assert.equal(brainCalls.length, n, 'tanpa foto dan tanpa teks, LLM tidak dipanggil');
+    assert.match(sent.at(-1)!, /foto-nya sudah kami terima/);
+    assert.match(sales.at(-1)!, /Kirim foto/);
+    cfg.llmVision = false;
+    let asked = 0;
+    await photo('lihat ya', async () => { asked += 1; return JPG; });
+    assert.equal(asked, 0, 'dimatikan: fotonya tidak diunduh sama sekali');
+    assert.equal(brainCalls.at(-1)!.image, undefined);
+    assert.match(brainCalls.at(-1)!.note ?? '', /TIDAK bisa kamu lihat/);
+    cfg.llmVision = true;
+    await photo('besar', async () => ({ data: Buffer.alloc(7_000_000), mime: 'image/jpeg' }));
+    assert.equal(brainCalls.at(-1)!.image, undefined, 'foto terlalu besar tidak dikirim ke LLM');
+  }],
+
+  ['penerima notifikasi: pemilik dan staf, tiap jenis kabar ke rutenya', async () => {
+    const OWNER = '+6281100000001';
+    const STAFF1 = '+6281100000002';
+    const STAFF2 = '+6281100000003';
+    biz.recipients = [
+      { name: 'Pak Harry', role: 'owner', phone: OWNER, email: 'owner@contoh.com', telegram: '111' },
+      { name: 'Rina', role: 'staff', phone: STAFF1, email: '', telegram: '' },
+      { name: 'Dedi', role: 'staff', phone: STAFF2, email: 'dedi@contoh.com', telegram: '' },
+    ];
+    assert.deepEqual(waTargets('lead'), [STAFF1, STAFF2], 'lead -> staf (bawaan)');
+    assert.deepEqual(waTargets('butuh-staf'), [STAFF1, STAFF2]);
+    assert.deepEqual(waTargets('llm'), [OWNER], 'urusan sistem -> pemilik (bawaan)');
+    biz.notifyRoutes = { lead: 'both', 'butuh-staf': 'owner', llm: 'none' };
+    assert.deepEqual(waTargets('lead'), [OWNER, STAFF1, STAFF2]);
+    assert.deepEqual(waTargets('butuh-staf'), [OWNER]);
+    assert.deepEqual(waTargets('llm'), []);
+    assert.deepEqual(recipientsFor('lead').map((r) => r.email).filter(Boolean), ['owner@contoh.com', 'dedi@contoh.com']);
+
+    // Notifikasi WA lewat antrean sampai ke semua nomor rutenya.
+    const t = fakeTransport('baileys', '+6281255550000', true);
+    assert.equal(await makeSalesNotifier(t.t)('halo', 'lead'), true);
+    assert.deepEqual(t.out.map((o) => o.phone), [OWNER, STAFF1, STAFF2]);
+    const t2 = fakeTransport('baileys', '+6281255550000', true);
+    await makeSalesNotifier(t2.t)('tolong', 'butuh-staf');
+    assert.deepEqual(t2.out.map((o) => o.phone), [OWNER]);
+
+    // Pesan dari pemilik/staf bukan pesan calon pelanggan.
+    await say('tes dari staf', STAFF1);
+    assert.equal(getContact(STAFF1), undefined);
+    assert.equal(sent.length, 0);
+
+    // Daftar kosong: kembali ke SALES_NUMBER dari .env untuk semua jenis kabar.
+    biz.recipients = [];
+    biz.notifyRoutes = {};
+    assert.deepEqual(waTargets('lead'), [SALES]);
+    assert.deepEqual(waTargets('wa-putus'), [SALES]);
   }],
 
   ['tombol bot per pelanggan: dimatikan, lalu dikembalikan ke bot', async () => {

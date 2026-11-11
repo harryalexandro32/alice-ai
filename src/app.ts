@@ -15,6 +15,7 @@ import { localStore } from './admin/store-local';
 import { initBiz } from './business';
 import { cfg, MINUTE } from './config';
 import { humanPause } from './pace';
+import { waTargets } from './notify';
 import { remoteEnabled } from './remote';
 import { pullProfile, startSync } from './sync';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
@@ -28,29 +29,24 @@ import { addUsage, openDb } from './store';
 import type { Transport, TransportInbound } from './transport/types';
 
 /**
- * Ke mana ringkasan lead dikirim.
+ * Kirim teks ke satu nomor penerima notifikasi.
  *
- * Nomor sales boleh nomor bot itu sendiri (SALES_NUMBER=self, atau diisi nomor
- * yang sama): sales membalas pelanggan dari aplikasi WhatsApp di nomor itu.
- * Baileys bisa mengirim ke chat "diri sendiri". Cloud API tidak bisa — di sana
- * notifikasinya dilewat, dan catatan lead-nya ada di Google Sheet serta di
- * percakapan itu sendiri, yang memang tampil di aplikasi sales.
+ * Nomornya boleh nomor bot itu sendiri ("self", atau diisi nomor yang sama):
+ * staf membalas pelanggan dari aplikasi WhatsApp di nomor itu. Baileys bisa
+ * mengirim ke chat "diri sendiri". Cloud API tidak bisa — di sana kabarnya
+ * dilewat; catatannya ada di Google Sheet, di dashboard, dan di percakapan itu
+ * sendiri. False = sengaja tidak dikirim; melempar = gagal.
  */
-export function makeSalesNotifier(transport: Transport): SalesNotifier {
+export function makeWaSender(transport: Transport): (phone: string, text: string) => Promise<boolean> {
   let warned = false;
-  return async (text) => {
-    if (!cfg.salesNumber) {
-      console.log('[lead] SALES_NUMBER kosong, notifikasi WA dilewat');
-      return false;
-    }
+  return async (phone, text) => {
     const self = transport.selfPhone();
-    const target = cfg.salesNumber === 'self' ? self : cfg.salesNumber;
+    const target = phone === 'self' ? self : phone;
     if (!target) throw new Error('nomor bot belum diketahui (belum tersambung)');
-
     if (target === self && !transport.canMessageSelf) {
       if (!warned) {
         console.log(
-          `[lead] nomor sales = nomor bot, dan jalur ${transport.name} tidak bisa mengirimi diri sendiri. ` +
+          `[lead] nomor penerima = nomor bot, dan jalur ${transport.name} tidak bisa mengirimi diri sendiri. ` +
             'Lead tetap tercatat di Google Sheet; percakapannya terlihat di aplikasi WhatsApp.'
         );
         warned = true;
@@ -62,9 +58,40 @@ export function makeSalesNotifier(transport: Transport): SalesNotifier {
   };
 }
 
+/**
+ * Ke mana ringkasan lead dan kabar "butuh staf" dikirim lewat WhatsApp: semua
+ * nomor penerima jenis kabar itu (Pengaturan > Notifikasi di dashboard, atau
+ * SALES_NUMBER selama daftarnya masih kosong).
+ */
+export function makeSalesNotifier(transport: Transport): SalesNotifier {
+  const sendTo = makeWaSender(transport);
+  return async (text, kind = 'lead') => {
+    const targets = waTargets(kind);
+    if (!targets.length) {
+      console.log('[lead] belum ada nomor penerima, notifikasi WA dilewat');
+      return false;
+    }
+    let sent = false;
+    let failure: unknown = null;
+    for (const phone of targets) {
+      try {
+        sent = (await sendTo(phone, text)) || sent;
+      } catch (e) {
+        failure = e;
+        console.error(`[lead] WA ke ${phone} gagal: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    // Tidak ada satu pun yang sampai: lempar supaya antrean mencobanya lagi.
+    if (!sent && failure) throw failure;
+    return sent;
+  };
+}
+
 interface Pending {
   first: TransportInbound;
   texts: string[];
+  /** Foto/suara terakhir di rentetan pesan ini (teksnya sudah masuk `texts`). */
+  media?: TransportInbound;
   timer: NodeJS.Timeout;
 }
 
@@ -91,6 +118,7 @@ function flush(phone: string): void {
       address: p.first.address,
       text: p.texts.length ? p.texts.join('\n') : null,
       waId: p.first.waId,
+      ...(p.media?.media ? { media: p.media.media, fetchMedia: p.media.fetchMedia } : {}),
     })
   );
 }
@@ -114,7 +142,7 @@ export async function startApp(transport: Transport): Promise<void> {
 
   // Peringatan untuk pemilik. Yang soal WhatsApp-nya sendiri tidak dikirim
   // lewat WhatsApp: saat itu jalurnya justru sedang bermasalah.
-  setAlertWhatsApp(toSales);
+  setAlertWhatsApp(makeWaSender(transport));
   setLlmProblemListener((text) => void raiseAlert('llm', text));
   setGuardListener((text) => void raiseAlert('kiriman-dijeda', text, { whatsapp: false }));
   if (transport.name === 'baileys') {
@@ -140,12 +168,15 @@ export async function startApp(transport: Transport): Promise<void> {
       if (p) {
         clearTimeout(p.timer);
         if (m.text) p.texts.push(m.text);
+        // Stiker tidak menimpa foto yang sudah menunggu di rentetan yang sama.
+        if (m.media && (m.media !== 'stiker' || !p.media)) p.media = m;
         p.timer = setTimeout(() => flush(m.phone), cfg.debounceMs);
         return;
       }
       pending.set(m.phone, {
         first: m,
         texts: m.text ? [m.text] : [],
+        ...(m.media ? { media: m } : {}),
         timer: setTimeout(() => flush(m.phone), cfg.debounceMs),
       });
     },

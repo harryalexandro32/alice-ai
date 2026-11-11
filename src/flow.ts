@@ -10,12 +10,14 @@
 import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
 import { join } from 'node:path';
 
-import { raiseAlert } from './alerts';
+import { ALERT_TITLES, raiseAlert } from './alerts';
 import { biz, fileById, mediaDir, productOfFile, refreshBiz } from './business';
 import type { LeadField } from './business/types';
 import { cfg, HOUR, MINUTE } from './config';
 import { now } from './clock';
-import { deliverOutbox, type LeadPayload } from './sinks/outbox';
+import { llmEnabled } from './llm/provider';
+import { deliverExternal, recipientPhones } from './notify';
+import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
   addMessage, contactByAddress, countInboundSince, createContact, getContact, humanSeenAt, isBotOff, markHuman,
   markSwitchApplied, outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, switchAppliedAt,
@@ -52,8 +54,10 @@ export interface Inbound {
   /** Null = pesan bukan teks (gambar, stiker, suara). */
   text: string | null;
   waId?: string | null;
-  /** Pesannya membawa foto, suara, dsb. (bot tidak bisa melihat/mendengarnya). */
+  /** Pesannya membawa foto, suara, dsb. */
   media?: MediaKind;
+  /** Untuk foto: unduh isinya supaya bisa diamati LLM. */
+  fetchMedia?: () => Promise<{ data: Buffer; mime: string } | null>;
 }
 
 export function missingFields(c: Pick<Contact, 'lead'>): LeadField[] {
@@ -135,6 +139,11 @@ export function applyBotSwitches(): void {
   }
 }
 
+/** Foto di atas ukuran ini tidak dikirim ke LLM. */
+const MAX_IMAGE_BYTES = 6_000_000;
+/** Ada otak yang bisa dipanggil: LLM sungguhan, atau tiruan yang dipasang tes. */
+const hasBrain = (): boolean => brain !== llmBrain || llmEnabled();
+
 /** Jarak minimum antar kabar "butuh staf" untuk pelanggan yang sama. */
 const STAFF_NOTIFY_GAP = 30 * MINUTE;
 
@@ -157,8 +166,8 @@ export async function handleInbound(m: Inbound): Promise<void> {
   await beforeTurn();
   refreshBiz();
   applyBotSwitches();
-  // Nomor sales itu penerima notifikasi, bukan calon pelanggan.
-  if (cfg.salesNumber && cfg.salesNumber === m.phone) return;
+  // Pemilik dan staf itu penerima notifikasi, bukan calon pelanggan.
+  if (recipientPhones().has(m.phone)) return;
   // Mode uji: selain nomor yang didaftarkan, tidak ada yang dibalas maupun
   // dicatat — pelanggan sungguhan di nomor itu tidak boleh ikut jadi bahan uji.
   if (cfg.onlyNumbers.length && !cfg.onlyNumbers.includes(m.phone)) {
@@ -201,11 +210,23 @@ export async function handleInbound(m: Inbound): Promise<void> {
   // mendengarnya, tapi staf bisa — jadi staf dikabari, dan pelanggan diberi tahu
   // bahwa kirimannya diterima. Stiker hanya basa-basi: tidak dibalas.
   const media = m.media && m.media !== 'stiker' ? m.media : null;
-  if (media) {
+  // Foto diamati LLM (kalau dinyalakan dan fotonya berhasil diunduh); dengan
+  // begitu bot bisa langsung menjawab dan staf tidak perlu dikabari.
+  let image: { data: Buffer; mime: string } | null = null;
+  if (media === 'foto' && m.fetchMedia && cfg.llmVision && hasBrain()) {
+    try {
+      const got = await m.fetchMedia();
+      if (got && got.data.length <= MAX_IMAGE_BYTES) image = got;
+      else if (got) console.log(`[alur] ${m.phone}: foto terlalu besar untuk dianalisis (${Math.round(got.data.length / 1e6)} MB)`);
+    } catch (e) {
+      console.error(`[alur] ${m.phone}: foto gagal diunduh: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  if (media && !image) {
     c = updateContact(c.phone, { needs_sales: 1 });
     c = notifyStaff(c, `Kirim ${media}`, stored, at);
   }
-  if (!text) {
+  if (!text && !image) {
     if (media) {
       const ack = mediaAck(media);
       if (c.last_out_text !== ack) c = await reply(c, ack);
@@ -218,16 +239,20 @@ export async function handleInbound(m: Inbound): Promise<void> {
     return;
   }
 
-  if (!(isNew && bareGreeting(text))) {
+  // Foto tanpa keterangan: tetap ada yang harus dijawab, yaitu fotonya.
+  const said = text || 'Pelanggan mengirim foto tanpa keterangan.';
+  if (!(isNew && text && bareGreeting(text))) {
     // Untuk kontak lama, entri terakhir adalah pesan yang baru saja dicatat.
     const history = isNew ? [] : recentMessages(c.phone, 12).slice(0, -1);
     let result: BrainResult | null = null;
     try {
       result = await brain({
-        text, known: c.lead, history, justGreeted: isNew, summary: c.summary,
-        ...(media
-          ? { note: `Pelanggan melampirkan ${media} yang TIDAK bisa kamu lihat. Jangan mengomentari isinya; sampaikan bahwa tim kami yang akan mengeceknya, lalu jawab teksnya.` }
-          : {}),
+        text: said, known: c.lead, history, justGreeted: isNew, summary: c.summary,
+        ...(image
+          ? { image, note: 'Pelanggan melampirkan foto, ikut di pesan ini. Amati fotonya (lihat FOTO DARI PELANGGAN) lalu jawab.' }
+          : media
+            ? { note: `Pelanggan melampirkan ${media} yang TIDAK bisa kamu lihat. Jangan mengomentari isinya; sampaikan bahwa tim kami yang akan mengeceknya, lalu jawab teksnya.` }
+            : {}),
       });
     } catch (e) {
       console.error(`[alur] otak gagal: ${e instanceof Error ? e.message : e}`);
@@ -246,7 +271,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
     let handoff = result?.intent === 'handoff' || result?.intent === 'human';
 
     // Yang dihitung "ditanyakan pelanggan": pesan ini dan pesan-pesannya yang baru lalu.
-    const asked = [text, ...history.filter((t) => t.dir === 'in').map((t) => t.text)].join('\n');
+    const asked = [said, ...history.filter((t) => t.dir === 'in').map((t) => t.text)].join('\n');
     const rejected = out ? checkReply(out, asked) : null;
     if (rejected) {
       console.error(`[alur] ${c.phone}: balasan dibuang (${rejected})`);
@@ -307,14 +332,16 @@ export async function handleInbound(m: Inbound): Promise<void> {
     // juga sekali, dengan data seadanya, supaya tidak ada yang menunggu.
     const complete = missingFields(c).length === 0;
     if (complete && !c.lead_sent_at) {
-      const p = leadPayload(c, 'Lead lengkap', text);
+      const p = leadPayload(c, 'Lead lengkap', said);
       outboxAdd('sales', p, at);
       outboxAdd('sheet', p, at);
+      // WhatsApp lewat antrean di atas; email dan Telegram langsung.
+      void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} — ${biz.brand}`, salesText(p));
       c = updateContact(c.phone, { lead_sent_at: at });
     } else if (handoff) {
       // Bot tidak bisa menjawab sendiri (di luar pengetahuannya, pelanggan minta
       // orang, atau balasannya ditolak pagar): staf dikabari, dengan pertanyaannya.
-      c = notifyStaff(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Bot tidak bisa menjawab — perlu dibantu', text, at);
+      c = notifyStaff(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Bot tidak bisa menjawab — perlu dibantu', said, at);
     }
   }
 

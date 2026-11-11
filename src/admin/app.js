@@ -30,9 +30,27 @@ function applyLang() {
   for (const b of $('lang').children) b.classList.toggle('on', b.dataset.lang === lang);
 }
 
+// ---------- tema terang / gelap ----------
+let theme = 'light';
+try {
+  const saved = localStorage.getItem('theme');
+  theme = saved === 'dark' || saved === 'light' ? saved : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+} catch { /* tetap terang */ }
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  $('theme').textContent = theme === 'dark' ? '☀' : '☾';
+}
+applyTheme();
+$('theme').addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('theme', theme); } catch { /* berlaku untuk kunjungan ini saja */ }
+  applyTheme();
+});
+
 let profile = null;
 let state = null;
 let tab = 'identitas';
+const NO_SAVE = ['lead', 'biaya', 'uji', 'pdf', 'peringatan'];
 let dirty = false;
 // Hanya kunci yang benar-benar diubah yang dikirim: yang tidak disentuh tetap
 // mengikuti bawaan, jadi perbaikan bawaan di kemudian hari tetap sampai.
@@ -42,7 +60,7 @@ let known = {};
 
 const PAGES = {
   identitas: () => [T('Identitas', 'Identity'), T('Siapa yang membalas chat, logonya, dan salam pembukanya. Perubahan berlaku pada pesan berikutnya setelah disimpan.', 'Who replies to chats, the logo, and the greeting. Changes apply to the next message after you save.')],
-  perilaku: () => [T('Perilaku', 'Behaviour'), T('Irama balasan bot dan keadaan bot saat ini.', 'The rhythm of the bot\'s replies and its current state.')],
+  pengaturan: () => [T('Pengaturan', 'Settings'), T('Notifikasi, irama balasan, follow-up, batas, dan keadaan bot.', 'Notifications, reply rhythm, follow-up, limits, and the bot\'s status.')],
   rekomendasi: () => [T('Rekomendasi', 'Recommendations'), T('Apa yang ditanyakan bot ke pelanggan, dan cara ia memilih produk.', 'What the bot asks the customer, and how it picks a product.')],
   pdf: () => ['PDF', T('Brosur dan katalog yang bisa dikirim bot ke pelanggan.', 'Brochures and catalogues the bot can send to customers.')],
   produk: () => [T('Produk', 'Products'), T('Satu-satunya sumber jawaban bot. Yang tidak tertulis di sini tidak akan dijawabnya.', 'The bot\'s only source of answers. Anything not written here, it will not answer.')],
@@ -82,7 +100,7 @@ function setDirty(v, key) {
   if (!v) changed.clear();
   $('save').disabled = !v;
   $('save').textContent = v ? T('Simpan & terapkan', 'Save & apply') : T('Tersimpan', 'Saved');
-  $('save').style.display = ['lead', 'biaya', 'uji', 'pdf', 'peringatan'].includes(tab) && !v ? 'none' : '';
+  $('save').style.display = NO_SAVE.includes(tab) && !v ? 'none' : '';
 }
 
 // ---------- isian sederhana ----------
@@ -93,6 +111,85 @@ function fillInputs() {
     else input.value = v ?? '';
   }
 }
+
+// Pengaturan operasional: kotak kosong = ikut .env bot (nilainya tampil abu-abu).
+const effective = () => (state && state.status && state.status.effective) || {};
+function fillSettings() {
+  const set = profile.settings || {};
+  const eff = effective();
+  for (const n of document.querySelectorAll('[data-set]')) {
+    const k = n.dataset.set;
+    n.value = set[k] ?? '';
+    n.placeholder = eff[k] !== undefined ? String(eff[k]) : '';
+  }
+  for (const n of document.querySelectorAll('[data-set-bool]')) {
+    const k = n.dataset.setBool;
+    n.checked = Boolean(set[k] ?? eff[k] ?? true);
+  }
+  for (const n of document.querySelectorAll('[data-set-list]')) {
+    const k = n.dataset.setList;
+    n.value = (set[k] ?? eff[k] ?? []).join(', ');
+  }
+}
+function touchSetting(apply) {
+  profile.settings = { ...(profile.settings || {}) };
+  apply(profile.settings);
+  setDirty(true, 'settings');
+}
+document.addEventListener('input', (e) => {
+  const d = e.target.dataset || {};
+  if (!profile) return;
+  if (d.set) touchSetting((x) => { if (e.target.value === '') delete x[d.set]; else x[d.set] = Number(e.target.value); });
+  else if (d.setBool) touchSetting((x) => { x[d.setBool] = e.target.checked; });
+  else if (d.setList) touchSetting((x) => { x[d.setList] = e.target.value.split(/[,;\s]+/).map((v) => v.trim()).filter(Boolean); });
+});
+
+// ---------- penerima notifikasi & rute ----------
+const NOTIFY = [
+  ['lead', () => T('Lead baru (data pelanggan lengkap)', 'New lead (customer data complete)'), 'staff'],
+  ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, minta orang, kirim suara/dokumen)', 'Customer needs staff (bot cannot answer, asks for a person, sends voice/document)'), 'staff'],
+  ['wa-putus', () => T('WhatsApp terputus', 'WhatsApp disconnected'), 'owner'],
+  ['kiriman-dijeda', () => T('Kiriman bot dijeda pengaman', 'Sending paused by the safeguard'), 'owner'],
+  ['llm', () => T('LLM bermasalah / jatah harian habis', 'LLM failing / daily limit reached'), 'owner'],
+  ['bot-mati', () => T('Bot berhenti', 'Bot stopped'), 'owner'],
+];
+function renderRecipients() {
+  const list = profile.recipients;
+  const touch = () => setDirty(true, 'recipients');
+  const body = el('tbody', {}, ...list.map((r, i) => {
+    const role = el('select', {}, el('option', { value: 'owner', textContent: T('Pemilik', 'Owner') }), el('option', { value: 'staff', textContent: T('Staf', 'Staff') }));
+    role.value = r.role;
+    role.addEventListener('change', () => { r.role = role.value; touch(); });
+    const cell = (k, ph) => el('td', { className: k === 'name' ? 'first' : '' }, cellInput(r[k], (v) => { r[k] = v; touch(); }, ph));
+    return el('tr', {}, cell('name', T('mis. Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')), cell('email', 'nama@contoh.com'),
+      cell('telegram', T('id chat, mis. 123456789', 'chat id, e.g. 123456789')),
+      el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
+  }));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 6, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima. Selama kosong, bot memakai SALES_NUMBER dari .env.', 'No recipients yet. While empty, the bot uses SALES_NUMBER from .env.') })));
+  $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp', 'Email', 'Telegram']), body);
+
+  const opts = [['owner', T('Pemilik', 'Owner')], ['staff', T('Staf', 'Staff')], ['both', T('Pemilik dan staf', 'Owner and staff')], ['none', T('Tidak dikirim', 'Not sent')]];
+  $('routes').replaceChildren(el('thead', {}, el('tr', {}, el('th', { textContent: T('Jenis kabar', 'Kind of news') }), el('th', { textContent: T('Dikirim ke', 'Sent to') }))),
+    el('tbody', {}, ...NOTIFY.map(([kind, label, def]) => {
+      const sel = el('select', {}, ...opts.map(([v, t]) => el('option', { value: v, textContent: t })));
+      sel.value = (profile.notifyRoutes || {})[kind] || def;
+      sel.addEventListener('change', () => { profile.notifyRoutes = { ...(profile.notifyRoutes || {}), [kind]: sel.value }; setDirty(true, 'notifyRoutes'); });
+      return el('tr', {}, el('td', { textContent: label() }), el('td', {}, sel));
+    })));
+
+  const ch = state && state.status && state.status.channels;
+  const yes = T('siap', 'ready');
+  const no = T('belum diatur di .env bot', 'not set in the bot\'s .env');
+  $('channels').textContent = !ch
+    ? T('Bot belum melapor, jadi belum diketahui jalur mana yang siap.', 'The bot has not reported yet, so it is unknown which channels are ready.')
+    : 'WhatsApp: ' + yes + ' · Email: ' + (ch.email ? yes : no) + ' · Telegram: ' + (ch.telegram ? yes : no);
+}
+$('addRecipient').addEventListener('click', () => {
+  if (profile.recipients.length >= 20) return toast(T('Maksimal 20 orang.', '20 people max.'), true);
+  profile.recipients.push({ name: '', role: 'staff', phone: '', email: '', telegram: '' });
+  setDirty(true, 'recipients');
+  renderRecipients();
+});
 
 document.addEventListener('input', (e) => {
   const key = e.target.dataset && e.target.dataset.key;
@@ -791,7 +888,7 @@ function renderStatus() {
   $('chipWa').className = 'chip ' + (!st || (mins !== null && mins > 40) ? 'warn' : 'ok');
   const info = !st
     ? [['Bot', T('Belum pernah melapor ke dashboard ini. Nyalakan bot dengan penyimpanan bersama yang sama.', 'Has never reported to this dashboard. Start the bot with the same shared storage.')]]
-    : [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Nomor sales', 'Sales number'), st.sales || T('belum diatur', 'not set')],
+    : [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Kabar lead lewat WA ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
         ['Google Sheet', st.sheet ? T('siap', 'ready') : T('belum diatur', 'not set')],
         [T('Yang dibalas', 'Who gets a reply'), st.onlyNumbers ? T('MODE UJI: hanya ', 'TEST MODE: only ') + st.onlyNumbers + T(' nomor', ' numbers') : T('semua nomor', 'every number')],
         [T('Panggilan LLM hari ini', 'LLM calls today'), st.usage.calls + T(' dari batas ', ' of limit ') + st.usage.limit],
@@ -817,6 +914,8 @@ function renderAll() {
   applyLang();
   if (!profile) return;
   fillInputs();
+  fillSettings();
+  renderRecipients();
   renderLogo();
   renderFields();
   renderQuestions();

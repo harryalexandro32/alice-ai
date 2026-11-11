@@ -4,7 +4,8 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { mediaDir, refreshBiz, saveBiz } from '../business';
-import { cfg } from '../config';
+import { cfg, effectiveSettings } from '../config';
+import { emailReady, telegramReady, waTargets } from '../notify';
 import { llmEnabled, llmUsageToday } from '../llm/provider';
 import { sheetConfigured } from '../sinks/sheet';
 import { now } from '../clock';
@@ -43,9 +44,11 @@ export function botStatus(): Omit<BotStatus, 'reportedAt'> {
     transport: cfg.transport,
     llm: llmEnabled() ? cfg.llmModel : null,
     usage: { calls: u.calls, limit: u.limit },
-    sales: cfg.salesNumber === 'self' ? 'nomor bot sendiri' : cfg.salesNumber,
+    sales: waTargets('lead').map((p) => (p === 'self' ? 'nomor bot sendiri' : p)).join(', ') || null,
     sheet: sheetConfigured(),
     onlyNumbers: cfg.onlyNumbers.length,
+    effective: effectiveSettings() as unknown as Record<string, number | boolean | string[]>,
+    channels: { email: emailReady(), telegram: telegramReady() },
     ...(cfg.transport === 'baileys' ? { guard: guardSummary() } : {}),
   };
 }

@@ -70,6 +70,8 @@ export interface AskOptions {
   user: string;
   maxTokens?: number;
   timeoutMs?: number;
+  /** Foto kiriman pelanggan; modelnya harus bisa membaca gambar. */
+  image?: { data: Buffer; mime: string };
 }
 
 /** Satu panggilan, jawaban berupa teks JSON. */
@@ -90,7 +92,15 @@ export async function askJson(opts: AskOptions): Promise<string | null> {
         // penyedia, dan itu bagian terbesar dari tiap permintaan.
         messages: [
           { role: 'system', content: opts.system },
-          { role: 'user', content: opts.user },
+          {
+            role: 'user',
+            content: opts.image
+              ? [
+                  { type: 'text', text: opts.user },
+                  { type: 'image_url', image_url: { url: `data:${opts.image.mime};base64,${opts.image.data.toString('base64')}` } },
+                ]
+              : opts.user,
+          },
         ],
         response_format: { type: 'json_object' },
         max_tokens: opts.maxTokens ?? 600,

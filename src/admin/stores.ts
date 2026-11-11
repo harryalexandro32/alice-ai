@@ -46,6 +46,10 @@ export interface BotStatus {
   onlyNumbers: number;
   /** Keadaan pengaman nomor (jalur Baileys), satu baris. */
   guard?: string;
+  /** Pengaturan yang sedang berlaku di bot (.env + yang diubah di dashboard). */
+  effective?: Record<string, number | boolean | string[]>;
+  /** Jalur notifikasi yang kredensialnya sudah diisi di .env bot. */
+  channels?: { email: boolean; telegram: boolean };
   /** Kapan bot terakhir melapor (ms). Null = dashboard satu proses dengan bot. */
   reportedAt: number | null;
 }

@@ -4,7 +4,7 @@
  *   - menyimpan SEMUA keluarannya (termasuk log Baileys) ke logs/bot-TANGGAL.log,
  *     jadi jejaknya tidak hilang saat jendela terminal ditutup;
  *   - menyalakannya lagi kalau ia mati, dengan jeda yang makin panjang;
- *   - mengabari pemilik lewat Telegram (kalau diatur) saat bot mati.
+ *   - mengabari pemilik lewat Telegram / email (kalau diatur) saat bot mati.
  *
  * Bot tanpa pengawas: `npm run bot`.
  */
@@ -51,16 +51,21 @@ function record(chunk: Buffer | string): void {
   }
 }
 
-async function telegram(text: string): Promise<void> {
-  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  const chat = process.env.TELEGRAM_CHAT_ID?.trim();
-  if (!token || !chat) return;
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text }),
-    signal: AbortSignal.timeout(10_000),
-  }).catch(() => {});
+/**
+ * Kabari penerima "bot mati" lewat Telegram dan email (WhatsApp tidak mungkin:
+ * botnya sedang mati). Profil dibaca dari disk tiap kali, jadi penerima yang
+ * baru diatur di dashboard langsung berlaku. Tidak pernah melempar.
+ */
+async function tell(text: string): Promise<void> {
+  try {
+    const { biz, initBiz, refreshBiz } = await import('./business');
+    initBiz();
+    refreshBiz(true);
+    const { deliverExternal } = await import('./notify');
+    await deliverExternal('bot-mati', `⚠️ Bot berhenti — ${biz.brand}`, text);
+  } catch (e) {
+    say(`kabar "bot mati" tidak terkirim: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 const say = (text: string): void => {
@@ -88,7 +93,7 @@ function start(): void {
     // Jalan lama lalu mati = kejadian baru; mati terus-menerus = jeda makin panjang.
     if (Date.now() - startedAt > 10 * 60_000) delay = 5_000;
     say(`bot BERHENTI (kode ${code ?? '-'}${signal ? `, sinyal ${signal}` : ''}); dinyalakan lagi dalam ${delay / 1000} detik`);
-    void telegram(`⚠️ Bot berhenti (kode ${code ?? '-'}). Dinyalakan lagi dalam ${delay / 1000} detik.`);
+    void tell(`Bot berhenti (kode ${code ?? '-'}) dan dinyalakan lagi dalam ${delay / 1000} detik. Kalau ini terus berulang, lihat halaman "Peringatan & log" di dashboard atau berkas log di mesin bot.`);
     setTimeout(start, delay);
     delay = Math.min(delay * 2, 5 * 60_000);
   });

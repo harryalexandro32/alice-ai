@@ -32,6 +32,22 @@ export interface MediaFile {
   read?: boolean;
 }
 
+/** Jenis kabar yang bisa dikirim ke pemilik/staf. */
+export type NotifyKind = 'lead' | 'butuh-staf' | 'wa-putus' | 'kiriman-dijeda' | 'llm' | 'bot-mati';
+/** Ke siapa sebuah jenis kabar dikirim. */
+export type Route = 'owner' | 'staff' | 'both' | 'none';
+
+/** Orang yang dikabari bot. Isi jalur yang ingin dipakai; yang kosong dilewati. */
+export interface Recipient {
+  name: string;
+  role: 'owner' | 'staff';
+  /** Nomor WhatsApp "+62…", "self" (nomor bot sendiri), atau ''. */
+  phone: string;
+  email: string;
+  /** Id chat Telegram, atau ''. */
+  telegram: string;
+}
+
 /** Perintah tombol "bot aktif / diam" untuk satu pelanggan, dari dashboard. */
 export interface BotSwitch {
   mode: 'on' | 'off';
@@ -127,6 +143,12 @@ export interface Business {
    * bot hanya diam selama HUMAN_PAUSE_HOURS, lalu aktif lagi.
    */
   stopAfterHuman: boolean;
+  /** Pemilik dan staf yang dikabari bot. */
+  recipients: Recipient[];
+  /** Jenis kabar -> penerimanya. Yang tidak diisi memakai rute bawaan. */
+  notifyRoutes: Partial<Record<NotifyKind, Route>>;
+  /** Pengaturan operasional yang menimpa bawaan .env (lihat config.TUNABLE). */
+  settings: import('../config').Settings;
   /** Tombol per pelanggan dari halaman Lead: nomor -> perintah terakhir. */
   botSwitch: Record<string, BotSwitch>;
   /** Jeda sebelum membalas, detik. Diacak di antara keduanya tiap balasan. */
@@ -146,7 +168,7 @@ export interface Business {
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'products', 'catalog', 'notes', 'questions',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'files', 'logo', 'stopAfterHuman', 'botSwitch', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'stopAfterHuman', 'botSwitch', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

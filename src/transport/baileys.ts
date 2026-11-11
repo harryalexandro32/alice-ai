@@ -20,6 +20,7 @@
 
 import makeWASocket, {
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
   type WASocket,
@@ -311,7 +312,21 @@ async function connect(): Promise<void> {
       unread.set(jid, keys.slice(-20));
       if (unread.size > 500) unread.delete(unread.keys().next().value as string);
       console.log(`[wa] diproses: ${phone} ${tag}`);
-      handlers.onInbound({ phone, address: jid, text, waId: m.key.id ?? null, media: mediaOf(m.message as Record<string, unknown> | null) });
+      const media = mediaOf(m.message as Record<string, unknown> | null);
+      handlers.onInbound({
+        phone, address: jid, text, waId: m.key.id ?? null,
+        ...(media ? { media } : {}),
+        ...(media === 'foto'
+          ? {
+              fetchMedia: async () => {
+                const data = await downloadMediaMessage(m, 'buffer', {});
+                const inner = [m.message as Record<string, unknown>, ...unwrap((m.message ?? {}) as Record<string, unknown>)];
+                const mime = inner.map((x) => (x.imageMessage as { mimetype?: string } | undefined)?.mimetype).find(Boolean) ?? 'image/jpeg';
+                return { data: data as Buffer, mime };
+              },
+            }
+          : {}),
+      });
     }
   });
 }

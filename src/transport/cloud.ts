@@ -44,7 +44,7 @@ interface WaMessage {
   text?: { body?: string };
   button?: { text?: string };
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
-  image?: { caption?: string };
+  image?: { caption?: string; id?: string; mime_type?: string };
   video?: { caption?: string };
   document?: { caption?: string };
 }
@@ -116,6 +116,18 @@ function process_(body: { entry?: { changes?: WaChange[] }[] }): void {
             text: textOf(m),
             waId: m.id ?? null,
             ...(MEDIA[m.type ?? ''] ? { media: MEDIA[m.type ?? ''] } : {}),
+            ...(m.type === 'image' && m.image?.id
+              ? {
+                  // Meta memberi id; isinya diambil lewat dua langkah (id -> URL -> berkas).
+                  fetchMedia: async () => {
+                    const info = await graph(m.image!.id as string);
+                    if (!info?.url) return null;
+                    const res = await fetch(info.url as string, { headers: { authorization: `Bearer ${cfg.waToken}` }, signal: AbortSignal.timeout(30_000) });
+                    if (!res.ok) return null;
+                    return { data: Buffer.from(await res.arrayBuffer()), mime: (info.mime_type as string) ?? m.image!.mime_type ?? 'image/jpeg' };
+                  },
+                }
+              : {}),
           });
         }
         for (const s of v.statuses ?? []) {
