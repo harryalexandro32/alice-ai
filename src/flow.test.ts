@@ -51,6 +51,7 @@ function fresh(): void {
   cfg.tz = 'Asia/Jakarta';
   cfg.salesNumber = SALES;
   cfg.followupAfterHours = 23;
+  cfg.followupAfterHoursMax = 23;
   cfg.followupStartHour = 8;
   cfg.followupEndHour = 20;
   cfg.followupMaxHours = 0;
@@ -494,6 +495,43 @@ const tests: [string, () => Promise<void>][] = [
     biz.greetingKnown = known;
     assert.match(greetingFor({ wa_name: 'Sari Dewi', lead: {} }), /Sari Dewi/);
     assert.equal(greetingFor({ wa_name: 'Sari Dewi', lead: { name: 'Sari' } }), GREETING, 'nama sudah ada: tidak perlu dipastikan lagi');
+  }],
+
+  ['follow-up diacak di antara dua batas, tetap untuk satu masa diam, dan tidak melewati jendela Cloud API', async () => {
+    cfg.followupAfterHoursMax = 25;
+    cfg.followupStartHour = 0;
+    cfg.followupEndHour = 24;
+    const base = T0;
+    const waits = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      const phone = '+62812' + String(1000000 + i);
+      const h = (followupDueAt(base, phone) - base) / HOUR;
+      assert.ok(h >= 23 && h <= 25, `di luar 23–25 jam: ${h}`);
+      assert.equal(followupDueAt(base, phone), followupDueAt(base, phone), 'putaran berikutnya tidak mengocok ulang');
+      waits.add(Math.round(h * 60));
+    }
+    assert.ok(waits.size > 60, `kurang beragam: ${waits.size} nilai dari 200 pelanggan`);
+    const hrs = [...waits].map((m) => m / 60);
+    assert.ok(Math.min(...hrs) < 23.3 && Math.max(...hrs) > 24.7, 'menyebar ke kedua ujung rentang');
+    // Pelanggan yang sama, masa diam berikutnya: jadwal baru.
+    assert.notEqual(followupDueAt(base, A) - base, followupDueAt(base + HOUR, A) - (base + HOUR));
+    // Batas atas lebih kecil dari batas bawah (salah isi): pakai batas bawah, tidak mundur.
+    cfg.followupAfterHoursMax = 10;
+    assert.equal(followupDueAt(base, A), base + 23 * HOUR);
+    // Cloud API: acakan tidak membawa jadwal ke luar jendela 24 jam.
+    cfg.followupAfterHoursMax = 25;
+    cfg.followupMaxHours = 24;
+    for (let i = 0; i < 50; i++) assert.ok(followupDueAt(base, '+62813' + i) <= base + 24 * HOUR - 10 * MINUTE);
+
+    // Dari ujung ke ujung: belum waktunya di jam ke-23, sudah terkirim setelah jam ke-25.
+    cfg.followupMaxHours = 0;
+    await say('halo');
+    next = () => R('Di kota mana?');
+    await say('ya');
+    advance(22 * HOUR + 59 * MINUTE);
+    assert.equal(await follow(), 0);
+    advance(2 * HOUR + 2 * MINUTE);
+    assert.equal(await follow(), 1);
   }],
 
   ['tombol bot per pelanggan: dimatikan, lalu dikembalikan ke bot', async () => {

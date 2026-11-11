@@ -308,6 +308,9 @@ const PNG = Buffer.from(
       assert.equal((await call('/admin/api/state')).body.status.effective.followupAfterHours, 20);
       assert.match((await put({ settings: { followupAfterHours: 500 } })).body.error, /1–72/);
       assert.match((await put({ settings: { followupStartHour: 20, followupEndHour: 8 } })).body.error, /jam selesai/);
+      assert.match((await put({ settings: { followupAfterHours: 30, followupAfterHoursMax: 24 } })).body.error, /paling lama/);
+      assert.equal((await put({ settings: { followupAfterHours: 20, followupAfterHoursMax: 22 } })).status, 200);
+      assert.deepEqual([cfg.followupAfterHours, cfg.followupAfterHoursMax], [20, 22]);
       assert.match((await put({ settings: { onlyNumbers: ['abc'] } })).body.error, /bukan nomor/);
       // Dikosongkan = kembali ke .env.
       assert.equal((await put({ settings: {} })).status, 200);

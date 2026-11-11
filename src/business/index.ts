@@ -262,6 +262,9 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
       if (!Number.isFinite(n) || n < min || n > max) throw new Error(`Pengaturan ${k}: isi angka ${min}–${max}`);
       out[k] = k.startsWith('llmPrice') ? n : Math.round(n);
     }
+    if (out.followupAfterHours !== undefined && out.followupAfterHoursMax !== undefined && out.followupAfterHoursMax < out.followupAfterHours) {
+      throw new Error('Follow-up: "paling lama" tidak boleh lebih kecil dari "paling cepat"');
+    }
     if (out.followupStartHour !== undefined && out.followupEndHour !== undefined && out.followupEndHour <= out.followupStartHour) {
       throw new Error('Jam follow-up: jam selesai harus setelah jam mulai');
     }

@@ -17,7 +17,7 @@ async function main() {
   );
   console.log(`[bot] Google Sheet: ${sheetConfigured() ? 'siap' : 'BELUM DIATUR'}`);
   console.log(
-    `[bot] follow-up setelah ${cfg.followupAfterHours} jam diam, jam ${cfg.followupStartHour}–${cfg.followupEndHour}` +
+    `[bot] follow-up setelah ${cfg.followupAfterHours}–${Math.max(cfg.followupAfterHours, cfg.followupAfterHoursMax)} jam diam (diacak), jam ${cfg.followupStartHour}–${cfg.followupEndHour}` +
       (cfg.followupMaxHours ? `, paling lambat jam ke-${cfg.followupMaxHours}` : '')
   );
 

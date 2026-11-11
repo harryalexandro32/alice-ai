@@ -68,7 +68,10 @@ export const cfg = {
   llmPriceOut: num('LLM_PRICE_OUT', 1.2),
   usdIdr: num('USD_IDR', 16_500),
 
+  // Follow-up dikirim setelah pelanggan diam selama waktu yang diacak di antara
+  // dua angka ini (seperti jeda balasan), supaya tidak selalu tepat di jam yang sama.
   followupAfterHours: num('FOLLOWUP_AFTER_HOURS', 23),
+  followupAfterHoursMax: num('FOLLOWUP_AFTER_HOURS_MAX', 25),
   followupStartHour: num('FOLLOWUP_START_HOUR', 8),
   followupEndHour: num('FOLLOWUP_END_HOUR', 20),
   // Cloud API menolak teks bebas di luar 24 jam sejak pesan terakhir pelanggan,
@@ -130,7 +133,7 @@ export const cfg = {
  * [minimum, maksimum] untuk angka.
  */
 export const TUNABLE = {
-  followupAfterHours: [1, 72], followupStartHour: [0, 23], followupEndHour: [1, 24], followupMaxTotal: [0, 5],
+  followupAfterHours: [1, 72], followupAfterHoursMax: [1, 96], followupStartHour: [0, 23], followupEndHour: [1, 24], followupMaxTotal: [0, 5],
   humanPauseHours: [1, 168], llmDailyLimit: [10, 100_000], maxInboundPerNumber: [5, 500],
   waMaxPerMinute: [1, 30], waMaxPerHour: [10, 1000], waMaxPerDay: [50, 10_000],
   llmPriceIn: [0, 100], llmPriceCached: [0, 100], llmPriceOut: [0, 100], usdIdr: [1000, 100_000],

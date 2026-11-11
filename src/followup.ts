@@ -19,16 +19,33 @@ import { followupText } from './texts';
 /** Terlambat lebih dari ini (bot sempat mati) = dilewat, bukan dikirim basi. */
 const GRACE_MS = 6 * HOUR;
 
+/** Pecahan 0–1 yang tetap untuk kunci yang sama (FNV-1a). */
+function fraction(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  return (h >>> 0) / 2 ** 32;
+}
+
 /**
  * Kapan follow-up untuk pelanggan yang terakhir bicara di `lastInbound`.
  *
- * Bawaannya lastInbound + FOLLOWUP_AFTER_HOURS. Kalau itu jatuh di luar jam
- * kirim, digeser ke jam buka berikutnya — kecuali geseran itu melewati
- * FOLLOWUP_MAX_HOURS (jendela Cloud API), maka dimajukan ke sesaat sebelum jam
- * tutup. Lebih awal dari 23 jam masih sopan; lewat 24 jam tidak terkirim.
+ * Jedanya diacak di antara FOLLOWUP_AFTER_HOURS dan FOLLOWUP_AFTER_HOURS_MAX
+ * (bawaan 23–25 jam), supaya pengingat tidak selalu datang tepat sekian jam
+ * kemudian. Acakannya diturunkan dari `key` (nomor pelanggan) dan waktu pesan
+ * terakhirnya, jadi untuk satu masa diam hasilnya selalu sama — putaran
+ * berkala tidak mengocok ulang jadwal yang sudah ditetapkan.
+ *
+ * Kalau waktunya jatuh di luar jam kirim, digeser ke jam buka berikutnya —
+ * kecuali geseran itu melewati FOLLOWUP_MAX_HOURS (jendela Cloud API), maka
+ * dimajukan ke sesaat sebelum jam tutup. Lebih awal masih sopan; lewat jendela
+ * 24 jam tidak terkirim.
  */
-export function followupDueAt(lastInbound: number): number {
-  const due = lastInbound + cfg.followupAfterHours * HOUR;
+export function followupDueAt(lastInbound: number, key = ''): number {
+  const spread = Math.max(0, cfg.followupAfterHoursMax - cfg.followupAfterHours);
+  const wait = Math.round((cfg.followupAfterHours + fraction(`${key}:${lastInbound}`) * spread) * 60) * MINUTE;
+  const cap = cfg.followupMaxHours ? lastInbound + cfg.followupMaxHours * HOUR - 10 * MINUTE : Infinity;
+  // Di Cloud API, acakan pun tidak boleh membawa jadwal ke luar jendela layanan.
+  const due = Math.min(lastInbound + wait, cap);
   const m = localMinutes(due);
   const start = cfg.followupStartHour * 60;
   const end = cfg.followupEndHour * 60;
@@ -48,7 +65,7 @@ export async function runFollowups(send: Sender): Promise<number> {
   applyBotSwitches();
 
   for (const c of followupCandidates()) {
-    const due = followupDueAt(c.last_inbound_at);
+    const due = followupDueAt(c.last_inbound_at, c.phone);
     if (t < due) continue;
 
     const skip =

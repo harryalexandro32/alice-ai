@@ -459,10 +459,11 @@
         </div>
 
         <div class="card">
-          <div class="ch"><h2>Follow-up</h2><p class="help" data-en="The reminder sent when a customer goes quiet. It is only sent between the two hours below.">Pesan pengingat saat pelanggan diam. Hanya dikirim di antara dua jam di bawah.</p></div>
+          <div class="ch"><h2>Follow-up</h2><p class="help" data-en="The reminder sent when a customer goes quiet. Like the reply delay, the wait is picked at random between the earliest and latest value for each customer, so reminders do not all arrive exactly the same number of hours later. It is only sent between the “from” and “until” hours.">Pesan pengingat saat pelanggan diam. Seperti jeda balasan, lamanya diacak di antara “paling cepat” dan “paling lama” untuk tiap pelanggan, supaya pengingat tidak selalu datang tepat sekian jam kemudian. Hanya dikirim di antara jam “mulai” dan “sampai”.</p></div>
           <div class="cb">
             <div class="row" style="margin-bottom:-14px">
-              <label class="f"><span data-en="After being quiet for (hours)">Setelah diam (jam)</span><input type="number" min="1" max="72" data-set="followupAfterHours"></label>
+              <label class="f"><span data-en="After being quiet for, at the earliest (hours)">Setelah diam, paling cepat (jam)</span><input type="number" min="1" max="72" data-set="followupAfterHours"></label>
+              <label class="f"><span data-en="…at the latest (hours)">…paling lama (jam)</span><input type="number" min="1" max="96" data-set="followupAfterHoursMax"></label>
               <label class="f"><span data-en="At most per customer">Paling banyak per pelanggan</span><input type="number" min="0" max="5" data-set="followupMaxTotal"></label>
               <label class="f"><span data-en="From hour">Mulai jam</span><input type="number" min="0" max="23" data-set="followupStartHour"></label>
               <label class="f"><span data-en="Until hour">Sampai jam</span><input type="number" min="1" max="24" data-set="followupEndHour"></label>
