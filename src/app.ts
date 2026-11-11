@@ -20,7 +20,10 @@ import { pullProfile, startSync } from './sync';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
-import { setUsageRecorder } from './llm/provider';
+import { raiseAlert, setAlertWhatsApp } from './alerts';
+import { installErrorLog } from './errlog';
+import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
+import { setGuardListener } from './transport/sendguard';
 import { addUsage, openDb } from './store';
 import type { Transport, TransportInbound } from './transport/types';
 
@@ -94,6 +97,8 @@ function flush(phone: string): void {
 
 export async function startApp(transport: Transport): Promise<void> {
   openDb(cfg.dbPath);
+  // Mulai sekarang semua galat juga tersimpan untuk dashboard.
+  installErrorLog();
   initBiz();
   // Tiap panggilan LLM dicatat per hari, supaya biayanya terlihat di dashboard.
   setUsageRecorder(addUsage);
@@ -104,7 +109,18 @@ export async function startApp(transport: Transport): Promise<void> {
     await humanPause(to.address || to.phone, text.length, async () => transport.typing?.(to));
     await transport.send(to, text, image ? { image, fileName } : undefined);
   });
-  setSalesNotifier(makeSalesNotifier(transport));
+  const toSales = makeSalesNotifier(transport);
+  setSalesNotifier(toSales);
+
+  // Peringatan untuk pemilik. Yang soal WhatsApp-nya sendiri tidak dikirim
+  // lewat WhatsApp: saat itu jalurnya justru sedang bermasalah.
+  setAlertWhatsApp(toSales);
+  setLlmProblemListener((text) => void raiseAlert('llm', text));
+  setGuardListener((text) => void raiseAlert('kiriman-dijeda', text, { whatsapp: false }));
+  if (transport.name === 'baileys') {
+    const { setFatalListener } = await import('./transport/baileys');
+    setFatalListener((text) => void raiseAlert('wa-putus', text, { whatsapp: false }));
+  }
 
   if (remoteEnabled()) {
     // Dashboard-nya di-hosting terpisah; bot ini hanya mengikuti apa yang disimpan di sana.

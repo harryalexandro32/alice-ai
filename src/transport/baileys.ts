@@ -26,11 +26,14 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { readFileSync } from 'node:fs';
 
+import pino from 'pino';
+
 import qrcode from 'qrcode-terminal';
 
 import { cfg } from '../config';
+import { recordError } from '../errlog';
 import { afterSend, beforeSend, onDisconnect, onOpen, onSendError } from './sendguard';
-import type { SendOptions, Transport, TransportHandlers } from './types';
+import type { MediaKind, SendOptions, Transport, TransportHandlers } from './types';
 
 /** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
 const MIN_GAP_MS = 1200;
@@ -66,9 +69,35 @@ function textOf(msg: Record<string, unknown> | null | undefined): string | null 
   };
   if (m.conversation) return m.conversation;
   if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
-  if (m.ephemeralMessage?.message) return textOf(m.ephemeralMessage.message);
-  if (m.viewOnceMessage?.message) return textOf(m.viewOnceMessage.message);
-  return null;
+  for (const inner of unwrap(msg)) return textOf(inner);
+  // Keterangan yang diketik bersama foto / video / dokumen.
+  const cap = msg as Record<string, { caption?: string } | undefined>;
+  return cap.imageMessage?.caption || cap.videoMessage?.caption || cap.documentMessage?.caption || null;
+}
+
+/** Pesan yang dibungkus (pesan sementara, sekali lihat, dokumen berketerangan). */
+function unwrap(msg: Record<string, unknown>): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const k of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'documentWithCaptionMessage']) {
+    const inner = (msg[k] as { message?: Record<string, unknown> } | undefined)?.message;
+    if (inner) out.push(inner);
+  }
+  return out;
+}
+
+const MEDIA: Record<string, MediaKind> = {
+  imageMessage: 'foto', videoMessage: 'video', ptvMessage: 'video', audioMessage: 'suara', documentMessage: 'dokumen',
+  stickerMessage: 'stiker', locationMessage: 'lokasi', liveLocationMessage: 'lokasi', contactMessage: 'kontak', contactsArrayMessage: 'kontak',
+};
+
+function mediaOf(msg: Record<string, unknown> | null | undefined): MediaKind | undefined {
+  if (!msg) return undefined;
+  for (const k of Object.keys(msg)) if (MEDIA[k]) return MEDIA[k];
+  for (const inner of unwrap(msg)) {
+    const found = mediaOf(inner);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** Isi yang bukan percakapan: tidak dibalas, dan tidak dihitung "manusia membalas". */
@@ -76,6 +105,48 @@ const NOT_A_MESSAGE = new Set([
   'protocolMessage', 'senderKeyDistributionMessage', 'reactionMessage', 'pollUpdateMessage',
   'keepInChatMessage', 'messageContextInfo',
 ]);
+
+/**
+ * Bentuk pesan yang hanya bisa dikirim akun bisnis lewat API: promo, OTP,
+ * notifikasi bertombol. Pengirimnya mesin, bukan calon pelanggan — membalasnya
+ * dengan salam (lalu follow-up) berarti bot mengobrol dengan bot lain.
+ */
+const AUTOMATED = new Set([
+  'templateMessage', 'highlyStructuredMessage', 'buttonsMessage', 'listMessage', 'interactiveMessage',
+  'productMessage', 'orderMessage', 'invoiceMessage', 'newsletterAdminInviteMessage',
+]);
+
+/** Lampiran yang baru dikirim, untuk mencatat apakah WhatsApp benar-benar menyampaikannya. */
+const tracked = new Map<string, { what: string; timer: NodeJS.Timeout }>();
+const STATUS = ['gagal', 'menunggu', 'diterima server', 'sampai di HP pelanggan', 'dibaca', 'diputar'];
+
+/**
+ * Log Baileys tetap tampil di terminal seperti biasa; baris galat (level 50+)
+ * dan peringatan (40) juga disalin ke catatan galat untuk dashboard.
+ */
+const waLogger = pino(
+  { level: 'info' },
+  {
+    write(line: string) {
+      process.stdout.write(line);
+      try {
+        const j = JSON.parse(line) as { level?: number; msg?: string; err?: { message?: string }; trace?: string };
+        if ((j.level ?? 0) >= 40) {
+          const detail = j.err?.message ?? j.trace?.split('\n')[0] ?? '';
+          recordError(j.level! >= 50 ? 'galat' : 'peringatan', `[baileys] ${j.msg ?? ''}${detail ? ` — ${detail}` : ''}`);
+        }
+      } catch {
+        // bukan baris JSON
+      }
+    },
+  }
+).child({ class: 'baileys' });
+
+let onFatal: ((text: string) => void) | null = null;
+/** Dipasang app.ts: sambungan yang tidak akan pulih sendiri harus sampai ke pemilik. */
+export function setFatalListener(fn: ((text: string) => void) | null): void {
+  onFatal = fn;
+}
 
 async function connect(): Promise<void> {
   const myGeneration = ++generation;
@@ -85,6 +156,7 @@ async function connect(): Promise<void> {
   const s = makeWASocket({
     version,
     auth: state,
+    logger: waLogger,
     printQRInTerminal: false,
     markOnlineOnConnect: false,
     syncFullHistory: false,
@@ -130,10 +202,12 @@ async function connect(): Promise<void> {
         ?.output?.statusCode;
       s.ev.removeAllListeners('connection.update');
       s.ev.removeAllListeners('messages.upsert');
+      s.ev.removeAllListeners('messages.update');
       s.ev.removeAllListeners('creds.update');
       if (sock === s) sock = null;
 
       if (code === DisconnectReason.loggedOut) {
+        onFatal?.('Sesi WhatsApp dicabut dari HP. Bot tidak bisa menerima maupun membalas pesan sampai ditautkan ulang.');
         console.error(
           `\n[wa] SESI DICABUT dari HP. Hapus folder ${cfg.waAuthDir} lalu jalankan ulang buat pairing.\n`
         );
@@ -141,6 +215,7 @@ async function connect(): Promise<void> {
         return;
       }
       if (code === DisconnectReason.connectionReplaced) {
+        onFatal?.('Sesi WhatsApp direbut sesi lain (440). Bot berhenti dan tidak menyambung ulang sendiri.');
         console.error(
           '\n[wa] SESI DIREBUT (440) — ada sesi lain yang pakai kredensial ini.\n' +
             '     Hampir selalu: ada `npm start` kedua yang masih jalan. Tutup semuanya,\n' +
@@ -155,6 +230,23 @@ async function connect(): Promise<void> {
       console.warn(`[wa] terputus (${code ?? 'tanpa kode'}), menyambung lagi dalam ${Math.round(delay / 1000)}s`);
       setTimeout(() => void connect(), delay);
       retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_MS);
+    }
+  });
+
+  // Status kiriman lampiran. "Diterima server" saja belum berarti sampai:
+  // tanpa catatan ini, PDF yang tidak pernah muncul di HP pelanggan tidak
+  // meninggalkan jejak apa pun di log.
+  s.ev.on('messages.update', (updates) => {
+    if (myGeneration !== generation) return;
+    for (const u of updates) {
+      const t = u.key.id ? tracked.get(u.key.id) : undefined;
+      const status = u.update?.status;
+      if (!t || typeof status !== 'number') continue;
+      console.log(`[wa] ${t.what}: ${STATUS[status] ?? `status ${status}`}`);
+      if (status >= 3 || status === 0) {
+        clearTimeout(t.timer);
+        tracked.delete(u.key.id as string);
+      }
     }
   });
 
@@ -173,6 +265,10 @@ async function connect(): Promise<void> {
       }
       if (!kind) {
         console.log(`[wa] dilewat (bukan isi percakapan): ${tag}`);
+        continue;
+      }
+      if (AUTOMATED.has(kind) && !m.key.fromMe) {
+        console.log(`[wa] dilewat (pesan otomatis akun bisnis): ${tag}`);
         continue;
       }
       // Sinkronisasi riwayat membawa pesan lama; hanya yang baru yang dilayani.
@@ -215,7 +311,7 @@ async function connect(): Promise<void> {
       unread.set(jid, keys.slice(-20));
       if (unread.size > 500) unread.delete(unread.keys().next().value as string);
       console.log(`[wa] diproses: ${phone} ${tag}`);
-      handlers.onInbound({ phone, address: jid, text, waId: m.key.id ?? null });
+      handlers.onInbound({ phone, address: jid, text, waId: m.key.id ?? null, media: mediaOf(m.message as Record<string, unknown> | null) });
     }
   });
 }
@@ -247,6 +343,16 @@ async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<v
     throw e;
   }
   afterSend();
+  if (opts?.image && res?.key.id) {
+    const id = res.key.id;
+    const what = `lampiran "${opts.fileName ?? text.slice(0, 40)}" ke ${jid}`;
+    const timer = setTimeout(() => {
+      if (tracked.delete(id)) console.error(`[wa] PERINGATAN: ${what} belum ada tanda sampai setelah 2 menit`);
+    }, 120_000);
+    timer.unref();
+    tracked.set(id, { what, timer });
+    console.log(`[wa] ${what}: terkirim ke server (id ${id})`);
+  }
   if (res?.key.id) {
     sentIds.add(res.key.id);
     if (sentIds.size > 2000) sentIds.delete(sentIds.values().next().value as string);

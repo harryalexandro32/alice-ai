@@ -19,6 +19,22 @@ export interface LeadRow {
   complete: boolean;
   lastAt: number;
   lastDir: string;
+  /** Ringkasan percakapan sejauh ini (ditulis LLM). */
+  summary?: string;
+  /** Kenapa bot diam di chat ini; null/kosong = bot aktif. */
+  hold?: 'tombol' | 'admin' | null;
+}
+
+export interface ErrorItem {
+  at: number;
+  level: string;
+  text: string;
+}
+
+export interface AlertItem {
+  at: number;
+  kind: string;
+  text: string;
 }
 
 export interface BotStatus {
@@ -50,6 +66,8 @@ export interface Snapshot {
   status: Omit<BotStatus, 'reportedAt'>;
   leads: LeadRow[];
   usage?: UsageReport;
+  alerts?: AlertItem[];
+  errors?: ErrorItem[];
 }
 
 export interface AdminStore {
@@ -63,6 +81,9 @@ export interface AdminStore {
   status(): Promise<BotStatus | null>;
   /** Null = bot belum pernah melapor. */
   usage(): Promise<UsageReport | null>;
+  alerts(): Promise<AlertItem[]>;
+  /** Catatan galat bot, terbaru dulu. */
+  errors(): Promise<ErrorItem[]>;
 }
 
 export function blobStore(): AdminStore {
@@ -92,6 +113,12 @@ export function blobStore(): AdminStore {
     },
     async usage() {
       return (await snapshot())?.usage ?? null;
+    },
+    async alerts() {
+      return (await snapshot())?.alerts ?? [];
+    },
+    async errors() {
+      return (await snapshot())?.errors ?? [];
     },
   };
 }

@@ -7,11 +7,24 @@ import { mediaDir, refreshBiz, saveBiz } from '../business';
 import { cfg } from '../config';
 import { llmEnabled, llmUsageToday } from '../llm/provider';
 import { sheetConfigured } from '../sinks/sheet';
-import { recentContacts, usageDays } from '../store';
+import { now } from '../clock';
+import { applyBotSwitches, holdReason } from '../flow';
+import { recentAlerts, recentContacts, recentErrors, usageDays } from '../store';
 import { guardSummary } from '../transport/sendguard';
-import type { AdminStore, BotStatus, LeadRow, UsageReport } from './stores';
+import type { AdminStore, AlertItem, BotStatus, ErrorItem, LeadRow, UsageReport } from './stores';
+
+export function alertItems(): AlertItem[] {
+  return recentAlerts(50).map((a) => ({ at: a.at, kind: a.kind, text: a.text }));
+}
+
+export function errorItems(): ErrorItem[] {
+  return recentErrors(150);
+}
 
 export function leadRows(): LeadRow[] {
+  // Tombol di halaman Lead berlaku tanpa menunggu pelanggan itu chat lagi.
+  applyBotSwitches();
+  const t = now();
   return recentContacts(100).map((c) => ({
     phone: c.phone,
     lead: c.lead,
@@ -19,6 +32,8 @@ export function leadRows(): LeadRow[] {
     complete: Boolean(c.lead_sent_at),
     lastAt: c.last_inbound_at,
     lastDir: c.last_dir,
+    summary: c.summary ?? '',
+    hold: holdReason(c.address, t),
   }));
 }
 
@@ -70,6 +85,12 @@ export function localStore(): AdminStore {
     },
     async usage() {
       return usageReport();
+    },
+    async alerts() {
+      return alertItems();
+    },
+    async errors() {
+      return errorItems();
     },
   };
 }

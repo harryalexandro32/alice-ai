@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { cfg } from '../config';
 import { isPdf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
 import { gfan } from './gfan/profile';
-import { EDITABLE, type Business, type Editable, type LeadField, type MediaFile } from './types';
+import { EDITABLE, type BotSwitch, type Business, type Editable, type LeadField, type MediaFile } from './types';
 
 const REGISTRY: Record<string, Business> = { gfan };
 
@@ -66,9 +66,54 @@ function apply(overrides: Partial<Editable>): void {
     biz.catalog = [];
     biz.notes = legacy;
   }
+  syncPdfTexts();
 }
 
-let rendered: { products: unknown; catalog: unknown; notes: string; text: string } | null = null;
+// Isi PDF yang boleh dibaca bot (MediaFile.read), per id berkas. Di mesin bot
+// teksnya ada di folder media sebagai <id>.txt (ditulis dashboard, ditarik
+// bersama PDF-nya); di dashboard online diisi lewat setPdfText().
+const pdfTexts = new Map<string, string>();
+/** Batas teks per PDF yang masuk ke prompt: lebih dari ini, tiap balasan jadi mahal. */
+const PDF_TEXT_MAX = 8000;
+let pdfVersion = 0;
+
+export function setPdfText(id: string, text: string): void {
+  if (pdfTexts.get(id) === text) return;
+  pdfTexts.set(id, text);
+  pdfVersion += 1;
+}
+
+function syncPdfTexts(): void {
+  const wanted = new Set(biz.files.filter((f) => isPdf(f) && f.read).map((f) => f.id));
+  for (const id of [...pdfTexts.keys()]) {
+    if (!wanted.has(id)) {
+      pdfTexts.delete(id);
+      pdfVersion += 1;
+    }
+  }
+  if (!enabled) return;
+  for (const id of wanted) {
+    if (pdfTexts.has(id)) continue;
+    try {
+      setPdfText(id, readFileSync(join(mediaDir(), `${id}.txt`), 'utf8'));
+    } catch {
+      // teksnya belum sampai di mesin ini; dicoba lagi saat profil dimuat ulang
+    }
+  }
+}
+
+function renderPdfTexts(): string {
+  return biz.files
+    .filter((f) => isPdf(f) && f.read && pdfTexts.get(f.id))
+    .map(
+      (f) =>
+        `ISI PDF "${f.name}" — dibaca otomatis dari berkasnya. Susunan tabelnya bisa bergeser: kalau sebuah angka ` +
+        `tidak jelas milik produk atau kolom yang mana, jangan ditebak — lampirkan PDF-nya dan serahkan ke tim.\n${(pdfTexts.get(f.id) as string).slice(0, PDF_TEXT_MAX)}`
+    )
+    .join('\n\n');
+}
+
+let rendered: { products: unknown; catalog: unknown; notes: string; files: unknown; pdf: number; text: string } | null = null;
 
 /**
  * Satu-satunya sumber jawaban bot: tabel produk + catatan bebas, sebagai teks.
@@ -76,9 +121,12 @@ let rendered: { products: unknown; catalog: unknown; notes: string; text: string
  * panggilan ke panggilan (awalan prompt yang di-cache penyedia LLM).
  */
 export function knowledgeText(): string {
-  if (rendered?.products !== biz.products || rendered.catalog !== biz.catalog || rendered.notes !== biz.notes) {
-    const text = [renderProducts(biz.products), renderCatalog(biz.catalog), biz.notes.trim()].filter(Boolean).join('\n\n');
-    rendered = { products: biz.products, catalog: biz.catalog, notes: biz.notes, text };
+  if (
+    rendered?.products !== biz.products || rendered.catalog !== biz.catalog || rendered.notes !== biz.notes ||
+    rendered.files !== biz.files || rendered.pdf !== pdfVersion
+  ) {
+    const text = [renderProducts(biz.products), renderCatalog(biz.catalog), biz.notes.trim(), renderPdfTexts()].filter(Boolean).join('\n\n');
+    rendered = { products: biz.products, catalog: biz.catalog, notes: biz.notes, files: biz.files, pdf: pdfVersion, text };
   }
   return rendered.text;
 }
@@ -167,6 +215,16 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('followupClosing' in input) set('followupClosing', text(input.followupClosing, 300, 'Kalimat follow-up', true));
   if ('forbidPrices' in input) set('forbidPrices', Boolean(input.forbidPrices));
   if ('stopAfterHuman' in input) set('stopAfterHuman', Boolean(input.stopAfterHuman));
+  if ('botSwitch' in input) {
+    const raw = (input.botSwitch && typeof input.botSwitch === 'object' ? input.botSwitch : {}) as Record<string, Partial<BotSwitch>>;
+    const entries = Object.entries(raw)
+      .filter(([phone, v]) => /^(\+\d{8,15}|lid:\d{5,20})$/.test(phone) && (v?.mode === 'on' || v?.mode === 'off') && Number.isFinite(v.at))
+      .map(([phone, v]) => [phone, { mode: v.mode, at: Math.round(Number(v.at)) }] as [string, BotSwitch])
+      // Yang terbaru saja yang disimpan; perintah lama sudah dijalankan bot.
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, 300);
+    set('botSwitch', Object.fromEntries(entries));
+  }
   if ('guardCodes' in input) set('guardCodes', Boolean(input.guardCodes));
 
   if ('leadFields' in input) {

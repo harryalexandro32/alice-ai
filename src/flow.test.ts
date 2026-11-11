@@ -10,10 +10,10 @@ import { checkReply, parseBrain, systemPrompt, type BrainInput, type BrainResult
 import { biz } from './business';
 import { advance, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
-import { handleHumanReply, handleInbound, setBrain, setSender } from './flow';
+import { handleHumanReply, handleInbound, holdReason, setBrain, setSender } from './flow';
 import { followupDueAt, runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
-import { getContact, openDb } from './store';
+import { getContact, openDb, recentAlerts } from './store';
 import { handoffText, NON_TEXT } from './texts';
 
 const HANDOFF = handoffText();
@@ -37,8 +37,9 @@ const R = (
   fields: Record<string, string> = {},
   intent: BrainResult['intent'] = 'info',
   photos: string[] = [],
-  docs: string[] = []
-): BrainResult => ({ reply, fields, intent, photos, docs });
+  docs: string[] = [],
+  summary = ''
+): BrainResult => ({ reply, fields, intent, photos, docs, summary });
 
 const SEED_PRODUCTS = biz.products;
 
@@ -64,6 +65,7 @@ function fresh(): void {
   biz.files = [];
   biz.products = SEED_PRODUCTS;
   biz.stopAfterHuman = true;
+  biz.botSwitch = {};
   setSender(async (_to, text, image, fileName) =>
     void sent.push(image ? `[${fileName ? 'pdf' : 'gambar'}:${fileName ?? image.split(/[\\/]/).pop()}] ${text}` : text)
   );
@@ -154,7 +156,7 @@ const tests: [string, () => Promise<void>][] = [
     next = () => R('Untuk harga, tim kami yang akan menginfokan. Boleh tahu namanya?', {}, 'handoff');
     await say('harga GFAF-40A berapa');
     assert.equal(sales.length, 1);
-    assert.match(sales[0] ?? '', /Perlu dibantu[\s\S]*menanyakan harga\/stok[\s\S]*harga GFAF-40A berapa/);
+    assert.match(sales[0] ?? '', /perlu dibantu[\s\S]*menanyakan harga\/stok[\s\S]*harga GFAF-40A berapa/);
     await say('diskon ada?');
     assert.equal(sales.length, 1, 'serah-terima hanya sekali');
     next = () => R('Terima kasih.', { name: 'Sari', city: 'Medan', need: 'GFAF-40A' });
@@ -314,6 +316,88 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
   }],
 
+  ['ringkasan percakapan: disimpan tiap giliran dan diberikan lagi ke LLM', async () => {
+    await say('halo');
+    next = () => R('Ukurannya berapa, Pak?', {}, 'info', [], [], 'Cari exhaust untuk gudang; menunggu ukuran ruangan.');
+    await say('butuh exhaust gudang');
+    assert.equal(getContact(A)?.summary, 'Cari exhaust untuk gudang; menunggu ukuran ruangan.');
+    next = () => R('Baik.');
+    await say('10x20');
+    assert.equal(brainCalls.at(-1)?.summary, 'Cari exhaust untuk gudang; menunggu ukuran ruangan.');
+    assert.equal(getContact(A)?.summary, 'Cari exhaust untuk gudang; menunggu ukuran ruangan.', 'ringkasan kosong tidak menghapus yang lama');
+  }],
+
+  ['bot tidak bisa menjawab: staf dikabari dengan pertanyaannya, tidak tiap pesan', async () => {
+    await say('halo');
+    next = () => R('Datanya belum ada di saya, tim kami yang akan bantu ya.', { name: 'Budi' }, 'handoff');
+    await say('bisa custom warna?');
+    assert.equal(sales.length, 1);
+    assert.match(sales[0]!, /Bot tidak bisa menjawab — perlu dibantu/);
+    assert.match(sales[0]!, /bisa custom warna\?/);
+    assert.match(recentAlerts(5)[0]!.text, /Budi \(\+6281211110001\) — "bisa custom warna\?"/);
+    assert.equal(recentAlerts(5)[0]!.kind, 'butuh-staf');
+    await say('bisa nggak?');
+    assert.equal(sales.length, 1, 'pertanyaan susulan dalam 30 menit tidak membanjiri staf');
+    advance(31 * MINUTE);
+    await say('halo? ada orang?');
+    assert.equal(sales.length, 2, 'masih menunggu setelah 30 menit: dikabari lagi');
+    assert.equal(recentAlerts(5).length, 2);
+    // Balasan yang ditolak pagar juga berarti bot tidak bisa menjawab.
+    next = () => R('Harganya Rp 1.000.000', {}, 'info');
+    advance(31 * MINUTE);
+    await say('harganya berapa');
+    assert.equal(sales.length, 3);
+  }],
+
+  ['foto, suara, stiker: staf dikabari, pelanggan diberi tahu, stiker didiamkan', async () => {
+    const media = (m: 'foto' | 'suara' | 'stiker', text: string | null = null, id = '') =>
+      handleInbound({ phone: A, address: A, text, waId: id || null, media: m });
+    await say('halo');
+    const n = sent.length;
+    await media('stiker');
+    assert.equal(sent.length, n, 'stiker tidak dibalas');
+    assert.equal(sales.length, 0);
+    await media('foto');
+    assert.match(sent.at(-1)!, /foto-nya sudah kami terima/);
+    assert.match(sales[0]!, /Kirim foto/);
+    assert.equal(getContact(A)?.needs_sales, 1);
+    assert.equal(brainCalls.length, 0, 'foto tanpa keterangan tidak memanggil LLM');
+    await media('foto');
+    assert.equal(sent.filter((t) => /foto-nya sudah kami terima/.test(t)).length, 1, 'foto beruntun tidak dijawab berulang');
+    await media('suara');
+    assert.match(sent.at(-1)!, /pesan suaranya/);
+    // Foto DENGAN keterangan: keterangannya dijawab, dan LLM tahu ada foto yang tidak bisa dilihatnya.
+    next = () => R('Baik, tim kami cek fotonya ya. Ruangannya ukuran berapa?');
+    await media('foto', 'ini ruangan saya, cocok pakai yang mana?');
+    assert.match(brainCalls.at(-1)!.note ?? '', /melampirkan foto yang TIDAK bisa kamu lihat/);
+    assert.equal(brainCalls.at(-1)!.text, 'ini ruangan saya, cocok pakai yang mana?');
+    assert.match(sent.at(-1)!, /tim kami cek fotonya/);
+  }],
+
+  ['tombol bot per pelanggan: dimatikan, lalu dikembalikan ke bot', async () => {
+    await say('halo');
+    biz.botSwitch = { [A]: { mode: 'off', at: T0 + 1000 } };
+    const n = sent.length;
+    await say('ada exhaust?');
+    assert.equal(sent.length, n, 'dimatikan dari dashboard: bot diam');
+    assert.equal(holdReason(A, T0), 'tombol');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'tidak ada follow-up selama dimatikan');
+    // Admin membalas, lalu pemilik mengembalikan chat ke bot.
+    handleHumanReply({ address: A, text: 'saya bantu ya' });
+    biz.botSwitch = { [A]: { mode: 'on', at: T0 + 2 * 24 * HOUR } };
+    next = () => R('Ada, Pak.');
+    await say('masih ada?');
+    assert.equal(sent.at(-1), 'Ada, Pak.', 'dinyalakan: penahan dari tombol DAN dari admin dilepas');
+    assert.equal(holdReason(A, T0), null);
+    // Perintah yang sama tidak dijalankan dua kali: admin membalas lagi = bot mundur lagi.
+    handleHumanReply({ address: A, text: 'saya lanjutkan' });
+    const m = sent.length;
+    await say('oke');
+    assert.equal(sent.length, m);
+    assert.equal(holdReason(A, T0), 'admin');
+  }],
+
   ['pesan ganda, nomor sales, dan pesan bukan teks', async () => {
     await say('halo', A, 'ID1');
     await say('halo', A, 'ID1');
@@ -462,8 +546,8 @@ const tests: [string, () => Promise<void>][] = [
     const p = parseBrain(
       '```json\n{"reply":"Halo","fields":{"name":"null","city":" Bandung ","need":null,"admin":"ya"},"intent":"hapus semua"}\n```'
     );
-    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [], docs: [] });
-    assert.deepEqual(parseBrain('{"reply":"Hai"}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [], docs: [] });
+    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [], docs: [], summary: '' });
+    assert.deepEqual(parseBrain('{"reply":"Hai","summary":" Cari exhaust gudang;  menunggu ukuran. "}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [], docs: [], summary: 'Cari exhaust gudang; menunggu ukuran.' });
     assert.equal(checkReply('GFAF-40A: 130 W, 2880 m³/h, 62 dB.'), null);
     assert.equal(checkReply('Tegangan 220/380 V, berat 8.5 kg.'), null);
     assert.ok(checkReply('Sekitar Rp750.000'));

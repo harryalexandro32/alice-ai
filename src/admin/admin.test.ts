@@ -191,7 +191,7 @@ const PNG = Buffer.from(
     // --- uji coba: memakai pagar yang sama dengan bot sungguhan ---
     setAdminBrain(async (i) => ({
       reply: i.text.includes('harga') ? 'Harganya Rp 500.000' : i.text.includes('40A') ? 'GFAF-40A Rp 450.000 ya' : 'Ini fotonya ya',
-      fields: { name: 'Budi' }, intent: 'info', photos: [photo.id], docs: [pdf.id],
+      fields: { name: 'Budi' }, intent: 'info', photos: [photo.id], docs: [pdf.id], summary: '',
     }));
     const test = (text: string) => call('/admin/api/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
     const t1 = await test('minta foto');
@@ -232,6 +232,44 @@ const PNG = Buffer.from(
       const again = await call(`/admin/api/files/${upPdf.body.file.id}/match`, { method: 'POST' });
       assert.deepEqual(again.body.matches, ['GFAF-40A', 'GFAF-60A'], 'cocokkan ulang memakai daftar produk terbaru');
       assert.ok(biz.files.some((f) => f.id === upPdf.body.file.id), 'PDF yang belum dipasang tetap ada di pustaka');
+      const pid = upPdf.body.file.id as string;
+      assert.ok(existsSync(join(mediaDir(), `${pid}.txt`)), 'teks PDF disimpan di samping PDF-nya');
+
+      // Produk yang BARU ditambahkan otomatis dipasangi PDF; produk lama yang PDF-nya dilepas tidak.
+      const auto = await put({ products: [{ name: 'GFAF-40A' }, { name: 'GFAF-60A' }, { name: 'GFAF-50A' }, { name: 'GZ-200' }] });
+      assert.equal(auto.body.autoPdf, 1);
+      assert.deepEqual(biz.products.map((x) => [x.name, x.pdf]), [['GFAF-40A', ''], ['GFAF-60A', ''], ['GFAF-50A', pid], ['GZ-200', '']]);
+
+      // Bot membaca isi PDF hanya kalau dinyalakan untuk PDF itu.
+      assert.ok(!knowledgeText().includes('ISI PDF'));
+      const on = await call(`/admin/api/files/${pid}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: true }) });
+      assert.equal(on.status, 200);
+      assert.equal(on.body.files.find((x: { id: string }) => x.id === pid).read, true);
+      refreshBiz(true);
+      assert.match(knowledgeText(), /ISI PDF "Industrial Fan - GFan\.pdf" — dibaca otomatis/);
+      assert.match(knowledgeText(), /GFAF-60A/);
+      assert.match(systemPrompt(), /ISI PDF "Industrial Fan - GFan\.pdf"/);
+      await call(`/admin/api/files/${pid}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: false }) });
+      assert.ok(!knowledgeText().includes('ISI PDF'), 'dimatikan = tidak lagi dibaca');
+      // PDF yang tidak terbaca tidak bisa dinyalakan.
+      const scan = (await up(Buffer.from('%PDF-1.4 rusak'), 'pindai.pdf')).body.file;
+      assert.equal((await call(`/admin/api/files/${scan.id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: true }) })).status, 400);
+
+      // Tombol bot per pelanggan: hanya nomor dan perintah yang sah yang disimpan.
+      const sw = await put({ botSwitch: { '+6281211110001': { mode: 'off', at: 1700000000000 }, 'DROP TABLE': { mode: 'off', at: 1 }, '+6281211110002': { mode: 'entah', at: 2 } } });
+      assert.deepEqual(sw.body.profile.botSwitch, { '+6281211110001': { mode: 'off', at: 1700000000000 } });
+
+      // Peringatan dan catatan galat tampil di dashboard.
+      const { addAlert, addError } = await import('../store');
+      addAlert({ at: Date.now(), kind: 'butuh-staf', key: '+6281211110001', text: 'Bot tidak bisa menjawab: Budi — "bisa custom?"' });
+      addError({ at: Date.now(), level: 'galat', text: '[alur] contoh galat' });
+      const al = await call('/admin/api/alerts');
+      assert.equal(al.body.alerts[0].kind, 'butuh-staf');
+      assert.equal(al.body.errors[0].text, '[alur] contoh galat');
+      assert.equal((await call('/admin/api/state')).body.alerts.length, 1);
+      assert.equal((await call('/admin/api/alerts', {}, false)).status, 401);
+      const leads = await call('/admin/api/leads');
+      assert.ok('reportedAt' in leads.body);
     }
 
     // --- permintaan dari situs lain ditolak ---

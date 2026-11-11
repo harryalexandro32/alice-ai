@@ -45,11 +45,18 @@ const within = (list: number[], ms: number): number => {
   return list.filter((t) => t > from).length;
 };
 
+let onPause: ((text: string) => void) | null = null;
+/** Dipasang app.ts: pemilik perlu tahu kalau bot berhenti mengirim. */
+export function setGuardListener(fn: ((text: string) => void) | null): void {
+  onPause = fn;
+}
+
 function pause(ms: number, reason: string): void {
   const until = clock() + ms;
   if (until <= pausedUntil) return;
   pausedUntil = until;
   pauseReason = reason;
+  onPause?.(`Bot berhenti mengirim selama ${Math.round(ms / MINUTE)} menit: ${reason}. Pelanggan yang chat selama itu tidak dibalas bot.`);
   console.error(`[pengaman] kiriman DIJEDA ${Math.round(ms / MINUTE)} menit: ${reason}`);
 }
 

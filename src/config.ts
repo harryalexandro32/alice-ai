@@ -72,6 +72,10 @@ export const cfg = {
 
   humanPauseHours: num('HUMAN_PAUSE_HOURS', 12),
 
+  // Peringatan untuk pemilik lewat Telegram (opsional; lihat src/alerts.ts).
+  telegramToken: str('TELEGRAM_BOT_TOKEN'),
+  telegramChat: str('TELEGRAM_CHAT_ID'),
+
   salesNumber: salesNumber(),
   sheetId: str('SHEET_ID'),
   sheetTab: str('SHEET_TAB', 'Leads'),

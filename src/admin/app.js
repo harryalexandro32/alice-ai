@@ -47,6 +47,7 @@ const PAGES = {
   pdf: () => ['PDF', T('Brosur dan katalog yang bisa dikirim bot ke pelanggan.', 'Brochures and catalogues the bot can send to customers.')],
   produk: () => [T('Produk', 'Products'), T('Satu-satunya sumber jawaban bot. Yang tidak tertulis di sini tidak akan dijawabnya.', 'The bot\'s only source of answers. Anything not written here, it will not answer.')],
   data: () => [T('Data pelanggan', 'Customer data'), T('Data yang diminta bot dari tiap calon pelanggan.', 'What the bot asks every prospective customer for.')],
+  peringatan: () => [T('Peringatan & log', 'Alerts & log'), T('Hal yang butuh perhatian Anda, dan catatan galat bot.', 'Things that need your attention, and the bot\'s error log.')],
   lead: () => ['Lead', T('Calon pelanggan yang sudah chat dengan bot.', 'Prospective customers who have chatted with the bot.')],
   biaya: () => [T('Pemakaian & biaya', 'Usage & cost'), T('Token LLM yang dipakai bot dan perkiraan biayanya.', 'LLM tokens used by the bot and their estimated cost.')],
   uji: () => [T('Uji coba', 'Test chat'), T('Coba bicara dengan bot tanpa mengirim apa pun ke WhatsApp.', 'Talk to the bot without sending anything to WhatsApp.')],
@@ -81,7 +82,7 @@ function setDirty(v, key) {
   if (!v) changed.clear();
   $('save').disabled = !v;
   $('save').textContent = v ? T('Simpan & terapkan', 'Save & apply') : T('Tersimpan', 'Saved');
-  $('save').style.display = ['lead', 'biaya', 'uji', 'pdf'].includes(tab) && !v ? 'none' : '';
+  $('save').style.display = ['lead', 'biaya', 'uji', 'pdf', 'peringatan'].includes(tab) && !v ? 'none' : '';
 }
 
 // ---------- isian sederhana ----------
@@ -145,7 +146,7 @@ async function afterAssign(wasDirty, notes) {
 
 function renderPdfs() {
   const list = pdfLibrary();
-  const head = el('thead', {}, el('tr', {}, el('th', { textContent: T('Berkas', 'File') }), el('th', { textContent: T('Produk yang memakai', 'Products using it') }), el('th')));
+  const head = el('thead', {}, el('tr', {}, el('th', { textContent: T('Berkas', 'File') }), el('th', { textContent: T('Produk yang memakai', 'Products using it') }), el('th', { textContent: T('Dibaca bot', 'Read by bot') }), el('th')));
   const rows = list.map((f) => {
     const using = profile.products.filter((p) => p.pdf === f.id);
     const free = profile.products.filter((p) => p.name && p.pdf !== f.id);
@@ -184,10 +185,19 @@ function renderPdfs() {
         toast(T('PDF dihapus.', 'PDF deleted.'));
       } catch (e) { toast(e.message, true); }
     });
+    const read = el('input', { type: 'checkbox', checked: Boolean(f.read) });
+    read.addEventListener('change', async () => {
+      read.disabled = true;
+      try {
+        profile.files = (await api('files/' + f.id + '/read', { method: 'POST', body: JSON.stringify({ read: read.checked }) })).files;
+        toast(read.checked ? T('Bot sekarang membaca isi PDF ini. Coba di Uji coba.', 'The bot now reads this PDF. Try it in Test chat.') : T('Bot tidak lagi membaca isi PDF ini.', 'The bot no longer reads this PDF.'));
+      } catch (e) { toast(e.message, true); }
+      renderPdfs();
+    });
     return el('tr', {}, el('td', {}, el('a', { href: '/admin/media/' + f.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + f.name })),
-      el('td', {}, chips), el('td', { className: 'acts' }, re, del));
+      el('td', {}, chips), el('td', {}, el('label', { className: 'switch' }, read)), el('td', { className: 'acts' }, re, del));
   });
-  $('pdfs').replaceChildren(head, el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 3, style: 'color:var(--muted)', textContent: T('Belum ada PDF. Unggah brosur atau katalog Anda.', 'No PDFs yet. Upload your brochures or catalogues.') }))])));
+  $('pdfs').replaceChildren(head, el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 4, style: 'color:var(--muted)', textContent: T('Belum ada PDF. Unggah brosur atau katalog Anda.', 'No PDFs yet. Upload your brochures or catalogues.') }))])));
   $('pdfRematch').style.display = list.length ? '' : 'none';
 }
 
@@ -642,14 +652,77 @@ async function loadLeads() {
   try {
     const r = await api('leads');
     const head = el('tr', {}, el('th', { textContent: T('Nomor', 'Number') }), ...r.fields.map((f) => el('th', { textContent: f.label })),
-      el('th', { textContent: 'Status' }), el('th', { textContent: T('Terakhir chat', 'Last message') }));
-    const rows = r.rows.map((c) =>
-      el('tr', {}, el('td', { textContent: c.phone }), ...r.fields.map((f) => el('td', { textContent: c.lead[f.key] || '—' })),
+      el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
+      el('th', { textContent: T('Terakhir chat', 'Last message') }));
+    const rows = r.rows.map((c) => {
+      // Keadaan sebenarnya datang dari bot. Tombol yang ditekan setelah laporan
+      // terakhir bot belum dijalankan: tampilkan yang diminta, dengan tanda menunggu.
+      const sw = (profile.botSwitch || {})[c.phone];
+      const actual = !c.hold;
+      const pending = Boolean(sw) && (sw.mode === 'on') !== actual && sw.at > (r.reportedAt || 0);
+      const active = pending ? sw.mode === 'on' : actual;
+      const box = el('input', { type: 'checkbox', checked: active });
+      box.addEventListener('change', async () => {
+        box.disabled = true;
+        try {
+          const next = { ...(profile.botSwitch || {}), [c.phone]: { mode: box.checked ? 'on' : 'off', at: Date.now() } };
+          profile.botSwitch = (await api('profile', { method: 'PUT', body: JSON.stringify({ botSwitch: next }) })).profile.botSwitch;
+          toast(box.checked ? T('Chat ini dikembalikan ke bot.', 'This chat is handed back to the bot.') : T('Bot dimatikan untuk chat ini.', 'The bot is turned off for this chat.'));
+        } catch (e) { toast(e.message, true); }
+        loadLeads();
+      });
+      const why = pending ? T('menunggu bot', 'waiting for the bot')
+        : c.hold === 'admin' ? T('admin membalas', 'an admin replied') : c.hold === 'tombol' ? T('dimatikan', 'turned off') : '';
+      return el('tr', {}, el('td', { textContent: c.phone }), ...r.fields.map((f) => el('td', { textContent: c.lead[f.key] || '—' })),
+        el('td', { className: 'sum', textContent: c.summary || '—' }),
         el('td', {}, el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }),
-          c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu sales', 'needs sales'), style: 'margin-left:4px' }) : null,
-          c.lastDir === 'human' ? el('span', { className: 'chip', textContent: T('ditangani manusia', 'handled by a human'), style: 'margin-left:4px' }) : null),
-        el('td', { textContent: new Date(c.lastAt).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) })));
-    t.replaceChildren(el('thead', {}, head), el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: r.fields.length + 3, textContent: T('Belum ada percakapan.', 'No conversations yet.') }))])));
+          c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }) : null),
+        el('td', {}, el('label', { className: 'switch' }, box, el('small', { textContent: why }))),
+        el('td', { textContent: new Date(c.lastAt).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) }));
+    });
+    t.replaceChildren(el('thead', {}, head), el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: r.fields.length + 5, textContent: T('Belum ada percakapan.', 'No conversations yet.') }))])));
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------- peringatan & catatan galat ----------
+const ALERT_KINDS = {
+  'butuh-staf': () => T('Pelanggan butuh staf', 'Customer needs staff'),
+  'wa-putus': () => T('WhatsApp terputus', 'WhatsApp disconnected'),
+  'kiriman-dijeda': () => T('Kiriman dijeda', 'Sending paused'),
+  llm: () => T('LLM bermasalah', 'LLM problem'),
+  'bot-mati': () => T('Bot berhenti', 'Bot stopped'),
+};
+const when = (at) => new Date(at).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
+
+function setBadge(alerts, status) {
+  const day = Date.now() - 86400000;
+  const stale = status && status.reportedAt && Date.now() - status.reportedAt > 40 * 60000;
+  const n = (alerts || []).filter((a) => a.at > day).length + (stale ? 1 : 0);
+  $('alertBadge').textContent = n > 99 ? '99+' : String(n);
+  $('alertBadge').classList.toggle('on', n > 0);
+}
+
+async function loadAlerts() {
+  try {
+    const r = await api('alerts');
+    setBadge(r.alerts, r.status);
+    const th = (...names) => el('thead', {}, el('tr', {}, ...names.map((n) => el('th', { textContent: n }))));
+    const rows = r.alerts.map((a) => el('tr', {}, el('td', { textContent: when(a.at), style: 'white-space:nowrap' }),
+      el('td', {}, el('span', { className: 'chip warn', textContent: (ALERT_KINDS[a.kind] || (() => a.kind))() })), el('td', { textContent: a.text })));
+    // Bot yang mati tidak bisa melapor sendiri: dashboard yang menyimpulkannya.
+    const mins = r.status && r.status.reportedAt ? Math.round((Date.now() - r.status.reportedAt) / 60000) : null;
+    if (mins !== null && mins > 40) {
+      rows.unshift(el('tr', { className: 'stale' }, el('td', { textContent: when(r.status.reportedAt), style: 'white-space:nowrap' }),
+        el('td', {}, el('span', { className: 'chip warn', textContent: T('Bot tidak melapor', 'Bot not reporting') })),
+        el('td', { textContent: T('Bot terakhir melapor ', 'The bot last reported ') + mins + T(' menit lalu. Kemungkinan bot mati atau mesinnya tidak tersambung internet.', ' minutes ago. It is probably stopped, or its machine is offline.') })));
+    }
+    $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
+      el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 3, style: 'color:var(--muted)', textContent: T('Tidak ada yang perlu perhatian.', 'Nothing needs attention.') }))])));
+    const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
+      el('td', {}, el('span', { className: 'chip ' + (e.level === 'galat' ? 'warn' : ''), textContent: e.level === 'galat' ? T('galat', 'error') : T('peringatan', 'warning') })),
+      el('td', { className: 'mono', textContent: e.text })));
+    $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Isi', 'Message')),
+      el('tbody', {}, ...(errs.length ? errs : [el('tr', {}, el('td', { colSpan: 3, style: 'color:var(--muted)', textContent: T('Belum ada galat yang tercatat.', 'No errors recorded yet.') }))])));
   } catch (e) { toast(e.message, true); }
 }
 
@@ -737,6 +810,7 @@ function show(next) {
   setDirty(dirty);
   if (tab === 'lead') loadLeads();
   if (tab === 'biaya') loadUsage();
+  if (tab === 'peringatan') loadAlerts();
 }
 
 function renderAll() {
@@ -750,13 +824,14 @@ function renderAll() {
   renderPdfs();
   renderCatalog();
   renderStatus();
+  setBadge(state.alerts, state.status);
   if (!chat.length) $('chat').replaceChildren(chatHint());
   show(tab);
 }
 
 $('nav').addEventListener('click', (e) => {
-  const next = e.target.dataset && e.target.dataset.tab;
-  if (next) show(next);
+  const btn = e.target.closest('button[data-tab]');
+  if (btn) show(btn.dataset.tab);
 });
 
 $('lang').addEventListener('click', (e) => {
@@ -776,7 +851,8 @@ async function save(quiet = false) {
     profile = r.profile;
     setDirty(false);
     renderAll();
-    if (!quiet) toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.'));
+    if (!quiet) toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.') +
+      (r.autoPdf ? ' ' + r.autoPdf + T(' produk baru otomatis dipasangi PDF.', ' new products were given a PDF automatically.') : ''));
   } catch (e) {
     toast(e.message, true);
     setDirty(true);

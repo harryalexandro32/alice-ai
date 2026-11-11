@@ -25,6 +25,10 @@ function withinBudget(): boolean {
     usage.day = d;
     usage.calls = usage.promptTokens = usage.cachedTokens = usage.completionTokens = 0;
   }
+  if (usage.calls >= cfg.llmDailyLimit && limitTold !== d) {
+    limitTold = d;
+    onProblem?.(`Jatah ${cfg.llmDailyLimit} panggilan LLM hari ini habis. Sampai besok bot membalas dengan jawaban cadangan (LLM_DAILY_LIMIT di .env).`);
+  }
   return usage.calls < cfg.llmDailyLimit;
 }
 
@@ -42,6 +46,20 @@ let recorder: ((d: UsageDelta) => void) | null = null;
 export function setUsageRecorder(fn: ((d: UsageDelta) => void) | null): void {
   recorder = fn;
 }
+
+// Pendengar masalah (dipasang app.ts -> peringatan). Seperti pencatat di atas,
+// penyedia ini sendiri tidak tahu apa-apa soal database maupun WhatsApp.
+let onProblem: ((text: string) => void) | null = null;
+export function setLlmProblemListener(fn: ((text: string) => void) | null): void {
+  onProblem = fn;
+}
+let failures = 0;
+function failed(why: string): void {
+  failures += 1;
+  // Satu kegagalan bisa kebetulan; tiga beruntun berarti ada yang rusak.
+  if (failures === 3) onProblem?.(`Tiga panggilan LLM beruntun gagal (${why}). Bot membalas dengan jawaban cadangan dan meneruskan pertanyaan ke tim.`);
+}
+let limitTold = '';
 
 export function llmUsageToday() {
   return { ...usage, model: cfg.llmModel, limit: cfg.llmDailyLimit };
@@ -84,6 +102,7 @@ export async function askJson(opts: AskOptions): Promise<string | null> {
     if (!res.ok) {
       const body = (await res.text()).slice(0, 200);
       console.error(`[llm] HTTP ${res.status} dari ${cfg.llmModel}: ${body}`);
+      failed(`HTTP ${res.status} dari ${cfg.llmModel}`);
       return null;
     }
 
@@ -107,9 +126,11 @@ export async function askJson(opts: AskOptions): Promise<string | null> {
       console.error(`[llm] pemakaian tidak tercatat: ${e instanceof Error ? e.message : e}`);
     }
 
+    failures = 0;
     return data.choices?.[0]?.message?.content?.trim() || null;
   } catch (e) {
     console.error(`[llm] gagal (${cfg.llmModel}): ${e instanceof Error ? e.message : e}`);
+    failed(e instanceof Error ? e.message : 'tidak terjangkau');
     return null;
   }
 }

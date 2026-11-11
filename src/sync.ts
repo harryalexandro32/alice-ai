@@ -15,7 +15,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { botStatus, leadRows, usageReport } from './admin/store-local';
+import { alertItems, botStatus, errorItems, leadRows, usageReport } from './admin/store-local';
 import type { Snapshot } from './admin/stores';
 import { mediaDir, replaceOverrides } from './business';
 import type { Editable } from './business/types';
@@ -47,6 +47,15 @@ async function pullOnce(): Promise<void> {
     if (data) writeFileSync(local, data);
     else console.error(`[sinkron] berkas ${p.file} belum ada di penyimpanan bersama`);
   }
+  // Isi PDF yang boleh dibaca bot: teksnya disiapkan dashboard sebagai <id>.txt.
+  for (const p of overrides.files ?? []) {
+    if (!p.read || !/^d[0-9a-f]{8}\.pdf$/.test(p.file)) continue;
+    const txt = `${p.id}.txt`;
+    if (existsSync(join(mediaDir(), txt))) continue;
+    const data = await blob().getBytes(remotePath.media(txt));
+    if (data) writeFileSync(join(mediaDir(), txt), data);
+    else console.error(`[sinkron] teks ${p.file} belum ada di penyimpanan bersama`);
+  }
   replaceOverrides(overrides);
   lastProfile = text;
   console.log('[sinkron] profil terbaru dari dashboard dipakai');
@@ -71,9 +80,11 @@ let lastLeads = '';
 /** Kirim salinan lead + status bot, kalau ada yang berubah. */
 export async function pushSnapshot(force = false): Promise<boolean> {
   const leads = leadRows();
-  const key = JSON.stringify(leads);
+  const alerts = alertItems();
+  const errors = errorItems();
+  const key = JSON.stringify([leads, alerts[0]?.at ?? 0, errors[0]?.at ?? 0]);
   if (!force && (key === lastLeads || Date.now() - lastPushAt < MIN_PUSH_GAP_MS)) return false;
-  const snapshot: Snapshot = { at: Date.now(), status: botStatus(), leads, usage: usageReport() };
+  const snapshot: Snapshot = { at: Date.now(), status: botStatus(), leads, usage: usageReport(), alerts, errors };
   try {
     await blob().put(remotePath.snapshot(), JSON.stringify(snapshot), 'application/json');
     lastPushAt = Date.now();

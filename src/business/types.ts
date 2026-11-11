@@ -28,6 +28,15 @@ export interface MediaFile {
   file: string;
   /** Nama asli berkasnya, untuk ditampilkan. */
   name: string;
+  /** Hanya PDF: true = isi PDF ini ikut dibaca bot sebagai pengetahuan. */
+  read?: boolean;
+}
+
+/** Perintah tombol "bot aktif / diam" untuk satu pelanggan, dari dashboard. */
+export interface BotSwitch {
+  mode: 'on' | 'off';
+  /** Kapan tombolnya ditekan (ms). Bot menjalankan tiap perintah sekali. */
+  at: number;
 }
 
 /** Satu baris daftar produk. Yang rinci cukup ada di PDF-nya. */
@@ -118,6 +127,8 @@ export interface Business {
    * bot hanya diam selama HUMAN_PAUSE_HOURS, lalu aktif lagi.
    */
   stopAfterHuman: boolean;
+  /** Tombol per pelanggan dari halaman Lead: nomor -> perintah terakhir. */
+  botSwitch: Record<string, BotSwitch>;
   /** Jeda sebelum membalas, detik. Diacak di antara keduanya tiap balasan. */
   replyDelayMin: number;
   replyDelayMax: number;
@@ -135,7 +146,7 @@ export interface Business {
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'products', 'catalog', 'notes', 'questions',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'files', 'logo', 'stopAfterHuman', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'stopAfterHuman', 'botSwitch', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

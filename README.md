@@ -27,7 +27,8 @@ Di dalam mode latihan: `/maju 23j` (majukan jam + jalankan follow-up), `/manusia
 npm test          # katalog, penyedia LLM, jalur Cloud API, dashboard, dan 23 alur
 npm run typecheck
 npm run eval      # ukur jawaban ke LLM sungguhan (butuh key)
-npm start         # nyambung ke WhatsApp sesuai TRANSPORT
+npm start         # bot lewat pengawas: nyala lagi kalau mati, log di logs/bot-TANGGAL.log
+npm run bot       # bot saja, tanpa pengawas
 ```
 
 ## Dashboard pemilik

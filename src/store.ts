@@ -31,6 +31,8 @@ export interface Contact {
   followup_total: number;
   lead_sent_at: number | null;
   handoff_sent_at: number | null;
+  /** Ringkasan percakapan sejauh ini, ditulis LLM tiap giliran. */
+  summary: string | null;
 }
 
 export interface OutboxRow {
@@ -74,6 +76,27 @@ export function openDb(path: string): void {
       address TEXT PRIMARY KEY,
       until INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS bot_off (
+      address TEXT PRIMARY KEY,
+      at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS switch_applied (
+      phone TEXT PRIMARY KEY,
+      at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      key TEXT NOT NULL DEFAULT '',
+      text TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS errors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at INTEGER NOT NULL,
+      level TEXT NOT NULL,
+      text TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS human_seen (
       address TEXT PRIMARY KEY,
       at INTEGER NOT NULL
@@ -94,6 +117,9 @@ export function openDb(path: string): void {
       completion_tokens INTEGER NOT NULL DEFAULT 0
     );
   `);
+  // Kolom yang ditambahkan belakangan (database lama tidak punya).
+  const cols = (db.prepare('PRAGMA table_info(contacts)').all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes('summary')) db.exec('ALTER TABLE contacts ADD COLUMN summary TEXT');
   // Percakapan yang sudah pernah dibalas admin sebelum tabel ini ada.
   db.exec(`
     INSERT OR IGNORE INTO human_seen (address, at)
@@ -132,7 +158,7 @@ export function createContact(phone: string, address: string, at: number): Conta
 
 const UPDATABLE = new Set<keyof Contact>([
   'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
-  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at',
+  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary',
 ]);
 
 export function updateContact(phone: string, patch: Partial<Contact>): Contact {
@@ -191,6 +217,73 @@ export function markHuman(address: string, at: number): void {
 export function humanSeenAt(address: string): number {
   const r = db.prepare('SELECT at FROM human_seen WHERE address = ?').get(address) as { at: number } | undefined;
   return r ? Number(r.at) : 0;
+}
+
+/** Bot dimatikan untuk alamat ini lewat tombol di dashboard. */
+export function setBotOff(address: string, at: number): void {
+  db.prepare('INSERT INTO bot_off (address, at) VALUES (?, ?) ON CONFLICT(address) DO UPDATE SET at = excluded.at').run(address, at);
+}
+
+export function isBotOff(address: string): boolean {
+  return Boolean(db.prepare('SELECT 1 FROM bot_off WHERE address = ?').get(address));
+}
+
+/** Kembalikan chat ke bot: semua penahan (tombol, admin membalas, jeda) dilepas. */
+export function releaseToBot(address: string): void {
+  for (const t of ['bot_off', 'human_seen', 'pauses']) db.prepare(`DELETE FROM ${t} WHERE address = ?`).run(address);
+}
+
+/** Kapan perintah tombol untuk nomor ini terakhir dijalankan; 0 = belum pernah. */
+export function switchAppliedAt(phone: string): number {
+  const r = db.prepare('SELECT at FROM switch_applied WHERE phone = ?').get(phone) as { at: number } | undefined;
+  return r ? Number(r.at) : 0;
+}
+
+export function markSwitchApplied(phone: string, at: number): void {
+  db.prepare('INSERT INTO switch_applied (phone, at) VALUES (?, ?) ON CONFLICT(phone) DO UPDATE SET at = excluded.at').run(phone, at);
+}
+
+export interface ErrorRow {
+  at: number;
+  level: string;
+  text: string;
+}
+
+let errorsSince = 0;
+export function addError(e: ErrorRow): void {
+  db.prepare('INSERT INTO errors (at, level, text) VALUES (?, ?, ?)').run(e.at, e.level, e.text);
+  // Merapikan tiap sekian catatan saja; tabelnya tidak boleh tumbuh tanpa batas.
+  if ((errorsSince += 1) % 50 === 0) db.exec('DELETE FROM errors WHERE id NOT IN (SELECT id FROM errors ORDER BY id DESC LIMIT 1000)');
+}
+
+/** Catatan galat, terbaru dulu. */
+export function recentErrors(n: number): ErrorRow[] {
+  const rows = db.prepare('SELECT at, level, text FROM errors ORDER BY id DESC LIMIT ?').all(n) as unknown as ErrorRow[];
+  return rows.map((r) => ({ ...r }));
+}
+
+export interface AlertRow {
+  at: number;
+  kind: string;
+  key: string;
+  text: string;
+}
+
+export function addAlert(a: AlertRow): void {
+  db.prepare('INSERT INTO alerts (at, kind, key, text) VALUES (?, ?, ?, ?)').run(a.at, a.kind, a.key, a.text);
+  db.exec('DELETE FROM alerts WHERE id NOT IN (SELECT id FROM alerts ORDER BY id DESC LIMIT 500)');
+}
+
+/** Kapan peringatan sejenis (jenis + kunci) terakhir dicatat; 0 = belum pernah. */
+export function lastAlertAt(kind: string, key: string): number {
+  const r = db.prepare('SELECT MAX(at) AS at FROM alerts WHERE kind = ? AND key = ?').get(kind, key) as { at: number | null };
+  return Number(r?.at ?? 0);
+}
+
+/** Peringatan terbaru dulu. */
+export function recentAlerts(n: number): AlertRow[] {
+  const rows = db.prepare('SELECT at, kind, key, text FROM alerts ORDER BY id DESC LIMIT ?').all(n) as unknown as AlertRow[];
+  return rows.map((r) => ({ ...r }));
 }
 
 export function followupCandidates(): Contact[] {

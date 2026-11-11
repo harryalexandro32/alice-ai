@@ -5,7 +5,8 @@
   "description": "Asisten penjualan WhatsApp untuk GFAN Indonesia: salam, data lead, tanya-jawab katalog, follow-up",
   "type": "commonjs",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx src/supervise.ts",
+    "bot": "tsx src/index.ts",
     "chat": "tsx src/cli.ts",
     "admin": "tsx src/admin/standalone.ts",
     "test": "tsx src/business/gfan/catalog.test.ts && tsx src/provider.test.ts && tsx src/transport/cloud.test.ts && tsx src/transport/sendguard.test.ts && tsx src/admin/admin.test.ts && tsx src/admin/remote.test.ts && tsx src/flow.test.ts",

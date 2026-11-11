@@ -8,3 +8,5 @@ google-service-account.json
 
 .vercel
 .env*
+
+logs/

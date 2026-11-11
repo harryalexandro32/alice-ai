@@ -12,7 +12,7 @@ import { refreshBiz } from './business';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
 import { contactName, missingFields, type Sender } from './flow';
-import { humanHolds } from './flow';
+import { applyBotSwitches, humanHolds } from './flow';
 import { addMessage, followupCandidates, updateContact } from './store';
 import { followupText } from './texts';
 
@@ -45,6 +45,7 @@ export async function runFollowups(send: Sender): Promise<number> {
   refreshBiz();
   const t = now();
   let sent = 0;
+  applyBotSwitches();
 
   for (const c of followupCandidates()) {
     const due = followupDueAt(c.last_inbound_at);

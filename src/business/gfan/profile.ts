@@ -75,6 +75,7 @@ export const gfan: Business = {
   handoffLabel: 'harga/stok',
   forbidPrices: true,
   stopAfterHuman: true,
+  botSwitch: {},
   guardCodes: true,
   followupClosing: 'apakah masih ada yang bisa kami bantu soal kebutuhan kipas/ventilasinya?',
   files: [],

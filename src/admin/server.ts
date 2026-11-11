@@ -24,12 +24,12 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 import { checkReply, llmBrain, type Brain } from '../brain';
-import { biz, editableView, fileById, referencedFiles, validate } from '../business';
+import { biz, editableView, fileById, referencedFiles, setPdfText, validate } from '../business';
 import { isPdf } from '../business/catalog';
 import type { MediaFile } from '../business/types';
 import { cfg } from '../config';
 import { llmEnabled } from '../llm/provider';
-import { matchProducts, pdfText } from './pdftext';
+import { matchProducts, pdfPlain, squash } from './pdftext';
 import type { AdminStore } from './stores';
 
 const SESSION_MS = 12 * 3_600_000;
@@ -111,6 +111,27 @@ function asset(name: string): Buffer {
 const label = (v: unknown, max: number): string => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 export function createAdminHandler(store: AdminStore) {
+  /**
+   * Teks sebuah PDF. Dibaca sekali lalu disimpan di samping PDF-nya sebagai
+   * <id>.txt, supaya mencocokkan produk baru dan "bot membaca PDF" tidak perlu
+   * membuka PDF-nya berulang-ulang (dan supaya bot bisa menarik teksnya).
+   */
+  async function textOfPdf(f: MediaFile, fresh?: Buffer): Promise<string> {
+    const name = `${f.id}.txt`;
+    if (!fresh) {
+      const cached = await store.getPhoto(name);
+      if (cached) return cached.toString('utf8');
+    }
+    const data = fresh ?? (await store.getPhoto(f.file));
+    const text = data ? (await pdfPlain(data)).slice(0, 200_000) : '';
+    if (text) await store.putPhoto(name, Buffer.from(text, 'utf8'), 'text/plain; charset=utf-8');
+    return text;
+  }
+  const namesIn = async (f: MediaFile, names: string[], fresh?: Buffer) => {
+    const text = squash(await textOfPdf(f, fresh));
+    return { readable: Boolean(text), matches: matchProducts(text, names) };
+  };
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://x');
     const path = url.pathname;
@@ -188,6 +209,7 @@ export function createAdminHandler(store: AdminStore) {
         business: biz.id,
         testReady: llmEnabled() || brain !== llmBrain,
         status: await store.status(),
+        alerts: await store.alerts(),
       });
     }
 
@@ -199,8 +221,27 @@ export function createAdminHandler(store: AdminStore) {
       } catch (e) {
         return json(400, { error: e instanceof Error ? e.message : 'Masukan tidak sah.' });
       }
+      // Produk yang baru ditambahkan dan belum punya PDF: cari di PDF yang sudah
+      // diunggah. Produk lama tidak disentuh — PDF yang sengaja dilepas tetap lepas.
+      let autoPdf = 0;
+      if (changes.products) {
+        const before = new Set(biz.products.map((x) => x.name));
+        const fresh = changes.products.filter((x) => !x.pdf && !before.has(x.name));
+        if (fresh.length) {
+          const names = changes.products.map((x) => x.name);
+          for (const f of biz.files.filter(isPdf)) {
+            const found = new Set((await namesIn(f, names)).matches);
+            for (const x of fresh) {
+              if (!x.pdf && found.has(x.name)) {
+                x.pdf = f.id;
+                autoPdf += 1;
+              }
+            }
+          }
+        }
+      }
       await store.save(changes);
-      console.log(`[dashboard] profil disimpan: ${Object.keys(changes).join(', ')}`);
+      console.log(`[dashboard] profil disimpan: ${Object.keys(changes).join(', ')}${autoPdf ? ` (${autoPdf} produk baru dipasangi PDF)` : ''}`);
       // Foto yang tidak lagi dipakai produk mana pun (atau logo) dibuang. PDF
       // tidak: ia punya halamannya sendiri dan dihapus dari sana.
       if ('products' in changes || 'logo' in changes) {
@@ -212,11 +253,20 @@ export function createAdminHandler(store: AdminStore) {
           console.log(`[dashboard] ${orphans.length} berkas tak terpakai dihapus`);
         }
       }
-      return json(200, { ok: true, profile: editableView() });
+      return json(200, { ok: true, profile: editableView(), autoPdf });
     }
 
     if (path === '/admin/api/leads' && method === 'GET') {
-      return json(200, { fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })), rows: await store.leads() });
+      return json(200, {
+        fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })),
+        rows: await store.leads(),
+        // Kapan bot terakhir melapor: tombol yang ditekan setelah itu belum dijalankan bot.
+        reportedAt: (await store.status())?.reportedAt ?? null,
+      });
+    }
+
+    if (path === '/admin/api/alerts' && method === 'GET') {
+      return json(200, { alerts: await store.alerts(), errors: await store.errors(), status: await store.status() });
     }
 
     if (path === '/admin/api/usage' && method === 'GET') {
@@ -233,6 +283,7 @@ export function createAdminHandler(store: AdminStore) {
       if (!text) return json(400, { error: 'Pesan kosong.' });
       if (!llmEnabled() && brain === llmBrain) return json(400, { error: 'LLM belum diatur (LLM_API_KEY kosong).' });
       const history = (body.history ?? []).slice(-10).map((h) => ({ dir: h.dir === 'out' ? ('out' as const) : ('in' as const), text: label(h.text, 1500) }));
+      for (const f of biz.files) if (isPdf(f) && f.read) setPdfText(f.id, await textOfPdf(f));
       const result = await brain({ text, known: body.known ?? {}, history, justGreeted: false });
       if (!result) return json(502, { error: 'LLM tidak menjawab. Coba lagi.' });
       const asked = [text, ...history.filter((h) => h.dir === 'in').map((h) => h.text)].join('\n');
@@ -263,22 +314,30 @@ export function createAdminHandler(store: AdminStore) {
       console.log(`[dashboard] berkas ditambah: ${file.name}`);
       // Satu PDF sering memuat banyak produk: beri tahu dashboard produk mana
       // yang disebut di dalamnya, supaya bisa langsung dipasangkan.
-      const text = ext === 'pdf' ? await pdfText(data) : '';
       return json(200, {
         ok: true, file, files: biz.files,
-        ...(ext === 'pdf' ? { readable: Boolean(text), matches: matchProducts(text, biz.products.map((x) => x.name)) } : {}),
+        ...(ext === 'pdf' ? await namesIn(file, biz.products.map((x) => x.name), data) : {}),
       });
     }
 
-    const one = path.match(/^\/admin\/api\/files\/(d[0-9a-f]{8})(\/match)?$/);
+    const one = path.match(/^\/admin\/api\/files\/(d[0-9a-f]{8})(\/match|\/read)?$/);
     if (one) {
       const f = fileById(one[1] as string);
       if (!f) return json(404, { error: 'PDF tidak ditemukan.' });
       // Cocokkan ulang dengan daftar produk yang sekarang (mis. setelah produk ditambah).
-      if (one[2] && method === 'POST') {
-        const data = await store.getPhoto(f.file);
-        const text = data ? await pdfText(data) : '';
-        return json(200, { ok: true, readable: Boolean(text), matches: matchProducts(text, biz.products.map((x) => x.name)) });
+      if (one[2] === '/match' && method === 'POST') {
+        return json(200, { ok: true, ...(await namesIn(f, biz.products.map((x) => x.name))) });
+      }
+      // Boleh/tidaknya bot membaca isi PDF ini sebagai pengetahuan.
+      if (one[2] === '/read' && method === 'POST') {
+        const body = JSON.parse((await readBody(req, 200)).toString('utf8') || '{}') as { read?: boolean };
+        const read = Boolean(body.read);
+        if (read && !(await textOfPdf(f))) {
+          return json(400, { error: 'PDF ini tidak bisa dibaca (hasil pindai?), jadi bot tidak bisa memakai isinya.' });
+        }
+        await store.save({ files: biz.files.map((x) => (x.id === f.id ? { ...x, read } : x)) });
+        console.log(`[dashboard] isi PDF "${f.name}" ${read ? 'sekarang dibaca bot' : 'tidak lagi dibaca bot'}`);
+        return json(200, { ok: true, files: biz.files });
       }
       if (!one[2] && method === 'DELETE') {
         await store.save({
@@ -286,6 +345,7 @@ export function createAdminHandler(store: AdminStore) {
           products: biz.products.map((x) => (x.pdf === f.id ? { ...x, pdf: '' } : x)),
         });
         await store.delPhoto(f.file).catch(() => {});
+        await store.delPhoto(`${f.id}.txt`).catch(() => {});
         console.log(`[dashboard] PDF dihapus: ${f.name}`);
         return json(200, { ok: true, profile: editableView() });
       }

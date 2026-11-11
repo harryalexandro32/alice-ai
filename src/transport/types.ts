@@ -3,13 +3,18 @@
  * sama-sama memenuhi ini; alur percakapan tidak tahu bedanya.
  */
 
+/** Isi pesan yang bukan teks. Bot tidak bisa melihat/mendengarnya; staf yang bisa. */
+export type MediaKind = 'foto' | 'video' | 'suara' | 'dokumen' | 'stiker' | 'lokasi' | 'kontak';
+
 export interface TransportInbound {
   /** "+62…", atau "lid:…" kalau nomornya tidak diberikan. */
   phone: string;
   /** Alamat balasan (JID di Baileys, nomor di Cloud API). */
   address: string;
-  /** Null = bukan teks. */
+  /** Null = bukan teks. Untuk foto/video/dokumen: keterangannya, kalau ada. */
   text: string | null;
+  /** Diisi kalau pesannya membawa foto, suara, dan sejenisnya. */
+  media?: MediaKind;
   waId: string | null;
 }
 

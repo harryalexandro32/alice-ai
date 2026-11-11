@@ -142,6 +142,17 @@
   .tile .k { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
   .tile .v { font-size: 26px; font-weight: 600; letter-spacing: -.01em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
   .tile .s { color: var(--muted); font-size: 13px; }
+  .badge { display: none; margin-left: 6px; background: var(--danger); color: #fff; border-radius: 99px; font-size: 11px; font-weight: 600; padding: 0 6px; line-height: 17px; }
+  .badge.on { display: inline-block; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+  .switch input { width: 34px; height: 18px; appearance: none; background: #c5c8cc; border-radius: 99px; position: relative; cursor: pointer; margin: 0; transition: .15s; flex: none; }
+  .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: .15s; }
+  .switch input:checked { background: var(--ok); }
+  .switch input:checked::after { left: 18px; }
+  .switch small { color: var(--muted); }
+  td.sum { max-width: 340px; min-width: 200px; color: #36393a; }
+  td.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-word; }
+  tr.stale td { background: var(--danger-soft); }
   .bar { height: 6px; background: var(--blue); border-radius: 3px; min-width: 2px; opacity: .8; }
 
   /* ---- uji coba ---- */
@@ -222,6 +233,7 @@
       <button data-tab="data" data-en="Customer data">Data pelanggan</button>
       <div class="nav-group" data-en="Monitor">Pantau</div>
       <button data-tab="lead" data-en="Leads">Lead</button>
+      <button data-tab="peringatan"><span data-en="Alerts &amp; log">Peringatan &amp; log</span><span class="badge" id="alertBadge"></span></button>
       <button data-tab="biaya" data-en="Usage &amp; cost">Pemakaian &amp; biaya</button>
       <button data-tab="uji" data-en="Test chat">Uji coba</button>
     </nav>
@@ -320,9 +332,9 @@
 
       <section id="tab-pdf">
         <div class="card">
-          <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. You can still change the PDF of any product here or in the product table. Up to 4 MB per file.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. PDF tiap produk tetap bisa diubah di sini atau di tabel produk. Maksimal 4 MB per berkas.</p></div>
+          <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. You can still change the PDF of any product here or in the product table. Up to 4 MB per file. Turn on <b>Read by bot</b> to let the bot answer from that PDF's contents.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. PDF tiap produk tetap bisa diubah di sini atau di tabel produk. Maksimal 4 MB per berkas. Nyalakan <b>Dibaca bot</b> kalau bot boleh menjawab dari isi PDF itu.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="pdfs"></table></div></div>
-          <div class="cardfoot"><button class="btn small" id="pdfUpload" type="button" data-en="Upload PDF">Unggah PDF</button><button class="btn ghost small" id="pdfRematch" type="button" data-en="Re-match all">Cocokkan ulang semua</button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read — attach those by hand.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca — pasangkan sendiri.</span></div>
+          <div class="cardfoot"><button class="btn small" id="pdfUpload" type="button" data-en="Upload PDF">Unggah PDF</button><button class="btn ghost small" id="pdfRematch" type="button" data-en="Re-match all">Cocokkan ulang semua</button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read — attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it in Test chat first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca — pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu di Uji coba; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
         </div>
       </section>
 
@@ -376,8 +388,19 @@
 
       <section id="tab-lead">
         <div class="card">
-          <div class="ch"><h2 data-en="Recent conversations">Percakapan terbaru</h2><p class="help" data-en="The last 100 contacts. When this dashboard is online, the bot refreshes the list about every 15 minutes. The full record is in Google Sheets.">100 kontak terakhir. Kalau dashboard ini online, daftarnya diperbarui bot tiap ±15 menit. Catatan lengkapnya ada di Google Sheet.</p></div>
+          <div class="ch"><h2 data-en="Recent conversations">Percakapan terbaru</h2><p class="help" data-en="The last 100 contacts, each with a short summary of the conversation so far. Use the <b>Bot</b> switch to hand a chat to your staff (off) or back to the bot (on). When this dashboard is online, the bot refreshes the list and picks up a switch within about 15 minutes, or as soon as that customer writes again.">100 kontak terakhir, masing-masing dengan ringkasan singkat percakapannya. Pakai tombol <b>Bot</b> untuk menyerahkan sebuah chat ke staf (mati) atau mengembalikannya ke bot (nyala). Kalau dashboard ini online, bot memperbarui daftar dan menjalankan tombol dalam ±15 menit, atau begitu pelanggan itu chat lagi.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="leads"></table></div></div>
+        </div>
+      </section>
+
+      <section id="tab-peringatan">
+        <div class="card">
+          <div class="ch"><h2 data-en="Needs your attention">Perlu perhatian</h2><p class="help" data-en="Things that need a person: a customer the bot could not answer, WhatsApp disconnected, sending paused, the LLM failing. These are also sent to the sales number on WhatsApp, and to Telegram when it is set up in <code>.env</code>.">Hal yang butuh orang: pelanggan yang tidak bisa dijawab bot, WhatsApp terputus, kiriman dijeda, LLM bermasalah. Ini juga dikirim ke nomor sales lewat WhatsApp, dan ke Telegram kalau diatur di <code>.env</code>.</p></div>
+          <div class="cb"><div class="scroll"><table class="list" id="alerts"></table></div></div>
+        </div>
+        <div class="card">
+          <div class="ch"><h2 data-en="Error log">Catatan galat</h2><p class="help" data-en="Every error and warning the bot wrote, newest first — the same lines as in its terminal, so you do not need access to the machine it runs on. When this dashboard is online the list is refreshed about every 15 minutes. The full log is in the <code>logs</code> folder next to the bot.">Semua galat dan peringatan yang ditulis bot, terbaru dulu — baris yang sama dengan di terminalnya, jadi Anda tidak perlu akses ke mesin tempat bot jalan. Kalau dashboard ini online, daftarnya diperbarui tiap ±15 menit. Log lengkapnya ada di folder <code>logs</code> di samping bot.</p></div>
+          <div class="cb"><div class="scroll"><table class="list" id="errors"></table></div></div>
         </div>
       </section>
 

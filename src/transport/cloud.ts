@@ -24,7 +24,7 @@ import type { AddressInfo } from 'node:net';
 import { basename, extname } from 'node:path';
 
 import { cfg, HOUR, normPhone } from '../config';
-import type { Transport, TransportHandlers } from './types';
+import type { MediaKind, Transport, TransportHandlers } from './types';
 
 let handlers: TransportHandlers | null = null;
 let server: Server | null = null;
@@ -44,7 +44,14 @@ interface WaMessage {
   text?: { body?: string };
   button?: { text?: string };
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+  image?: { caption?: string };
+  video?: { caption?: string };
+  document?: { caption?: string };
 }
+
+const MEDIA: Record<string, MediaKind> = {
+  image: 'foto', video: 'video', audio: 'suara', document: 'dokumen', sticker: 'stiker', location: 'lokasi', contacts: 'kontak',
+};
 interface WaEcho {
   to?: string;
   id?: string;
@@ -69,7 +76,7 @@ function textOf(m: WaMessage): string | null {
         ? m.button?.text
         : m.type === 'interactive'
           ? (m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title)
-          : null;
+          : (m.image?.caption ?? m.video?.caption ?? m.document?.caption ?? null);
   return t?.trim() || null;
 }
 
@@ -108,6 +115,7 @@ function process_(body: { entry?: { changes?: WaChange[] }[] }): void {
             address: digits(m.from),
             text: textOf(m),
             waId: m.id ?? null,
+            ...(MEDIA[m.type ?? ''] ? { media: MEDIA[m.type ?? ''] } : {}),
           });
         }
         for (const s of v.statuses ?? []) {
