@@ -16,7 +16,7 @@ import { cfg, HOUR } from './config';
 import { now } from './clock';
 import { deliverOutbox, type LeadPayload } from './sinks/outbox';
 import {
-  addMessage, contactByAddress, countInboundSince, createContact, getContact, outboxAdd,
+  addMessage, contactByAddress, countInboundSince, createContact, getContact, humanSeenAt, markHuman, outboxAdd,
   pausedUntil, recentMessages, setPause, updateContact, type Contact,
 } from './store';
 import { askMissing, handoffText, NON_TEXT } from './texts';
@@ -38,6 +38,10 @@ export function setBrain(fn: Brain): void {
 export function setBeforeTurn(fn: () => Promise<void>): void {
   beforeTurn = fn;
 }
+
+/** Berkas yang sama paling banyak sekian kali per pelanggan dalam riwayat terakhirnya. */
+const MAX_SAME_FILE = 3;
+const ATTACH_FAILED = 'Mohon maaf, berkasnya belum berhasil terkirim dari sini 🙏 Tim kami yang akan mengirimkannya ya.';
 
 export interface Inbound {
   phone: string;
@@ -94,6 +98,15 @@ function awaitsCustomer(c: Contact): boolean {
   return missingFields(c).length > 0 || Boolean(c.last_out_text?.includes('?'));
 }
 
+/**
+ * Apakah chat ini sedang dipegang admin manusia? Dengan `stopAfterHuman`,
+ * sekali admin membalas, bot tidak ikut campur lagi; tanpa itu, bot hanya diam
+ * selama HUMAN_PAUSE_HOURS.
+ */
+export function humanHolds(address: string, at: number): boolean {
+  return pausedUntil(address) > at || (biz.stopAfterHuman && humanSeenAt(address) > 0);
+}
+
 export async function handleInbound(m: Inbound): Promise<void> {
   // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
   await beforeTurn();
@@ -124,7 +137,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
     followup_state: 'idle',
   });
 
-  if (pausedUntil(m.address) > at) {
+  if (humanHolds(m.address, at)) {
     console.log(`[alur] ${m.phone}: sedang ditangani manusia, bot diam`);
     return;
   }
@@ -186,22 +199,40 @@ export async function handleInbound(m: Inbound): Promise<void> {
     }
     if (out) c = await reply(c, out);
 
-    // Lampiran (foto, PDF) hanya menyertai balasan LLM yang lolos pagar, dan
-    // berkas yang sama tidak dikirim ulang ke orang yang baru saja menerimanya.
+    // Lampiran (foto, PDF) hanya menyertai balasan LLM yang lolos pagar.
+    //
+    // Kapan sebuah berkas dikirim ulang diputuskan LLM (ia melihat catatan
+    // "[pdf:…]" di riwayat dan diminta tidak mengulang kecuali diminta). Kode
+    // di sini hanya rem darurat: dulu ia menahan SEMUA kiriman ulang, sehingga
+    // bot bilang "saya lampirkan" padahal tidak ada yang terkirim.
     if (result && !rejected) {
-      const recent = new Set(recentMessages(c.phone, 20).filter((t) => t.dir === 'out').map((t) => t.text));
+      const outs = recentMessages(c.phone, 40).filter((t) => t.dir === 'out').map((t) => t.text);
+      let failed = false;
       for (const [kind, id] of [...result.photos.map((x) => ['foto', x] as const), ...result.docs.map((x) => ['pdf', x] as const)]) {
         const f = fileById(id);
-        const label = productOfFile(id) ?? f?.name ?? '';
+        if (!f) continue;
+        // Satu PDF bisa dipakai banyak produk, jadi ia dikirim dengan namanya
+        // sendiri — bukan nama produk pertama yang kebetulan memakainya.
+        const label = kind === 'pdf' ? f.name.replace(/\.pdf$/i, '') : (productOfFile(id) ?? f.name);
         const mark = `[${kind}:${id}] ${label}`;
-        if (!f || recent.has(mark)) continue;
+        if (outs.filter((t) => t.startsWith(`[${kind}:${id}]`)).length >= MAX_SAME_FILE) {
+          console.log(`[alur] ${c.phone}: ${kind} ${id} sudah ${MAX_SAME_FILE} kali terkirim, tidak diulang`);
+          continue;
+        }
         try {
-          const fileName = kind === 'pdf' ? `${label.replace(/[^\w .()-]+/g, ' ').trim() || 'brosur'}.pdf` : undefined;
+          const fileName = kind === 'pdf' ? `${label.replace(/[^\w .()+-]+/g, ' ').trim() || 'brosur'}.pdf` : undefined;
           await send({ phone: c.phone, address: c.address }, label, join(mediaDir(), f.file), fileName);
           addMessage(c.phone, 'out', mark, now());
+          console.log(`[alur] ${c.phone}: ${kind} terkirim — ${label}`);
         } catch (e) {
+          failed = true;
           console.error(`[alur] ${c.phone}: ${kind} ${id} gagal terkirim: ${e instanceof Error ? e.message : e}`);
         }
+      }
+      // Balasannya sudah berjanji melampirkan: kalau gagal, katakan terus terang.
+      if (failed) {
+        c = await reply(c, ATTACH_FAILED).catch(() => c);
+        handoff = true;
       }
     }
 
@@ -232,10 +263,11 @@ export async function handleInbound(m: Inbound): Promise<void> {
 export function handleHumanReply(m: { address: string; text: string }): void {
   const at = now();
   setPause(m.address, at + cfg.humanPauseHours * HOUR);
+  markHuman(m.address, at);
   const c = contactByAddress(m.address);
   if (c) {
     addMessage(c.phone, 'human', m.text || '[bukan teks]', at);
     updateContact(c.phone, { last_dir: 'human', followup_state: 'idle' });
   }
-  console.log(`[alur] ${c?.phone ?? m.address}: dibalas manusia, bot diam ${cfg.humanPauseHours} jam`);
+  console.log(`[alur] ${c?.phone ?? m.address}: dibalas manusia, bot ${biz.stopAfterHuman ? 'tidak ikut campur lagi di chat ini' : `diam ${cfg.humanPauseHours} jam`}`);
 }

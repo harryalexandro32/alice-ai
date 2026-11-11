@@ -74,6 +74,7 @@ export const gfan: Business = {
   handoffTopics: 'harga, diskon, stok, waktu kirim, ongkir, garansi, cara bayar, alamat/kontak toko',
   handoffLabel: 'harga/stok',
   forbidPrices: true,
+  stopAfterHuman: true,
   guardCodes: true,
   followupClosing: 'apakah masih ada yang bisa kami bantu soal kebutuhan kipas/ventilasinya?',
   files: [],

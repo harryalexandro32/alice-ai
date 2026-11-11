@@ -112,6 +112,12 @@ export interface Business {
   logo: string;
   /** Pertanyaan untuk memahami kebutuhan pelanggan sebelum menyarankan produk. */
   questions: string[];
+  /**
+   * True = begitu admin manusia membalas atau mengirimi seorang pelanggan dari
+   * HP, bot tidak ikut campur lagi di chat itu (tanpa batas waktu). False =
+   * bot hanya diam selama HUMAN_PAUSE_HOURS, lalu aktif lagi.
+   */
+  stopAfterHuman: boolean;
   /** Jeda sebelum membalas, detik. Diacak di antara keduanya tiap balasan. */
   replyDelayMin: number;
   replyDelayMax: number;
@@ -129,7 +135,7 @@ export interface Business {
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'leadFields', 'products', 'catalog', 'notes', 'questions',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'files', 'logo', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'stopAfterHuman', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

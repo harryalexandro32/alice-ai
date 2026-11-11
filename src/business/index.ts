@@ -166,6 +166,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('handoffLabel' in input) set('handoffLabel', text(input.handoffLabel, 40, 'Label notifikasi', true));
   if ('followupClosing' in input) set('followupClosing', text(input.followupClosing, 300, 'Kalimat follow-up', true));
   if ('forbidPrices' in input) set('forbidPrices', Boolean(input.forbidPrices));
+  if ('stopAfterHuman' in input) set('stopAfterHuman', Boolean(input.stopAfterHuman));
   if ('guardCodes' in input) set('guardCodes', Boolean(input.guardCodes));
 
   if ('leadFields' in input) {

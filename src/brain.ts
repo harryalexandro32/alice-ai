@@ -115,6 +115,11 @@ LAMPIRAN (FOTO DAN PDF)
   lengkap, atau saat kamu merekomendasikan produk yang PDF-nya ada.
 - Jangan melampirkan berkas produk lain yang tidak berhubungan, dan jangan
   menulis id berkas di dalam "reply".
+- Baris "[foto:…]" / "[pdf:…]" di RIWAYAT berarti berkas itu sudah terkirim.
+  Jangan melampirkannya lagi di balasan berikutnya, KECUALI pelanggan
+  memintanya lagi atau bilang belum menerimanya — saat itu lampirkan lagi.
+- Berkas hanya terkirim kalau id-nya kamu isi di "photos"/"docs" pada balasan
+  INI. Menulis "saya lampirkan" tanpa mengisinya berarti tidak ada yang terkirim.
 - Jangan bilang mengirim foto atau brosur kalau "photos"/"docs" kosong. Kalau
   yang diminta tidak ada (kolomnya "-"), katakan tim kami yang akan mengirimkannya.
 

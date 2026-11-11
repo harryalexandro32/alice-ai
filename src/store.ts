@@ -74,6 +74,10 @@ export function openDb(path: string): void {
       address TEXT PRIMARY KEY,
       until INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS human_seen (
+      address TEXT PRIMARY KEY,
+      at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS outbox (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL,
@@ -89,6 +93,12 @@ export function openDb(path: string): void {
       cached_tokens INTEGER NOT NULL DEFAULT 0,
       completion_tokens INTEGER NOT NULL DEFAULT 0
     );
+  `);
+  // Percakapan yang sudah pernah dibalas admin sebelum tabel ini ada.
+  db.exec(`
+    INSERT OR IGNORE INTO human_seen (address, at)
+    SELECT c.address, MAX(m.at) FROM messages m JOIN contacts c ON c.phone = m.phone
+    WHERE m.dir = 'human' GROUP BY c.address
   `);
 }
 
@@ -170,6 +180,17 @@ export function pausedUntil(address: string): number {
     | { until: number }
     | undefined;
   return r ? Number(r.until) : 0;
+}
+
+/** Catat bahwa admin manusia membalas / mengirimi alamat ini. */
+export function markHuman(address: string, at: number): void {
+  db.prepare('INSERT INTO human_seen (address, at) VALUES (?, ?) ON CONFLICT(address) DO UPDATE SET at = excluded.at').run(address, at);
+}
+
+/** Kapan admin manusia terakhir membalas alamat ini; 0 = belum pernah. */
+export function humanSeenAt(address: string): number {
+  const r = db.prepare('SELECT at FROM human_seen WHERE address = ?').get(address) as { at: number } | undefined;
+  return r ? Number(r.at) : 0;
 }
 
 export function followupCandidates(): Contact[] {

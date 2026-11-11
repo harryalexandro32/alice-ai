@@ -63,6 +63,7 @@ function fresh(): void {
   next = () => R('Baik.');
   biz.files = [];
   biz.products = SEED_PRODUCTS;
+  biz.stopAfterHuman = true;
   setSender(async (_to, text, image, fileName) =>
     void sent.push(image ? `[${fileName ? 'pdf' : 'gambar'}:${fileName ?? image.split(/[\\/]/).pop()}] ${text}` : text)
   );
@@ -263,7 +264,35 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
   }],
 
-  ['manusia membalas: bot diam, follow-up batal, lalu aktif lagi setelah jeda', async () => {
+  ['manusia membalas (bawaan): bot tidak ikut campur lagi di chat itu', async () => {
+    await say('halo');
+    handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    const before = sent.length;
+    advance(30 * 24 * HOUR);
+    await say('masih ada?');
+    assert.equal(sent.length, before, 'sebulan kemudian pun bot tetap diam');
+    assert.equal(brainCalls.length, 0);
+    assert.equal(await follow(), 0);
+    // Pelanggan lain tidak terpengaruh.
+    next = () => R('Ada, Bu.');
+    await say('halo', '+6281377770009');
+    await say('ada exhaust?', '+6281377770009');
+    assert.equal(sent.at(-1), 'Ada, Bu.');
+    // Admin yang lebih dulu mengirimi nomor yang belum pernah chat: bot juga tidak menyapa.
+    handleHumanReply({ address: '+6281377770010', text: 'Halo Pak, ini penawarannya' });
+    const n = sent.length;
+    await say('oke terima kasih', '+6281377770010');
+    assert.equal(sent.length, n, 'tidak ada salam dari bot di chat yang dimulai admin');
+    // Setelan dimatikan: kembali ke aturan jeda.
+    biz.stopAfterHuman = false;
+    advance(13 * HOUR);
+    next = () => R('Masih ada, Pak.');
+    await say('masih ada kan?');
+    assert.equal(sent.at(-1), 'Masih ada, Pak.');
+  }],
+
+  ['manusia membalas, setelan dimatikan: bot diam, follow-up batal, lalu aktif lagi setelah jeda', async () => {
+    biz.stopAfterHuman = false;
     await say('halo');
     handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
     const before = sent.length;
@@ -317,19 +346,38 @@ const tests: [string, () => Promise<void>][] = [
     next = () => R('Ini fotonya ya, Pak.', {}, 'info', ['f0000000a']);
     await say('minta foto GFAF-40A');
     assert.deepEqual(sent.slice(1), ['Ini fotonya ya, Pak.', '[gambar:f0000000a.jpg] GFAF-40A']);
+    next = () => R('Dayanya 130 W.');
     await say('yang tadi berapa watt');
-    assert.equal(sent.filter((t) => t.startsWith('[gambar')).length, 1, 'foto yang sama tidak dikirim ulang');
+    assert.equal(sent.filter((t) => t.startsWith('[gambar')).length, 1);
+    assert.match(brainCalls.at(-1)!.history.map((h) => h.text).join('\n'), /\[foto:f0000000a\] GFAF-40A/, 'LLM melihat apa yang sudah terkirim');
     next = () => R('Harganya Rp 900.000', {}, 'info', ['f0000000a']);
     await say('foto lagi dong', '+6281377770003');
     assert.ok(!sent.some((t) => t.startsWith('[gambar') && sent.indexOf(t) > 3), 'balasan yang dibuang tidak membawa foto');
     assert.deepEqual(parseBrain('{"reply":"ok","photos":["f0000000a","karangan","f0000000a",7]}')?.photos, ['f0000000a']);
 
-    // PDF: dikirim sebagai dokumen bernama produknya, sekali saja.
+    // PDF: dikirim sebagai dokumen dengan nama berkasnya sendiri (satu PDF dipakai
+    // banyak produk), dan DIKIRIM LAGI kalau pelanggan memintanya lagi.
     next = () => R('Ini brosurnya ya, Pak.', {}, 'info', [], ['d0000000b']);
     await say('ada brosurnya?');
-    assert.equal(sent.at(-1), '[pdf:GFAF-40A.pdf] GFAF-40A');
-    await say('kirim lagi brosurnya');
-    assert.equal(sent.filter((t) => t.startsWith('[pdf')).length, 1, 'PDF yang sama tidak dikirim ulang');
+    assert.equal(sent.at(-1), '[pdf:Industrial Fan - GFan.pdf] Industrial Fan - GFan');
+    await say('mana katalognya? belum masuk');
+    assert.equal(sent.filter((t) => t.startsWith('[pdf')).length, 2, 'diminta lagi = dikirim lagi');
+    await say('kirim lagi');
+    await say('lagi');
+    assert.equal(sent.filter((t) => t.startsWith('[pdf')).length, 3, 'rem darurat: berkas yang sama paling banyak 3 kali');
+    assert.match(systemPrompt(), /KECUALI pelanggan\s+memintanya lagi/);
+
+    // Kiriman berkas gagal: bot tidak diam-diam mengingkari janjinya.
+    const ok = sent.length;
+    setSender(async (_to, text, image) => {
+      if (image) throw new Error('unggah gagal');
+      sent.push(text);
+    });
+    next = () => R('Ini fotonya ya, Bu.', {}, 'info', ['f0000000a']);
+    await say('halo', '+6281377770011');
+    await say('minta foto', '+6281377770011');
+    assert.match(sent.at(-1)!, /belum berhasil terkirim/);
+    assert.ok(sent.length > ok);
     // Foto tidak bisa menyamar jadi PDF, dan berkas yang tidak terpasang di produk tidak bisa dikirim.
     const mixed = parseBrain('{"reply":"ok","photos":["d0000000b","f0000000c"],"docs":["f0000000a","d0000000b"]}');
     assert.deepEqual([mixed?.photos, mixed?.docs], [[], ['d0000000b']]);

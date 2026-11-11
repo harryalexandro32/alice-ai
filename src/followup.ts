@@ -12,7 +12,8 @@ import { refreshBiz } from './business';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
 import { contactName, missingFields, type Sender } from './flow';
-import { addMessage, followupCandidates, pausedUntil, updateContact } from './store';
+import { humanHolds } from './flow';
+import { addMessage, followupCandidates, updateContact } from './store';
 import { followupText } from './texts';
 
 /** Terlambat lebih dari ini (bot sempat mati) = dilewat, bukan dikirim basi. */
@@ -50,7 +51,7 @@ export async function runFollowups(send: Sender): Promise<number> {
     if (t < due) continue;
 
     const skip =
-      pausedUntil(c.address) > t
+      humanHolds(c.address, t)
         ? 'sedang ditangani manusia'
         : t > due + GRACE_MS
           ? 'sudah terlalu lama lewat'
