@@ -46,6 +46,7 @@ interface WaMessage {
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
   image?: { caption?: string; id?: string; mime_type?: string };
   video?: { caption?: string };
+  audio?: { id?: string; mime_type?: string };
   document?: { caption?: string };
 }
 
@@ -124,15 +125,16 @@ function process_(body: { entry?: { changes?: WaChange[] }[] }): void {
             waId: m.id ?? null,
             ...(profileOf(v.contacts, m.from) ? { profileName: profileOf(v.contacts, m.from) as string } : {}),
             ...(MEDIA[m.type ?? ''] ? { media: MEDIA[m.type ?? ''] } : {}),
-            ...(m.type === 'image' && m.image?.id
+            ...((m.type === 'image' && m.image?.id) || (m.type === 'audio' && m.audio?.id)
               ? {
                   // Meta memberi id; isinya diambil lewat dua langkah (id -> URL -> berkas).
                   fetchMedia: async () => {
-                    const info = await graph(m.image!.id as string);
+                    const part = m.type === 'audio' ? m.audio! : m.image!;
+                    const info = await graph(part.id as string);
                     if (!info?.url) return null;
                     const res = await fetch(info.url as string, { headers: { authorization: `Bearer ${cfg.waToken}` }, signal: AbortSignal.timeout(30_000) });
                     if (!res.ok) return null;
-                    return { data: Buffer.from(await res.arrayBuffer()), mime: (info.mime_type as string) ?? m.image!.mime_type ?? 'image/jpeg' };
+                    return { data: Buffer.from(await res.arrayBuffer()), mime: (info.mime_type as string) ?? part.mime_type ?? (m.type === 'audio' ? 'audio/ogg' : 'image/jpeg') };
                   },
                 }
               : {}),

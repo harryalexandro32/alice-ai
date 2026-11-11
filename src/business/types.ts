@@ -155,6 +155,11 @@ export interface Business {
   notifyRoutes: Partial<Record<NotifyKind, Route>>;
   /** Pengaturan operasional yang menimpa bawaan .env (lihat config.TUNABLE). */
   settings: import('../config').Settings;
+  /** "Sudah ditangani" dari halaman Lead: nomor -> kapan ditandai (ms). */
+  handled: Record<string, number>;
+  /** Kapan daftar pelanggan lama terakhir diimpor (ms; 0 = belum pernah) dan isinya berapa. */
+  knownAt: number;
+  knownCount: number;
   /** Tombol per pelanggan dari halaman Lead: nomor -> perintah terakhir. */
   botSwitch: Record<string, BotSwitch>;
   /** Jeda sebelum membalas, detik. Diacak di antara keduanya tiap balasan. */
@@ -174,7 +179,7 @@ export interface Business {
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'files', 'logo', 'stopAfterHuman', 'botSwitch', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'stopAfterHuman', 'botSwitch', 'handled', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

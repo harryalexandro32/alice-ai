@@ -269,6 +269,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
       throw new Error('Jam follow-up: jam selesai harus setelah jam mulai');
     }
     if (typeof raw.llmVision === 'boolean') out.llmVision = raw.llmVision;
+    if (typeof raw.followupSmart === 'boolean') out.followupSmart = raw.followupSmart;
     if (Array.isArray(raw.onlyNumbers)) {
       const list = raw.onlyNumbers.map((x) => String(x).trim()).filter(Boolean);
       const bad = list.find((x) => !normPhone(x));
@@ -278,6 +279,15 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
       out.onlyNumbers = list.map((x) => normPhone(x) as string);
     }
     set('settings', out);
+  }
+  if ('handled' in input) {
+    const raw = (input.handled && typeof input.handled === 'object' ? input.handled : {}) as Record<string, unknown>;
+    const entries = Object.entries(raw)
+      .filter(([phone, at]) => /^(\+\d{8,15}|lid:\d{5,20})$/.test(phone) && Number.isFinite(at))
+      .map(([phone, at]) => [phone, Math.round(Number(at))] as [string, number])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 300);
+    set('handled', Object.fromEntries(entries));
   }
   if ('botSwitch' in input) {
     const raw = (input.botSwitch && typeof input.botSwitch === 'object' ? input.botSwitch : {}) as Record<string, Partial<BotSwitch>>;

@@ -744,42 +744,127 @@ $('resetChat').addEventListener('click', () => {
 });
 
 // ---------- lead ----------
+let leadData = null;
+
+/** Keadaan satu baris lead, dengan memperhitungkan tombol yang belum dijalankan bot. */
+function leadState(c) {
+  const since = (leadData && leadData.reportedAt) || 0;
+  const sw = (profile.botSwitch || {})[c.phone];
+  const actual = !c.hold;
+  const pendingBot = Boolean(sw) && (sw.mode === 'on') !== actual && sw.at > since;
+  const done = (profile.handled || {})[c.phone] || 0;
+  // "Sudah ditangani" yang ditekan setelah laporan terakhir bot: anggap sudah beres.
+  const needs = c.needsSales && !(done > since);
+  return { botOn: pendingBot ? sw.mode === 'on' : actual, pendingBot, needs };
+}
+
 async function loadLeads() {
-  const t = $('leads');
   try {
-    const r = await api('leads');
-    const head = el('tr', {}, el('th', { textContent: T('Nomor', 'Number') }), ...r.fields.map((f) => el('th', { textContent: f.label })),
-      el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
-      el('th', { textContent: T('Terakhir chat', 'Last message') }));
-    const rows = r.rows.map((c) => {
-      // Keadaan sebenarnya datang dari bot. Tombol yang ditekan setelah laporan
-      // terakhir bot belum dijalankan: tampilkan yang diminta, dengan tanda menunggu.
-      const sw = (profile.botSwitch || {})[c.phone];
-      const actual = !c.hold;
-      const pending = Boolean(sw) && (sw.mode === 'on') !== actual && sw.at > (r.reportedAt || 0);
-      const active = pending ? sw.mode === 'on' : actual;
-      const box = el('input', { type: 'checkbox', checked: active });
-      box.addEventListener('change', async () => {
-        box.disabled = true;
-        try {
-          const next = { ...(profile.botSwitch || {}), [c.phone]: { mode: box.checked ? 'on' : 'off', at: Date.now() } };
-          profile.botSwitch = (await api('profile', { method: 'PUT', body: JSON.stringify({ botSwitch: next }) })).profile.botSwitch;
-          toast(box.checked ? T('Chat ini dikembalikan ke bot.', 'This chat is handed back to the bot.') : T('Bot dimatikan untuk chat ini.', 'The bot is turned off for this chat.'));
-        } catch (e) { toast(e.message, true); }
-        loadLeads();
-      });
-      const why = pending ? T('menunggu bot', 'waiting for the bot')
-        : c.hold === 'admin' ? T('admin membalas', 'an admin replied') : c.hold === 'tombol' ? T('dimatikan', 'turned off') : '';
-      return el('tr', {}, el('td', { textContent: c.phone }), ...r.fields.map((f) => el('td', { textContent: c.lead[f.key] || '—' })),
-        el('td', { className: 'sum', textContent: c.summary || '—' }),
-        el('td', {}, el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }),
-          c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }) : null),
-        el('td', {}, el('label', { className: 'switch' }, box, el('small', { textContent: why }))),
-        el('td', { textContent: new Date(c.lastAt).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) }));
-    });
-    t.replaceChildren(el('thead', {}, head), el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: r.fields.length + 5, textContent: T('Belum ada percakapan.', 'No conversations yet.') }))])));
+    leadData = await api('leads');
+    renderLeads();
   } catch (e) { toast(e.message, true); }
 }
+
+function visibleLeads() {
+  const q = $('leadSearch').value.trim().toLowerCase();
+  const f = $('leadFilter').value;
+  return leadData.rows.filter((c) => {
+    const s = leadState(c);
+    if (f === 'staf' && !s.needs) return false;
+    if (f === 'belum' && c.complete) return false;
+    if (f === 'lengkap' && !c.complete) return false;
+    if (f === 'diam' && s.botOn) return false;
+    if (!q) return true;
+    return [c.phone, c.summary || '', ...Object.values(c.lead)].join(' ').toLowerCase().includes(q);
+  });
+}
+
+function renderLeads() {
+  if (!leadData) return;
+  const r = leadData;
+  const head = el('tr', {}, el('th', { textContent: T('Nomor', 'Number') }), ...r.fields.map((f) => el('th', { textContent: f.label })),
+    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
+    el('th', { textContent: T('Terakhir chat', 'Last message') }));
+  const list = visibleLeads();
+  const rows = list.map((c) => {
+    const s = leadState(c);
+    const box = el('input', { type: 'checkbox', checked: s.botOn });
+    box.addEventListener('change', async () => {
+      box.disabled = true;
+      try {
+        const next = { ...(profile.botSwitch || {}), [c.phone]: { mode: box.checked ? 'on' : 'off', at: Date.now() } };
+        profile.botSwitch = (await api('profile', { method: 'PUT', body: JSON.stringify({ botSwitch: next }) })).profile.botSwitch;
+        toast(box.checked ? T('Chat ini dikembalikan ke bot.', 'This chat is handed back to the bot.') : T('Bot dimatikan untuk chat ini.', 'The bot is turned off for this chat.'));
+      } catch (e) { toast(e.message, true); }
+      renderLeads();
+    });
+    const why = s.pendingBot ? T('menunggu bot', 'waiting for the bot')
+      : c.hold === 'admin' ? T('admin membalas', 'an admin replied') : c.hold === 'tombol' ? T('dimatikan', 'turned off') : '';
+    let staff = null;
+    if (s.needs) {
+      const done = el('button', { className: 'btn ghost small', type: 'button', textContent: T('✓ Sudah ditangani', '✓ Handled'), style: 'margin-left:6px' });
+      done.addEventListener('click', async () => {
+        done.disabled = true;
+        try {
+          const next = { ...(profile.handled || {}), [c.phone]: Date.now() };
+          profile.handled = (await api('profile', { method: 'PUT', body: JSON.stringify({ handled: next }) })).profile.handled;
+          toast(T('Ditandai sudah ditangani.', 'Marked as handled.'));
+        } catch (e) { toast(e.message, true); }
+        renderLeads();
+      });
+      staff = el('span', { style: 'white-space:nowrap' }, el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }), done);
+    }
+    return el('tr', {}, el('td', { textContent: c.phone }), ...r.fields.map((f) => el('td', { textContent: c.lead[f.key] || '—' })),
+      el('td', { className: 'sum', textContent: c.summary || '—' }),
+      el('td', {}, el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }), staff),
+      el('td', {}, el('label', { className: 'switch' }, box, el('small', { textContent: why }))),
+      el('td', { textContent: c.lastAt ? new Date(c.lastAt).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) : T('belum pernah chat', 'never chatted') }));
+  });
+  const empty = r.rows.length ? T('Tidak ada yang cocok dengan pencarian atau saringan ini.', 'Nothing matches this search or filter.') : T('Belum ada percakapan.', 'No conversations yet.');
+  $('leads').replaceChildren(el('thead', {}, head), el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: r.fields.length + 5, textContent: empty }))])));
+  $('leadCount').textContent = list.length + T(' dari ', ' of ') + r.rows.length + T(' kontak', ' contacts');
+  $('knownCount').textContent = profile.knownCount
+    ? profile.knownCount + T(' pelanggan lama terdaftar.', ' existing customers on file.')
+    : T('Belum ada pelanggan lama yang diimpor.', 'No existing customers imported yet.');
+}
+
+$('leadSearch').addEventListener('input', renderLeads);
+$('leadFilter').addEventListener('change', renderLeads);
+
+// Unduh yang sedang tampil sebagai CSV (bisa dibuka di Excel).
+$('leadExport').addEventListener('click', () => {
+  if (!leadData) return;
+  const r = leadData;
+  const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const lines = [[T('Nomor', 'Number'), ...r.fields.map((f) => f.label), T('Ringkasan', 'Summary'), T('Lengkap', 'Complete'), T('Perlu staf', 'Needs staff'), 'Bot', T('Terakhir chat', 'Last message')]];
+  for (const c of visibleLeads()) {
+    const s = leadState(c);
+    lines.push([c.phone, ...r.fields.map((f) => c.lead[f.key] || ''), c.summary || '', c.complete ? T('ya', 'yes') : T('tidak', 'no'), s.needs ? T('ya', 'yes') : '',
+      s.botOn ? T('aktif', 'on') : T('diam', 'off'), c.lastAt ? new Date(c.lastAt).toLocaleString(locale()) : '']);
+  }
+  // BOM di depan supaya Excel membaca huruf dan emoji dengan benar.
+  const csv = '﻿' + lines.map((l) => l.map(cell).join(',')).join('\r\n');
+  const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'lead-' + new Date().toLocaleDateString('en-CA') + '.csv' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+// Impor pelanggan lama: satu nomor per baris, boleh diikuti nama.
+$('knownImport').addEventListener('click', async () => {
+  const text = $('knownText').value.trim();
+  if (!text) return toast(T('Tempel dulu daftar nomornya.', 'Paste the list of numbers first.'), true);
+  $('knownImport').disabled = true;
+  try {
+    const r = await api('known', { method: 'POST', body: JSON.stringify({ text, off: $('knownOff').checked }) });
+    profile = r.profile;
+    $('knownText').value = '';
+    toast(r.added + T(' nomor ditambahkan', ' numbers added') + (r.invalid ? ', ' + r.invalid + T(' baris dilewati (bukan nomor)', ' lines skipped (not a number)') : '') + '. ' + T('Total: ', 'Total: ') + r.total + '.');
+    renderLeads();
+  } catch (e) { toast(e.message, true); }
+  $('knownImport').disabled = false;
+});
 
 // ---------- peringatan & catatan galat ----------
 const ALERT_KINDS = {
@@ -890,6 +975,8 @@ function renderStatus() {
     ? [['Bot', T('Belum pernah melapor ke dashboard ini. Nyalakan bot dengan penyimpanan bersama yang sama.', 'Has never reported to this dashboard. Start the bot with the same shared storage.')]]
     : [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Kabar lead lewat WA ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
         ['Google Sheet', st.sheet ? T('siap', 'ready') : T('belum diatur', 'not set')],
+        [T('Transkripsi pesan suara', 'Voice note transcription'), st.channels && st.channels.stt ? T('siap', 'ready') : T('belum diatur di .env bot (STT_API_KEY)', 'not set in the bot\'s .env (STT_API_KEY)')],
+        ...(st.quota ? [[T('Jatah penyimpanan dashboard', 'Dashboard storage quota'), st.quota]] : []),
         [T('Yang dibalas', 'Who gets a reply'), st.onlyNumbers ? T('MODE UJI: hanya ', 'TEST MODE: only ') + st.onlyNumbers + T(' nomor', ' numbers') : T('semua nomor', 'every number')],
         [T('Panggilan LLM hari ini', 'LLM calls today'), st.usage.calls + T(' dari batas ', ' of limit ') + st.usage.limit],
         ...(st.guard ? [[T('Pengaman nomor', 'Number safeguard'), st.guard]] : [])];
@@ -950,6 +1037,7 @@ async function save(quiet = false) {
     profile = r.profile;
     setDirty(false);
     renderAll();
+    if (leadData) renderLeads();
     if (!quiet) toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.') +
       (r.autoPdf ? ' ' + r.autoPdf + T(' produk baru otomatis dipasangi PDF.', ' new products were given a PDF automatically.') : ''));
   } catch (e) {

@@ -17,11 +17,11 @@ import { cfg, MINUTE } from './config';
 import { humanPause } from './pace';
 import { waTargets } from './notify';
 import { remoteEnabled } from './remote';
-import { pullProfile, startSync } from './sync';
+import { pullProfile, pushSoon, startSync } from './sync';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
-import { raiseAlert, setAlertWhatsApp } from './alerts';
+import { raiseAlert, setAlertWhatsApp, setDashboardSignal } from './alerts';
 import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
 import { setGuardListener } from './transport/sendguard';
@@ -155,6 +155,7 @@ export async function startApp(transport: Transport): Promise<void> {
     // Dashboard-nya di-hosting terpisah; bot ini hanya mengikuti apa yang disimpan di sana.
     await startSync();
     setBeforeTurn(() => pullProfile());
+    setDashboardSignal(pushSoon);
   } else if (cfg.adminPassword) {
     await startAdmin(localStore()).catch((e) =>
       console.error(`[dashboard] tidak bisa dinyalakan: ${e instanceof Error ? e.message : e}`)

@@ -5,7 +5,9 @@ import { join } from 'node:path';
 
 import { mediaDir, refreshBiz, saveBiz } from '../business';
 import { cfg, effectiveSettings } from '../config';
+import { sttEnabled } from '../llm/stt';
 import { emailReady, telegramReady, waTargets } from '../notify';
+import { remoteEnabled } from '../remote';
 import { llmEnabled, llmUsageToday } from '../llm/provider';
 import { sheetConfigured } from '../sinks/sheet';
 import { now } from '../clock';
@@ -13,6 +15,12 @@ import { applyBotSwitches, holdReason } from '../flow';
 import { recentAlerts, recentContacts, recentErrors, usageDays } from '../store';
 import { guardSummary } from '../transport/sendguard';
 import type { AdminStore, AlertItem, BotStatus, ErrorItem, LeadRow, UsageReport } from './stores';
+
+let quotaNow: (() => string) | null = null;
+/** Dipasang sync.ts (yang mengimpor berkas ini, bukan sebaliknya). */
+export function setQuotaReporter(fn: () => string): void {
+  quotaNow = fn;
+}
 
 export function alertItems(): AlertItem[] {
   return recentAlerts(50).map((a) => ({ at: a.at, kind: a.kind, text: a.text }));
@@ -26,7 +34,7 @@ export function leadRows(): LeadRow[] {
   // Tombol di halaman Lead berlaku tanpa menunggu pelanggan itu chat lagi.
   applyBotSwitches();
   const t = now();
-  return recentContacts(100).map((c) => ({
+  return recentContacts(200).map((c) => ({
     phone: c.phone,
     lead: c.lead,
     needsSales: Boolean(c.needs_sales),
@@ -34,7 +42,8 @@ export function leadRows(): LeadRow[] {
     lastAt: c.last_inbound_at,
     lastDir: c.last_dir,
     summary: c.summary ?? '',
-    hold: holdReason(c.address, t),
+    // Diimpor dengan "bot diam" tapi belum pernah chat: alamatnya belum ada, tandanya ada di kontak.
+    hold: c.pending_off ? 'tombol' : holdReason(c.address, t),
   }));
 }
 
@@ -48,7 +57,8 @@ export function botStatus(): Omit<BotStatus, 'reportedAt'> {
     sheet: sheetConfigured(),
     onlyNumbers: cfg.onlyNumbers.length,
     effective: effectiveSettings() as unknown as Record<string, number | boolean | string[]>,
-    channels: { email: emailReady(), telegram: telegramReady() },
+    channels: { email: emailReady(), telegram: telegramReady(), stt: sttEnabled() },
+    ...(remoteEnabled() ? { quota: quotaNow?.() } : {}),
     ...(cfg.transport === 'baileys' ? { guard: guardSummary() } : {}),
   };
 }

@@ -317,12 +317,14 @@ async function connect(): Promise<void> {
         phone, address: jid, text, waId: m.key.id ?? null,
         ...(m.pushName ? { profileName: m.pushName } : {}),
         ...(media ? { media } : {}),
-        ...(media === 'foto'
+        ...(media === 'foto' || media === 'suara'
           ? {
               fetchMedia: async () => {
                 const data = await downloadMediaMessage(m, 'buffer', {});
                 const inner = [m.message as Record<string, unknown>, ...unwrap((m.message ?? {}) as Record<string, unknown>)];
-                const mime = inner.map((x) => (x.imageMessage as { mimetype?: string } | undefined)?.mimetype).find(Boolean) ?? 'image/jpeg';
+                const mime =
+                  inner.map((x) => ((x.imageMessage ?? x.audioMessage) as { mimetype?: string } | undefined)?.mimetype).find(Boolean) ??
+                  (media === 'suara' ? 'audio/ogg' : 'image/jpeg');
                 return { data: data as Buffer, mime };
               },
             }

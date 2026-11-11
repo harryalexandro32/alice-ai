@@ -27,7 +27,7 @@ import { checkReply, llmBrain, type Brain } from '../brain';
 import { biz, editableView, fileById, referencedFiles, setPdfText, validate } from '../business';
 import { isPdf } from '../business/catalog';
 import type { MediaFile } from '../business/types';
-import { cfg } from '../config';
+import { cfg, normPhone } from '../config';
 import { llmEnabled } from '../llm/provider';
 import { matchProducts, pdfPlain, squash } from './pdftext';
 import type { AdminStore } from './stores';
@@ -263,6 +263,44 @@ export function createAdminHandler(store: AdminStore) {
         // Kapan bot terakhir melapor: tombol yang ditekan setelah itu belum dijalankan bot.
         reportedAt: (await store.status())?.reportedAt ?? null,
       });
+    }
+
+    // Pelanggan lama: daftar nomor (dan nama) yang sudah dikenal bisnis ini.
+    // Disimpan sebagai satu berkas di samping media; bot menariknya saat
+    // `knownAt` di profil berubah. Impor baru digabung dengan yang lama.
+    if (path === '/admin/api/known' && method === 'POST') {
+      const body = JSON.parse((await readBody(req, 400_000)).toString('utf8') || '{}') as { text?: string; off?: boolean };
+      const list = new Map<string, { phone: string; name?: string; off?: boolean }>();
+      if (biz.knownAt) {
+        const old = await store.getPhoto(`known-${biz.knownAt}.json`);
+        try {
+          for (const r of (JSON.parse(old?.toString('utf8') ?? '{"rows":[]}') as { rows: { phone: string; name?: string; off?: boolean }[] }).rows) list.set(r.phone, r);
+        } catch {
+          // berkas lama rusak: mulai dari daftar kosong
+        }
+      }
+      const before = list.size;
+      let invalid = 0;
+      for (const line of String(body.text ?? '').split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const [first, ...rest] = line.split(/[,;\t]/);
+        const phone = normPhone(first ?? '');
+        if (!phone) {
+          invalid += 1;
+          continue;
+        }
+        const name = label(rest.join(' '), 60);
+        list.set(phone, { phone, ...(name ? { name } : {}), ...(body.off ? { off: true } : {}) });
+      }
+      if (list.size === before && !invalid) return json(400, { error: 'Tidak ada nomor di daftar itu.' });
+      if (list.size > 5000) return json(400, { error: 'Maksimal 5.000 pelanggan lama.' });
+      const at = Date.now();
+      await store.putPhoto(`known-${at}.json`, Buffer.from(JSON.stringify({ rows: [...list.values()] })), 'application/json');
+      const previous = biz.knownAt;
+      await store.save({ knownAt: at, knownCount: list.size });
+      if (previous) await store.delPhoto(`known-${previous}.json`).catch(() => {});
+      console.log(`[dashboard] pelanggan lama: ${list.size - before} ditambahkan, total ${list.size}`);
+      return json(200, { ok: true, added: list.size - before, invalid, total: list.size, profile: editableView() });
     }
 
     if (path === '/admin/api/alerts' && method === 'GET') {

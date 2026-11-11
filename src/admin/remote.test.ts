@@ -134,6 +134,23 @@ const PNG = Buffer.from(
     assert.equal(st.transport, 'baileys');
     assert.ok(Date.now() - st.reportedAt < 5000);
 
+    // --- jatah harian: bot yang ramai tidak bisa menghabiskan jatah penyimpanan ---
+    {
+      const { DAILY_READS, DAILY_WRITES, quotaToday } = await import('../sync');
+      const quiet = console.warn;
+      console.warn = () => {};
+      resetSync();
+      const r0 = reads;
+      for (let i = 0; i < DAILY_READS + 40; i++) { resetSync(); await pullProfile(true); }
+      assert.ok(reads - r0 <= DAILY_READS, `pembacaan melewati jatah: ${reads - r0}`);
+      let wrote = 0;
+      for (let i = 0; i < DAILY_WRITES + 20; i++) wrote += (await pushSnapshot(true)) ? 1 : 0;
+      assert.ok(wrote <= DAILY_WRITES && wrote > 0, `penulisan: ${wrote}`);
+      assert.equal(await pushSnapshot(true), false, 'jatah habis: tidak menulis lagi hari ini');
+      assert.match(quotaToday(), new RegExp(`^${DAILY_READS}/${DAILY_READS} baca · ${DAILY_WRITES}/${DAILY_WRITES} tulis`));
+      console.warn = quiet;
+    }
+
     // Foto dilepas dari produk: hilang dari penyimpanan bersama juga.
     await call('/admin/api/profile', jsonInit('PUT', { products: [{ ...product, photos: [] }] }));
     assert.ok(!files.has(`gfan/media/${photo.file}`));

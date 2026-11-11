@@ -49,7 +49,9 @@ export interface BotStatus {
   /** Pengaturan yang sedang berlaku di bot (.env + yang diubah di dashboard). */
   effective?: Record<string, number | boolean | string[]>;
   /** Jalur notifikasi yang kredensialnya sudah diisi di .env bot. */
-  channels?: { email: boolean; telegram: boolean };
+  channels?: { email: boolean; telegram: boolean; stt?: boolean };
+  /** Pemakaian jatah penyimpanan bersama hari ini. */
+  quota?: string;
   /** Kapan bot terakhir melapor (ms). Null = dashboard satu proses dengan bot. */
   reportedAt: number | null;
 }
@@ -92,10 +94,15 @@ export interface AdminStore {
 
 export function blobStore(): AdminStore {
   let current: Partial<Editable> = {};
-  const snapshot = () => getJson<Snapshot>(remotePath.snapshot());
+  // Satu permintaan dashboard sering butuh beberapa bagian laporan yang sama
+  // (status + peringatan + galat). Tiap pembacaan memakai jatah penyimpanan,
+  // jadi laporannya dibaca sekali per permintaan: refresh() membuang ingatannya.
+  let memo: Promise<Snapshot | null> | null = null;
+  const snapshot = () => (memo ??= getJson<Snapshot>(remotePath.snapshot()));
 
   return {
     async refresh() {
+      memo = null;
       current = (await getJson<Partial<Editable>>(remotePath.profile())) ?? {};
       applyOverrides(current);
     },

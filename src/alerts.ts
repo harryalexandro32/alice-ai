@@ -39,6 +39,16 @@ const QUIET: Record<AlertKind, number> = {
   'bot-mati': 10 * MINUTE,
 };
 
+let signal: (() => void) | null = null;
+/** Dipasang app.ts: minta laporan ke dashboard online dikirim segera, bukan menunggu jadwal. */
+export function setDashboardSignal(fn: (() => void) | null): void {
+  signal = fn;
+}
+/** Ada yang perlu segera terlihat di dashboard (peringatan, lead baru). */
+export function signalDashboard(): void {
+  signal?.();
+}
+
 let viaWhatsApp: ((phone: string, text: string) => Promise<unknown>) | null = null;
 /** Dipasang app.ts: kirim teks ke satu nomor ("self" = nomor bot sendiri) lewat WhatsApp. */
 export function setAlertWhatsApp(fn: ((phone: string, text: string) => Promise<unknown>) | null): void {
@@ -61,6 +71,7 @@ export function raiseAlert(kind: AlertKind, text: string, opts: { key?: string; 
     // Database belum terbuka (mis. gagal sangat awal): tetap tampil di log.
     console.error(`[peringatan] tidak tercatat: ${e instanceof Error ? e.message : e}`);
   }
+  signalDashboard();
   const title = `⚠️ ${ALERT_TITLES[kind]} — ${biz.brand}`;
   console.error(`[peringatan] ${ALERT_TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
   void deliverExternal(kind, title, text);

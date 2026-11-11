@@ -35,6 +35,12 @@ export interface Contact {
   summary: string | null;
   /** Nama profil WhatsApp-nya, apa adanya (belum tentu nama orang). */
   wa_name: string | null;
+  /** Kapan staf terakhir menandai "sudah ditangani" (ms), atau null. */
+  handled_at: number | null;
+  /** 1 = pelanggan lama yang diimpor pemilik (bukan orang baru). */
+  imported: number;
+  /** 1 = diimpor dengan "bot diam"; diterapkan begitu alamat chatnya diketahui. */
+  pending_off: number;
 }
 
 export interface OutboxRow {
@@ -93,6 +99,12 @@ export function openDb(path: string): void {
       key TEXT NOT NULL DEFAULT '',
       text TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS quota (
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      n INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (day, kind)
+    );
     CREATE TABLE IF NOT EXISTS errors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       at INTEGER NOT NULL,
@@ -123,6 +135,9 @@ export function openDb(path: string): void {
   const cols = (db.prepare('PRAGMA table_info(contacts)').all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes('summary')) db.exec('ALTER TABLE contacts ADD COLUMN summary TEXT');
   if (!cols.includes('wa_name')) db.exec('ALTER TABLE contacts ADD COLUMN wa_name TEXT');
+  if (!cols.includes('handled_at')) db.exec('ALTER TABLE contacts ADD COLUMN handled_at INTEGER');
+  if (!cols.includes('imported')) db.exec('ALTER TABLE contacts ADD COLUMN imported INTEGER NOT NULL DEFAULT 0');
+  if (!cols.includes('pending_off')) db.exec('ALTER TABLE contacts ADD COLUMN pending_off INTEGER NOT NULL DEFAULT 0');
   // Percakapan yang sudah pernah dibalas admin sebelum tabel ini ada.
   db.exec(`
     INSERT OR IGNORE INTO human_seen (address, at)
@@ -161,7 +176,7 @@ export function createContact(phone: string, address: string, at: number): Conta
 
 const UPDATABLE = new Set<keyof Contact>([
   'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
-  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name',
+  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name', 'handled_at', 'pending_off',
 ]);
 
 export function updateContact(phone: string, patch: Partial<Contact>): Contact {
@@ -244,6 +259,37 @@ export function switchAppliedAt(phone: string): number {
 
 export function markSwitchApplied(phone: string, at: number): void {
   db.prepare('INSERT INTO switch_applied (phone, at) VALUES (?, ?) ON CONFLICT(phone) DO UPDATE SET at = excluded.at').run(phone, at);
+}
+
+/** Pakai satu jatah harian (penyimpanan bersama); mengembalikan jumlah terpakai. */
+export function quotaUse(day: string, kind: string): number {
+  db.prepare('INSERT INTO quota (day, kind, n) VALUES (?, ?, 1) ON CONFLICT(day, kind) DO UPDATE SET n = n + 1').run(day, kind);
+  return quotaUsed(day, kind);
+}
+
+export function quotaUsed(day: string, kind: string): number {
+  const r = db.prepare('SELECT n FROM quota WHERE day = ? AND kind = ?').get(day, kind) as { n: number } | undefined;
+  return r ? Number(r.n) : 0;
+}
+
+/**
+ * Catat pelanggan lama yang diimpor pemilik. Kontak yang sudah ada tidak
+ * ditimpa; hanya namanya diisi kalau belum ada. Mengembalikan true kalau
+ * kontaknya baru dibuat.
+ */
+export function importContact(phone: string, lead: Record<string, string>, off: boolean, at: number): boolean {
+  const existing = getContact(phone);
+  if (!existing) {
+    // last_inbound_at 0: belum pernah chat dengan bot, jadi tidak ikut daftar "terbaru".
+    db.prepare(
+      'INSERT INTO contacts (phone, address, lead, first_seen_at, last_inbound_at, last_dir, imported, pending_off) VALUES (?, ?, ?, ?, 0, ?, 1, ?)'
+    ).run(phone, '', JSON.stringify(lead), at, 'in', off ? 1 : 0);
+    return true;
+  }
+  const merged = { ...lead, ...existing.lead };
+  db.prepare('UPDATE contacts SET lead = ?, pending_off = ? WHERE phone = ?').run(JSON.stringify(merged), off && !existing.address ? 1 : existing.pending_off, phone);
+  if (off && existing.address) setBotOff(existing.address, at);
+  return false;
 }
 
 export interface ErrorRow {

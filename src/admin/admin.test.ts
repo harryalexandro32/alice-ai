@@ -271,6 +271,31 @@ const PNG = Buffer.from(
       const leads = await call('/admin/api/leads');
       assert.ok('reportedAt' in leads.body);
 
+      // --- Pelanggan lama: impor digabung, nomor dirapikan, baris ngawur dilewati ---
+      const imp = (text: string, off = false) => call('/admin/api/known', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, off }) });
+      const i1 = await imp('0812 3456 7890, Pak Budi\n+62 813-5550-1234\nbukan nomor\n\n');
+      assert.deepEqual([i1.body.added, i1.body.invalid, i1.body.total], [2, 1, 2]);
+      const at1 = biz.knownAt;
+      assert.ok(at1 > 0 && existsSync(join(mediaDir(), `known-${at1}.json`)));
+      await new Promise((r) => setTimeout(r, 5));
+      const i2 = await imp('081234567890; Budi Santoso\n081700000009, Bu Sari', true);
+      assert.deepEqual([i2.body.added, i2.body.total, i2.body.profile.knownCount], [1, 3, 3]);
+      assert.ok(!existsSync(join(mediaDir(), `known-${at1}.json`)), 'berkas impor lama dibuang');
+      const rows = JSON.parse(readFileSync(join(mediaDir(), `known-${biz.knownAt}.json`), 'utf8')).rows;
+      assert.deepEqual(rows, [
+        { phone: '+6281234567890', name: 'Budi Santoso', off: true },
+        { phone: '+6281355501234' },
+        { phone: '+6281700000009', name: 'Bu Sari', off: true },
+      ]);
+      assert.equal((await imp('   ')).status, 400);
+      assert.equal((await call('/admin/api/known', { method: 'POST', body: '{}' }, false)).status, 401);
+      // "Sudah ditangani" hanya menerima nomor dan waktu yang sah.
+      const hd = await put({ handled: { '+6281211110001': 1700000000000, 'x': 5, '+6281211110002': 'kapan' } });
+      assert.deepEqual(hd.body.profile.handled, { '+6281211110001': 1700000000000 });
+      assert.equal((await put({ settings: { followupSmart: false } })).status, 200);
+      assert.equal(cfg.followupSmart, false);
+      await put({ settings: {} });
+
       // Salam untuk nama yang sudah diketahui harus memuat {nama}.
       assert.match((await put({ greetingKnown: 'Halo, betul?' })).body.error, /\{nama\}/);
       assert.equal((await put({ greetingKnown: 'Halo Kak {nama}, betul?' })).status, 200);

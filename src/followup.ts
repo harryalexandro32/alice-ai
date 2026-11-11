@@ -8,13 +8,32 @@
  * begitu pelanggan atau manusia bicara.
  */
 
+import { followupBrain } from './brain';
 import { refreshBiz } from './business';
+import { llmEnabled } from './llm/provider';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
 import { contactName, missingFields, type Sender } from './flow';
 import { applyBotSwitches, humanHolds } from './flow';
-import { addMessage, followupCandidates, updateContact } from './store';
+import { addMessage, followupCandidates, recentMessages, updateContact, type Contact } from './store';
 import { followupText } from './texts';
+
+/** Menulis follow-up untuk satu pelanggan; null = pakai kalimat tetap. */
+export type FollowupWriter = (c: Contact, hours: number) => Promise<string | null>;
+
+const llmWriter: FollowupWriter = async (c, hours) => {
+  if (!cfg.followupSmart || !llmEnabled()) return null;
+  // Tanpa percakapan sungguhan tidak ada yang bisa disambung: kalimat tetap lebih jujur.
+  const history = recentMessages(c.phone, 12);
+  if (history.filter((m) => m.dir === 'in').length < 2 && !c.summary) return null;
+  return followupBrain({ known: c.lead, history, summary: c.summary, missing: missingFields(c).map((f) => f.label), hours });
+};
+
+let writer: FollowupWriter = llmWriter;
+/** Tes: ganti penulis follow-up. */
+export function setFollowupWriter(fn: FollowupWriter | null): void {
+  writer = fn ?? llmWriter;
+}
 
 /** Terlambat lebih dari ini (bot sempat mati) = dilewat, bukan dikirim basi. */
 const GRACE_MS = 6 * HOUR;
@@ -84,7 +103,14 @@ export async function runFollowups(send: Sender): Promise<number> {
       continue;
     }
 
-    const text = followupText(contactName(c), missingFields(c));
+    // Ditulis untuk percakapan ini kalau bisa; kalau LLM mati atau jawabannya
+    // ditolak pagar, kalimat tetap yang dipakai — follow-up tidak boleh batal.
+    let text = followupText(contactName(c), missingFields(c));
+    try {
+      text = (await writer(c, (t - c.last_inbound_at) / HOUR)) ?? text;
+    } catch (e) {
+      console.error(`[follow-up] ${c.phone}: penulis gagal, pakai kalimat tetap: ${e instanceof Error ? e.message : e}`);
+    }
     try {
       await send({ phone: c.phone, address: c.address }, text);
     } catch (e) {

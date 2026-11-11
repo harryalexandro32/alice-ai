@@ -58,6 +58,13 @@ export const cfg = {
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),
   llmModel: str('LLM_MODEL', 'deepseek-chat'),
   llmDailyLimit: num('LLM_DAILY_LIMIT', 1500),
+  // Pesan suara -> teks lewat layanan speech-to-text berformat OpenAI (opsional).
+  sttBaseUrl: str('STT_BASE_URL').replace(/\/+$/, ''),
+  sttApiKey: str('STT_API_KEY'),
+  sttModel: str('STT_MODEL', 'whisper-large-v3'),
+  sttLanguage: str('STT_LANGUAGE', 'id'),
+  // Follow-up ditulis LLM menurut isi percakapannya (kalau mati: kalimat tetap).
+  followupSmart: bool('FOLLOWUP_SMART', true),
   // Foto dari pelanggan ikut dikirim ke LLM untuk diamati (model harus bisa membaca gambar).
   llmVision: bool('LLM_VISION', true),
   // Tarif untuk menghitung perkiraan biaya di dashboard: USD per 1 juta token.
@@ -143,6 +150,8 @@ export type TunableKey = keyof typeof TUNABLE;
 export interface Settings extends Partial<Record<TunableKey, number>> {
   /** Foto dari pelanggan dianalisis LLM. */
   llmVision?: boolean;
+  /** Follow-up ditulis LLM menurut isi percakapan. */
+  followupSmart?: boolean;
   /** Mode uji: hanya nomor-nomor ini yang dilayani. Kosong = semua nomor. */
   onlyNumbers?: string[];
 }
@@ -154,12 +163,13 @@ export function applySettings(s: Settings): void {
   const c = cfg as unknown as Record<string, unknown>;
   for (const k of Object.keys(TUNABLE) as TunableKey[]) c[k] = typeof s[k] === 'number' ? s[k] : envDefaults[k];
   cfg.llmVision = typeof s.llmVision === 'boolean' ? s.llmVision : envDefaults.llmVision;
+  cfg.followupSmart = typeof s.followupSmart === 'boolean' ? s.followupSmart : envDefaults.followupSmart;
   cfg.onlyNumbers = Array.isArray(s.onlyNumbers) ? s.onlyNumbers : envDefaults.onlyNumbers;
 }
 
 /** Nilai yang sedang berlaku, untuk ditampilkan dashboard. */
 export function effectiveSettings(): Required<Settings> {
-  const out = { llmVision: cfg.llmVision, onlyNumbers: cfg.onlyNumbers } as Record<string, unknown>;
+  const out = { llmVision: cfg.llmVision, followupSmart: cfg.followupSmart, onlyNumbers: cfg.onlyNumbers } as Record<string, unknown>;
   for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = cfg[k];
   return out as unknown as Required<Settings>;
 }
