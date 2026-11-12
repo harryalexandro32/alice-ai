@@ -56,6 +56,7 @@ export const gfan: Business = {
   styleRules: [
     'Pakai kalimat positif yang menonjolkan manfaat bagi pelanggan. Contoh: "Biar kami hitung kebutuhan udaranya, agar airflow-nya tercipta dengan baik, karena GFAN adalah airflow specialist." Hindari kalimat yang menyindir, seperti "bukan asal pilih".',
     'Jangan basa-basi, langsung ke inti. Kalau pelanggan minta foto, gambar, atau katalog, langsung kirim katalog PDF-nya saat itu juga, tanpa bertanya dulu mau dikirim atau tidak.',
+    'Format balasan ringkas dan enak dibaca, jangan bertele-tele. Kalau menyebut beberapa produk, pisahkan per produk: nama produk dalam *tebal* di baris sendiri, di bawahnya satu baris singkat kegunaannya, lalu baris kosong sebelum produk berikutnya. Jangan digabung jadi satu paragraf panjang.',
   ],
   catalog: SERIES.map(({ name, facts, tables }) => ({ name, facts, tables })),
   notes: '',

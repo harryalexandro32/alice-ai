@@ -703,7 +703,8 @@ const tests: [string, () => Promise<void>][] = [
   }],
 
   ['aturan balasan dari pemilik masuk ke prompt; lampiran dikirim tanpa minta izin', async () => {
-    assert.match(systemPrompt(), /ATURAN DARI PEMILIK[^\n]*\n- Pakai kalimat positif[\s\S]*airflow specialist[\s\S]*\n- Jangan basa-basi/);
+    assert.match(systemPrompt(), /ATURAN DARI PEMILIK[^\n]*\n- Pakai kalimat positif[\s\S]*airflow specialist[\s\S]*\n- Jangan basa-basi[\s\S]*\n- Format balasan ringkas/);
+    assert.match(systemPrompt(), /tiap pilihan jadi bloknya sendiri/);
     biz.styleRules = ['Selalu tutup dengan "Salam sejuk dari kami".'];
     assert.match(systemPrompt(), /ATURAN DARI PEMILIK[^\n]*\n- Selalu tutup dengan "Salam sejuk dari kami"\./);
     assert.ok(!/airflow specialist/.test(systemPrompt()), 'aturan pemilik menggantikan bawaan, bukan menumpuk');
