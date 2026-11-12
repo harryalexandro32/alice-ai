@@ -53,6 +53,10 @@ export const gfan: Business = {
     'Ruangannya dipakai untuk apa? (kamar, toilet, dapur, gudang, pabrik, …)',
     'Mau dipasang di mana: plafon, dinding, atau lewat ducting?',
   ],
+  styleRules: [
+    'Pakai kalimat positif yang menonjolkan manfaat bagi pelanggan. Contoh: "Biar kami hitung kebutuhan udaranya, agar airflow-nya tercipta dengan baik, karena GFAN adalah airflow specialist." Hindari kalimat yang menyindir, seperti "bukan asal pilih".',
+    'Jangan basa-basi, langsung ke inti. Kalau pelanggan minta foto, gambar, atau katalog, langsung kirim katalog PDF-nya saat itu juga, tanpa bertanya dulu mau dikirim atau tidak.',
+  ],
   catalog: SERIES.map(({ name, facts, tables }) => ({ name, facts, tables })),
   notes: '',
 

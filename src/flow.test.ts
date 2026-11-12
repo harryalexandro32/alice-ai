@@ -16,12 +16,12 @@ import { biz } from './business';
 import { advance, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
 import { recipientsFor, waTargets } from './notify';
-import { greetingFor, handleHumanReply, handleInbound, holdReason, setBrain, setSender } from './flow';
+import { missingFields, greetingFor, handleHumanReply, handleInbound, holdReason, setBrain, setSender } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
 import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
 import { getContact, openDb, recentAlerts, updateContact, importContact } from './store';
-import { handoffText, NON_TEXT } from './texts';
+import { handoffText, NON_TEXT, noDash, followupText } from './texts';
 
 const HANDOFF = handoffText();
 import type { Transport } from './transport/types';
@@ -49,6 +49,7 @@ const R = (
 ): BrainResult => ({ reply, fields, intent, photos, docs, summary });
 
 const SEED_PRODUCTS = biz.products;
+const SEED_RULES = biz.styleRules;
 
 function fresh(): void {
   openDb(':memory:');
@@ -80,6 +81,7 @@ function fresh(): void {
   cfg.sttApiKey = '';
   cfg.sttBaseUrl = '';
   biz.handled = {};
+  biz.styleRules = SEED_RULES;
   biz.knownAt = 0;
   // Tes tidak pernah memanggil LLM sungguhan: bawaan = kalimat tetap.
   setFollowupWriter(async () => null);
@@ -349,9 +351,9 @@ const tests: [string, () => Promise<void>][] = [
     next = () => R('Datanya belum ada di saya, tim kami yang akan bantu ya.', { name: 'Budi' }, 'handoff');
     await say('bisa custom warna?');
     assert.equal(sales.length, 1);
-    assert.match(sales[0]!, /Bot tidak bisa menjawab — perlu dibantu/);
+    assert.match(sales[0]!, /Bot tidak bisa menjawab, perlu dibantu/);
     assert.match(sales[0]!, /bisa custom warna\?/);
-    assert.match(recentAlerts(5)[0]!.text, /Budi \(\+6281211110001\) — "bisa custom warna\?"/);
+    assert.match(recentAlerts(5)[0]!.text, /Budi \(\+6281211110001\): "bisa custom warna\?"/);
     assert.equal(recentAlerts(5)[0]!.kind, 'butuh-staf');
     await say('bisa nggak?');
     assert.equal(sales.length, 1, 'pertanyaan susulan dalam 30 menit tidak membanjiri staf');
@@ -662,6 +664,54 @@ const tests: [string, () => Promise<void>][] = [
     advance(23 * HOUR + MINUTE);
     assert.equal(await follow(), 1);
     assert.match(sent.at(-1)!, /Menyambung chat sebelumnya/);
+  }],
+
+  ['tanda pisah panjang tidak pernah keluar, dari sumber mana pun', async () => {
+    const dash = /[–—]/;
+    assert.equal(noDash('lalu arahkan model yang paling pas — bukan asal pilih.'), 'lalu arahkan model yang paling pas, bukan asal pilih.');
+    assert.equal(noDash('Kebutuhannya 288–384 m³/h, model 4 – 6'), 'Kebutuhannya 288-384 m³/h, model 4-6');
+    assert.equal(noDash('Model A — 5 pilihan —\n— cocok untuk toilet'), 'Model A, 5 pilihan\ncocok untuk toilet');
+    assert.equal(noDash('Siap —. Baik — , ya'), 'Siap. Baik, ya');
+    assert.equal(noDash('GFAF-40A tetap utuh, begitu juga 10-15 dan e-mail'), 'GFAF-40A tetap utuh, begitu juga 10-15 dan e-mail');
+    assert.equal(parseBrain('{"reply":"Bisa, Pak — tinggal pilih ukurannya."}')?.reply, 'Bisa, Pak, tinggal pilih ukurannya.');
+
+    // Jawaban LLM, salam dari dashboard, follow-up, dan keterangan lampiran: semuanya disaring.
+    const greeting = biz.greeting;
+    biz.greeting = 'Halo — selamat datang di toko kami — ada yang bisa dibantu?';
+    biz.files = [{ id: 'd0000000b', file: 'd0000000b.pdf', name: 'Katalog — Seri A.pdf' }];
+    biz.products = [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: 'd0000000b' }];
+    try {
+      next = () => R('Ada, Pak — ini katalognya. Ukuran 16–20 inci tersedia.', {}, 'info', [], ['d0000000b']);
+      await say('halo ada katalog?');
+      setFollowupWriter(async () => 'Halo Pak — jadi yang mana?');
+      advance(23 * HOUR + MINUTE);
+      await follow();
+      assert.equal(sent[0], 'Halo, selamat datang di toko kami, ada yang bisa dibantu?');
+      assert.equal(sent[1], 'Ada, Pak, ini katalognya. Ukuran 16-20 inci tersedia.');
+      assert.equal(sent[2], '[pdf:Katalog Seri A.pdf] Katalog, Seri A');
+      assert.equal(sent[3], 'Halo Pak, jadi yang mana?');
+      assert.ok(sent.every((t) => !dash.test(t)), 'tidak ada satu pun kiriman yang membawa tanda pisah panjang');
+      // Kabar ke staf dan kalimat tetap mesin juga bersih.
+      next = () => null;
+      await say('halo', '+6281377770041');
+      await say('harga berapa', '+6281377770041');
+      assert.ok([...sent, ...sales].every((t) => !dash.test(t)));
+      assert.ok(!dash.test(followupText('Budi', [])) && !dash.test(followupText(null, missingFields({ lead: {} }))));
+    } finally {
+      biz.greeting = greeting;
+    }
+  }],
+
+  ['aturan balasan dari pemilik masuk ke prompt; lampiran dikirim tanpa minta izin', async () => {
+    assert.match(systemPrompt(), /ATURAN DARI PEMILIK[^\n]*\n- Pakai kalimat positif[\s\S]*airflow specialist[\s\S]*\n- Jangan basa-basi/);
+    biz.styleRules = ['Selalu tutup dengan "Salam sejuk dari kami".'];
+    assert.match(systemPrompt(), /ATURAN DARI PEMILIK[^\n]*\n- Selalu tutup dengan "Salam sejuk dari kami"\./);
+    assert.ok(!/airflow specialist/.test(systemPrompt()), 'aturan pemilik menggantikan bawaan, bukan menumpuk');
+    biz.styleRules = [];
+    assert.ok(!/ATURAN DARI PEMILIK/.test(systemPrompt()), 'tanpa aturan, bagiannya tidak ada');
+    assert.match(systemPrompt(), /Jangan\s+menawarkannya dulu/);
+    assert.match(systemPrompt(), /minta foto tetapi kolom Foto produk itu "-" sedangkan PDF-nya\s+ada: langsung lampirkan PDF-nya/);
+    assert.match(systemPrompt(), /Jangan pernah memakai tanda pisah panjang/);
   }],
 
   ['tombol bot per pelanggan: dimatikan, lalu dikembalikan ke bot', async () => {

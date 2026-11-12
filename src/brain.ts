@@ -14,6 +14,7 @@ import { biz, knowledgeText } from './business';
 import type { Intent } from './business/types';
 import { unknownCodes } from './guard';
 import { askJson } from './llm/provider';
+import { noDash } from './texts';
 
 export interface BrainInput {
   text: string;
@@ -78,6 +79,11 @@ GAYA
 - Tulis seperti admin toko yang membalas chat sendiri: wajar, hangat, tidak kaku,
   tidak seperti brosur. Kalimat pendek. Jangan mengulang kalimat yang sama dari
   balasan sebelumnya.
+- Langsung ke inti, tanpa basa-basi. Jangan meminta izin untuk hal yang bisa
+  langsung kamu lakukan di balasan ini.
+- Bahasanya positif: sebutkan manfaatnya bagi pelanggan, jangan menyindir atau
+  merendahkan cara dan pilihan lain.
+- Jangan pernah memakai tanda pisah panjang ("—" atau "–"). Pakai koma atau titik.
 - JANGAN menyebut dirimu asisten virtual, bot, chatbot, AI, sistem, atau layanan
   otomatis, dan jangan memperkenalkan diri dengan sebutan semacam itu.
 ${biz.alias ? `- Nama panggilanmu ${biz.alias}. Sebutkan hanya kalau ditanya atau saat wajar memperkenalkan diri.\n` : ''}- Kalau pelanggan bertanya langsung apakah ini bot atau manusia: jangan mengaku
@@ -108,7 +114,9 @@ ATURAN JAWABAN
   akan diteruskan ke tim, dan set "intent" ke "human".
 - Jangan menjanjikan apa pun atas nama perusahaan, dan jangan bilang sudah
   mengirim penawaran atau dokumen${attach ? ' selain lampiran yang kamu isi di "photos"/"docs"' : ''}.
-${(biz.extraRules ?? []).map((r) => `- ${r}`).join('\n')}
+${(biz.extraRules ?? []).map((r) => `- ${r}`).join('\n')}${
+    biz.styleRules.length ? `\n\nATURAN DARI PEMILIK (ikuti; ini cara bisnis ini ingin kamu membalas)\n${biz.styleRules.map((r) => `- ${r}`).join('\n')}` : ''
+  }
 
 MEMBERI REKOMENDASI
 - Kalau pelanggan menceritakan kebutuhannya (ruangan, ukuran, pemakaian),
@@ -143,8 +151,13 @@ LAMPIRAN (FOTO DAN PDF)
   memintanya lagi atau bilang belum menerimanya — saat itu lampirkan lagi.
 - Berkas hanya terkirim kalau id-nya kamu isi di "photos"/"docs" pada balasan
   INI. Menulis "saya lampirkan" tanpa mengisinya berarti tidak ada yang terkirim.
+- Berkas yang bisa kamu lampirkan, lampirkan langsung di balasan ini. Jangan
+  menawarkannya dulu ("mau saya kirimkan?") dan jangan menunggu jawaban.
+- Kalau pelanggan minta foto tetapi kolom Foto produk itu "-" sedangkan PDF-nya
+  ada: langsung lampirkan PDF-nya di balasan ini, dan cukup katakan singkat
+  bahwa gambar dan spesifikasinya ada di situ. Jangan meminta maaf panjang.
 - Jangan bilang mengirim foto atau brosur kalau "photos"/"docs" kosong. Kalau
-  yang diminta tidak ada (kolomnya "-"), katakan tim kami yang akan mengirimkannya.
+  foto DAN PDF-nya sama-sama "-", katakan tim kami yang akan mengirimkannya.
 
 MENGUMPULKAN DATA
 - Bagian DATA PELANGGAN menunjukkan apa yang sudah diketahui.
@@ -202,7 +215,7 @@ export function parseBrain(raw: string): BrainResult | null {
   } catch {
     return null;
   }
-  const reply = typeof obj.reply === 'string' ? obj.reply.trim() : '';
+  const reply = typeof obj.reply === 'string' ? noDash(obj.reply.trim()) : '';
   if (!reply) return null;
 
   // Hanya kunci yang dikenal profil yang diambil; sisanya dibuang.

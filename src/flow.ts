@@ -27,7 +27,7 @@ import {
   markSwitchApplied, outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, switchAppliedAt,
   updateContact, type Contact,
 } from './store';
-import { askMissing, handoffText, mediaAck, NON_TEXT } from './texts';
+import { askMissing, handoffText, mediaAck, noDash, NON_TEXT } from './texts';
 import type { MediaKind } from './transport/types';
 
 /** `image` = path file foto atau PDF; kalau ada, `text` menjadi keterangannya. */
@@ -86,7 +86,10 @@ function bareGreeting(text: string): boolean {
   );
 }
 
-async function reply(c: Contact, text: string): Promise<Contact> {
+async function reply(c: Contact, raw: string): Promise<Contact> {
+  // Satu pintu untuk semua balasan ke pelanggan: salam dari dashboard, kalimat
+  // tetap, maupun jawaban LLM sama-sama lewat sini.
+  const text = noDash(raw);
   await send({ phone: c.phone, address: c.address }, text);
   addMessage(c.phone, 'out', text, now());
   return updateContact(c.phone, { last_dir: 'out', last_out_text: text });
@@ -209,7 +212,7 @@ function notifyStaff(c: Contact, kind: string, lastMessage: string, at: number):
   outboxAdd('sales', p, at);
   outboxAdd('sheet', p, at);
   // WhatsApp-nya sudah lewat antrean di atas; di sini hanya dashboard + Telegram.
-  raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}) — "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
+  raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}): "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
   return updateContact(c.phone, { handoff_sent_at: at });
 }
 
@@ -388,14 +391,14 @@ export async function handleInbound(m: Inbound): Promise<void> {
         if (!f) continue;
         // Satu PDF bisa dipakai banyak produk, jadi ia dikirim dengan namanya
         // sendiri — bukan nama produk pertama yang kebetulan memakainya.
-        const label = kind === 'pdf' ? f.name.replace(/\.pdf$/i, '') : (productOfFile(id) ?? f.name);
+        const label = noDash(kind === 'pdf' ? f.name.replace(/\.pdf$/i, '') : (productOfFile(id) ?? f.name));
         const mark = `[${kind}:${id}] ${label}`;
         if (outs.filter((t) => t.startsWith(`[${kind}:${id}]`)).length >= MAX_SAME_FILE) {
           console.log(`[alur] ${c.phone}: ${kind} ${id} sudah ${MAX_SAME_FILE} kali terkirim, tidak diulang`);
           continue;
         }
         try {
-          const fileName = kind === 'pdf' ? `${label.replace(/[^\w .()+-]+/g, ' ').trim() || 'brosur'}.pdf` : undefined;
+          const fileName = kind === 'pdf' ? `${label.replace(/[^\w .()+-]+/g, ' ').replace(/\s+/g, ' ').trim() || 'brosur'}.pdf` : undefined;
           await send({ phone: c.phone, address: c.address }, label, join(mediaDir(), f.file), fileName);
           addMessage(c.phone, 'out', mark, now());
           console.log(`[alur] ${c.phone}: ${kind} terkirim — ${label}`);
@@ -419,13 +422,13 @@ export async function handleInbound(m: Inbound): Promise<void> {
       outboxAdd('sales', p, at);
       outboxAdd('sheet', p, at);
       // WhatsApp lewat antrean di atas; email dan Telegram langsung.
-      void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} — ${biz.brand}`, salesText(p));
+      void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} | ${biz.brand}`, salesText(p));
       signalDashboard();
       c = updateContact(c.phone, { lead_sent_at: at });
     } else if (handoff) {
       // Bot tidak bisa menjawab sendiri (di luar pengetahuannya, pelanggan minta
       // orang, atau balasannya ditolak pagar): staf dikabari, dengan pertanyaannya.
-      c = notifyStaff(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Bot tidak bisa menjawab — perlu dibantu', said, at);
+      c = notifyStaff(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Bot tidak bisa menjawab, perlu dibantu', said, at);
     }
   }
 

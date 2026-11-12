@@ -16,7 +16,7 @@ import { localMinutes, now } from './clock';
 import { contactName, missingFields, type Sender } from './flow';
 import { applyBotSwitches, humanHolds } from './flow';
 import { addMessage, followupCandidates, recentMessages, updateContact, type Contact } from './store';
-import { followupText } from './texts';
+import { followupText, noDash } from './texts';
 
 /** Menulis follow-up untuk satu pelanggan; null = pakai kalimat tetap. */
 export type FollowupWriter = (c: Contact, hours: number) => Promise<string | null>;
@@ -108,6 +108,7 @@ export async function runFollowups(send: Sender): Promise<number> {
     let text = followupText(contactName(c), missingFields(c));
     try {
       text = (await writer(c, (t - c.last_inbound_at) / HOUR)) ?? text;
+      text = noDash(text);
     } catch (e) {
       console.error(`[follow-up] ${c.phone}: penulis gagal, pakai kalimat tetap: ${e instanceof Error ? e.message : e}`);
     }

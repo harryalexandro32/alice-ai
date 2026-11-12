@@ -26,6 +26,7 @@ import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
 import { setGuardListener } from './transport/sendguard';
 import { addUsage, openDb } from './store';
+import { noDash } from './texts';
 import type { Transport, TransportInbound } from './transport/types';
 
 /**
@@ -124,7 +125,15 @@ function flush(phone: string): void {
   );
 }
 
-export async function startApp(transport: Transport): Promise<void> {
+/** Pagar terakhir: tidak ada teks yang keluar lewat WhatsApp membawa tanda pisah panjang. */
+function withoutDashes(transport: Transport): Transport {
+  const send = transport.send.bind(transport);
+  transport.send = (to, text, opts) => send(to, noDash(text), opts);
+  return transport;
+}
+
+export async function startApp(raw: Transport): Promise<void> {
+  const transport = withoutDashes(raw);
   openDb(cfg.dbPath);
   // Mulai sekarang semua galat juga tersimpan untuk dashboard.
   installErrorLog();

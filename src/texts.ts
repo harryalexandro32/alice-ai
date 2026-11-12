@@ -7,6 +7,25 @@
 import { biz } from './business';
 import type { LeadField } from './business/types';
 
+/**
+ * Buang tanda pisah panjang (— dan –) dari teks yang dikirim bot.
+ *
+ * Tanda itu jarang diketik orang di WhatsApp dan membuat balasan terasa
+ * buatan mesin. Di antara angka ia menjadi tanda hubung biasa ("23–25" ->
+ * "23-25"); di tempat lain menjadi koma. Dipasang di semua jalan keluar, jadi
+ * berlaku juga untuk teks yang ditulis pemilik di dashboard.
+ */
+export function noDash(text: string): string {
+  return text
+    .replace(/(\d)[ \t]*[\u2013\u2014][ \t]*(\d)/g, '$1-$2')
+    .replace(/[ \t]*\u2014[ \t]*/g, ', ')
+    .replace(/[ \t]+\u2013[ \t]+/g, ', ')
+    .replace(/\u2013/g, '-')
+    .replace(/^[ \t]*,[ \t]*/gm, '')
+    .replace(/,[ \t]*$/gm, '')
+    .replace(/,[ \t]*([,.!?:;])/g, '$1');
+}
+
 export const NON_TEXT =
   'Mohon maaf, boleh diketik saja pertanyaannya? 🙏 Biar bisa langsung kami bantu.';
 
@@ -34,7 +53,7 @@ export function askMissing(missing: LeadField[]): string {
 
 export function followupText(name: string | null, missing: LeadField[]): string {
   const hi = name ? `Halo ${name}` : 'Halo';
-  const open = `${hi}, kami dari ${biz.brand} 🙏 Menyambung chat sebelumnya — `;
+  const open = `${hi}, kami dari ${biz.brand} 🙏 Menyambung chat sebelumnya, `;
   return missing.length
     ? `${open}supaya tim kami bisa bantu dengan tepat, boleh diinfokan ${listFields(missing)}?`
     : `${open}${biz.followupClosing}`;

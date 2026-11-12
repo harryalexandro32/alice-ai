@@ -144,6 +144,11 @@ export interface Business {
   /** Pertanyaan untuk memahami kebutuhan pelanggan sebelum menyarankan produk. */
   questions: string[];
   /**
+   * Aturan gaya dan cara membalas yang ditulis pemilik, satu aturan per baris
+   * ("pakai kalimat positif", "jangan basa-basi", contoh kalimat yang disukai).
+   */
+  styleRules: string[];
+  /**
    * True = begitu admin manusia membalas atau mengirimi seorang pelanggan dari
    * HP, bot tidak ikut campur lagi di chat itu (tanpa batas waktu). False =
    * bot hanya diam selama HUMAN_PAUSE_HOURS, lalu aktif lagi.
@@ -177,7 +182,7 @@ export interface Business {
 
 /** Kunci yang boleh diubah pemilik lewat dashboard. */
 export const EDITABLE = [
-  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions',
+  'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions', 'styleRules',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
   'files', 'logo', 'stopAfterHuman', 'botSwitch', 'handled', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];

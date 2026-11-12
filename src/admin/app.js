@@ -465,6 +465,27 @@ $('addQuestion').addEventListener('click', () => {
   inputs[inputs.length - 1].focus();
 });
 
+// ---------- aturan gaya balasan ----------
+function renderRules() {
+  const list = profile.styleRules;
+  const body = el('tbody', {}, ...list.map((r, i) => {
+    // Aturan bisa panjang: kotak teks yang membungkus, bukan satu baris.
+    const box = el('textarea', { rows: Math.min(5, Math.max(2, Math.ceil((r || '').length / 90))), value: r, placeholder: T('mis. Pakai kalimat positif dan langsung ke inti.', 'e.g. Pakai kalimat positif dan langsung ke inti.'), style: 'border:0;border-radius:0;background:transparent' });
+    box.addEventListener('input', () => { list[i] = box.value; setDirty(true, 'styleRules'); });
+    return el('tr', {}, el('td', {}, box), el('td', { className: 'act' }, xBtn(T('Hapus aturan', 'Delete rule'), () => { list.splice(i, 1); setDirty(true, 'styleRules'); renderRules(); })));
+  }));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada aturan. Bot memakai gaya bawaannya.', 'No rules yet. The bot uses its default style.') })));
+  $('rules').replaceChildren(headRow([T('Aturan', 'Rule')]), body);
+}
+$('addRule').addEventListener('click', () => {
+  if (profile.styleRules.length >= 20) return toast(T('Maksimal 20 aturan.', '20 rules max.'), true);
+  profile.styleRules.push('');
+  setDirty(true, 'styleRules');
+  renderRules();
+  const boxes = $('rules').querySelectorAll('textarea');
+  boxes[boxes.length - 1].focus();
+});
+
 // ---------- daftar produk ----------
 const P_COLS = ['name', 'description', 'price', 'stock'];
 const blankProduct = () => ({ name: '', description: '', price: '', stock: '', photos: [], pdf: '' });
@@ -1006,6 +1027,7 @@ function renderAll() {
   renderLogo();
   renderFields();
   renderQuestions();
+  renderRules();
   renderProducts();
   renderPdfs();
   renderCatalog();

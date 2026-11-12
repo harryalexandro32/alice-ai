@@ -212,6 +212,10 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
     if (!Array.isArray(input.questions) || input.questions.length > 12) throw new Error('Pertanyaan kebutuhan: maksimal 12 baris');
     set('questions', input.questions.map((q, i) => text(q, 200, `Pertanyaan baris ${i + 1}`)).filter(Boolean));
   }
+  if ('styleRules' in input) {
+    if (!Array.isArray(input.styleRules) || input.styleRules.length > 20) throw new Error('Aturan balasan: maksimal 20 baris');
+    set('styleRules', input.styleRules.map((r, i) => text(r, 400, `Aturan balasan baris ${i + 1}`)).filter(Boolean));
+  }
   if ('catalog' in input) {
     const catalog = validateCatalog(input.catalog);
     if (renderCatalog(catalog).length > 60_000) throw new Error('Data teknis terlalu besar (maksimal ±60.000 karakter)');

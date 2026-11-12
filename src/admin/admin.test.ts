@@ -296,6 +296,13 @@ const PNG = Buffer.from(
       assert.equal(cfg.followupSmart, false);
       await put({ settings: {} });
 
+      // Aturan balasan dari pemilik: baris kosong dibuang, panjang dan jumlahnya dibatasi.
+      const sr = await put({ styleRules: ['  Pakai kalimat positif.  ', '', 'Langsung kirim katalog.'] });
+      assert.deepEqual(sr.body.profile.styleRules, ['Pakai kalimat positif.', 'Langsung kirim katalog.']);
+      assert.match(systemPrompt(), /ATURAN DARI PEMILIK[^\n]*\n- Pakai kalimat positif\.\n- Langsung kirim katalog\./);
+      assert.match((await put({ styleRules: Array.from({ length: 21 }, () => 'x') })).body.error, /maksimal 20/);
+      assert.match((await put({ styleRules: ['x'.repeat(401)] })).body.error, /terlalu panjang/);
+
       // Salam untuk nama yang sudah diketahui harus memuat {nama}.
       assert.match((await put({ greetingKnown: 'Halo, betul?' })).body.error, /\{nama\}/);
       assert.equal((await put({ greetingKnown: 'Halo Kak {nama}, betul?' })).status, 200);

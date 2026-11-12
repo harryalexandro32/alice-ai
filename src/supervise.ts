@@ -62,7 +62,7 @@ async function tell(text: string): Promise<void> {
     initBiz();
     refreshBiz(true);
     const { deliverExternal } = await import('./notify');
-    await deliverExternal('bot-mati', `⚠️ Bot berhenti — ${biz.brand}`, text);
+    await deliverExternal('bot-mati', `⚠️ Bot berhenti | ${biz.brand}`, text);
   } catch (e) {
     say(`kabar "bot mati" tidak terkirim: ${e instanceof Error ? e.message : e}`);
   }

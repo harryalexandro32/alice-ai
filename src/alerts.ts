@@ -72,7 +72,7 @@ export function raiseAlert(kind: AlertKind, text: string, opts: { key?: string; 
     console.error(`[peringatan] tidak tercatat: ${e instanceof Error ? e.message : e}`);
   }
   signalDashboard();
-  const title = `⚠️ ${ALERT_TITLES[kind]} — ${biz.brand}`;
+  const title = `⚠️ ${ALERT_TITLES[kind]} | ${biz.brand}`;
   console.error(`[peringatan] ${ALERT_TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
   void deliverExternal(kind, title, text);
   if (opts.whatsapp !== false && viaWhatsApp) {

@@ -52,7 +52,7 @@ const waLink = (phone: string): string =>
 
 export function salesText(p: LeadPayload): string {
   return (
-    `🔔 *${p.kind}* — ${biz.brand}\n` +
+    `🔔 *${p.kind}* | ${biz.brand}\n` +
     p.fields.map(([label, v]) => `${cap(label)}: ${v ?? '-'}\n`).join('') +
     (p.needsSales ? `Catatan: menanyakan ${biz.handoffLabel}\n` : '') +
     `Pesan terakhir: "${p.lastMessage}"\n` +
