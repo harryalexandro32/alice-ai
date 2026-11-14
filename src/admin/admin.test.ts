@@ -515,6 +515,12 @@ const PNG = Buffer.from(
         assert.match(r.headers.get('content-type') ?? '', type);
         assert.equal(r.headers.get('cache-control'), 'no-cache');
       }
+      // Teks dashboard tanpa tanda pisah panjang (em dash): pakai koma, titik dua, atau titik.
+      for (const name of ['page.html', 'app.js', 'app.css']) {
+        const text = readFileSync(join(__dirname, name), 'utf8');
+        const at = text.indexOf('\u2014');
+        assert.equal(at, -1, `${name} masih memuat tanda pisah panjang: "${text.slice(Math.max(0, at - 40), at + 40)}"`);
+      }
       for (const id of ['login', 'assets', 'health', 'webhook', 'admin', 'logout']) {
         assert.equal((await post('/api/projects', { id, name: 'X', template: 'generic' })).status, 400, `id "${id}" dipakai alamat dashboard`);
       }

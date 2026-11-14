@@ -60,7 +60,7 @@ export interface Contact {
   note: string | null;
 }
 
-export type OutboxKind = 'sales' | 'sheet' | 'reply';
+export type OutboxKind = 'sales' | 'reply';
 
 export interface OutboxRow {
   id: number;

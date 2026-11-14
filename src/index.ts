@@ -9,7 +9,6 @@ import { cfg } from './config';
 import { openDb } from './db';
 import { markStopped } from './heartbeat';
 import { llmEnabled } from './llm/provider';
-import { sheetConfigured } from './sinks/sheet';
 
 async function main() {
   await openDb();
@@ -22,7 +21,6 @@ async function main() {
   console.log(
     `[bot] notifikasi sales: ${cfg.salesNumber === 'self' ? 'nomor bot sendiri' : (cfg.salesNumber ?? 'BELUM DIATUR')}`
   );
-  console.log(`[bot] Google Sheet: ${sheetConfigured() ? 'siap' : 'BELUM DIATUR'}`);
   console.log(
     `[bot] follow-up setelah ${cfg.followupAfterHours}–${Math.max(cfg.followupAfterHours, cfg.followupAfterHoursMax)} jam diam (diacak), jam ${cfg.followupStartHour}–${cfg.followupEndHour}` +
       (cfg.followupMaxHours ? `, paling lambat jam ke-${cfg.followupMaxHours}` : '')

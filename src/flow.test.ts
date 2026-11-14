@@ -1,7 +1,7 @@
 /**
  * Uji alur ujung-ke-ujung: LLM tiruan, jam tiruan, database di memori
- * (PostgreSQL versi WASM), di dalam proyek gfan. Tidak menyentuh WhatsApp,
- * Google, maupun API LLM.
+ * (PostgreSQL versi WASM), di dalam proyek gfan. Tidak menyentuh WhatsApp
+ * maupun API LLM.
  */
 
 import assert from 'node:assert/strict';
@@ -18,7 +18,7 @@ import { recipientsFor, waTargets } from './notify';
 import { missingFields, greetingFor, handleHumanReply, handleInbound, holdReason, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
-import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, setSheetWriter, type ReplyPayload } from './sinks/outbox';
+import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, type ReplyPayload } from './sinks/outbox';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
@@ -39,10 +39,10 @@ const T0 = Date.UTC(2026, 10, 10, 3, 0);
 
 let sent: string[] = [];
 let sales: string[] = [];
-let rows: string[][] = [];
 let brainCalls: BrainInput[] = [];
 let next: (i: BrainInput) => BrainResult | null = () => null;
-let sheetFails = 0;
+/** Berapa kali lagi notifikasi ke sales dibuat gagal (WhatsApp putus). */
+let salesFails = 0;
 
 const R = (
   reply: string,
@@ -74,9 +74,8 @@ async function fresh(): Promise<void> {
   cfg.onlyNumbers = [];
   sent = [];
   sales = [];
-  rows = [];
   brainCalls = [];
-  sheetFails = 0;
+  salesFails = 0;
   next = () => R('Baik.');
   biz.files = [];
   biz.products = SEED_PRODUCTS;
@@ -94,15 +93,12 @@ async function fresh(): Promise<void> {
     void sent.push(image ? `[${fileName ? 'pdf' : 'gambar'}:${fileName ?? image.split(/[\\/]/).pop()}] ${text}` : text)
   );
   setSalesNotifier(async (text) => {
+    if (salesFails > 0) {
+      salesFails -= 1;
+      throw new Error('wa down');
+    }
     sales.push(text);
     return true;
-  });
-  setSheetWriter(async (row) => {
-    if (sheetFails > 0) {
-      sheetFails -= 1;
-      throw new Error('sheet down');
-    }
-    rows.push(row);
   });
   setBrain(async (i) => {
     brainCalls.push(i);
@@ -149,7 +145,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.deepEqual(brainCalls[0]?.history, []);
   }],
 
-  ['data lead tergabung dari beberapa pesan; sales + Sheet dikabari tepat sekali', async () => {
+  ['data lead tergabung dari beberapa pesan; sales dikabari tepat sekali', async () => {
     await say('halo');
     next = () => R('Baik Pak Budi, di kota mana?', { name: 'Budi' });
     await say('saya Budi');
@@ -164,14 +160,9 @@ const tests: [string, () => Promise<void>][] = [
     assert.match(sales[0] ?? '', /Lead lengkap/);
     assert.match(sales[0] ?? '', /Nama: Budi\nKota\/alamat: Surabaya\nKebutuhannya: exhaust fan gudang/);
     assert.match(sales[0] ?? '', /wa\.me\/6281211110001/);
-    assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0]?.slice(1), [
-      'Lead lengkap', A, 'Budi', 'Surabaya', 'exhaust fan gudang', '', 'butuh exhaust buat gudang',
-    ]);
     next = () => R('Sama-sama.', { need: 'exhaust fan gudang 16 inci' });
     await say('yang 16 inci ya');
     assert.equal(sales.length, 1, 'tidak dikabari dua kali');
-    assert.equal(rows.length, 1);
     assert.equal((await getContact(A))?.lead.need, 'exhaust fan gudang 16 inci', 'koreksi menggantikan');
   }],
 
@@ -844,17 +835,17 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(brainCalls.length, 3);
   }],
 
-  ['Sheet gagal: lead tidak hilang, dicoba lagi', async () => {
-    sheetFails = 1;
+  ['notifikasi sales gagal: lead tidak hilang, dicoba lagi tepat sekali', async () => {
+    salesFails = 1;
     next = () => R('Terima kasih 🙏', { name: 'Adi', city: 'Solo', need: 'jet fan' });
     await say('Adi, Solo, butuh jet fan');
-    assert.equal(rows.length, 0);
-    assert.equal(sales.length, 1);
+    assert.equal(sales.length, 0, 'percobaan pertama gagal');
+    assert.ok(sent.some((t) => t.includes('Terima kasih')), 'balasan ke pelanggan tidak tertahan');
     await deliverOutbox();
-    assert.equal(rows.length, 1);
+    assert.equal(sales.length, 1, 'dicoba lagi di putaran berikutnya');
+    assert.match(sales[0] ?? '', /Lead lengkap[\s\S]*Adi/);
     await deliverOutbox();
-    assert.equal(rows.length, 1);
-    assert.equal(sales.length, 1);
+    assert.equal(sales.length, 1, 'yang sudah terkirim tidak dikirim lagi');
   }],
 
   ['pertanyaan yang dioper ke staf dicatat sekali untuk halaman Pengetahuan', async () => {

@@ -197,7 +197,7 @@ export const errors = pgTable(
   (t) => [index('errors_project').on(t.project, t.id)]
 );
 
-/** Antrean lead ke sales / Sheet; dicoba ulang sampai berhasil. */
+/** Antrean lead ke sales dan balasan dari dashboard; dicoba ulang sampai berhasil. */
 export const outbox = pgTable(
   'outbox',
   {

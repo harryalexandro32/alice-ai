@@ -12,7 +12,6 @@ import { cfg, effectiveSettings } from '../config';
 import { sttEnabled } from '../llm/stt';
 import { emailReady, telegramReady, waTargets } from '../notify';
 import { llmEnabled } from '../llm/provider';
-import { sheetConfigured } from '../sinks/sheet';
 import { now } from '../clock';
 import { holdFrom } from '../flow';
 import { currentProject } from '../project';
@@ -58,7 +57,6 @@ export async function botStatus(): Promise<BotStatus> {
     llm: llmEnabled() ? cfg.llmModel : null,
     usage: { calls: st?.usage_calls ?? 0, limit: st?.usage_limit ?? cfg.llmDailyLimit },
     sales: waTargets('lead').map((p) => (p === 'self' ? 'nomor bot sendiri' : p)).join(', ') || null,
-    sheet: sheetConfigured(),
     onlyNumbers: cfg.onlyNumbers.length,
     effective: effectiveSettings() as unknown as Record<string, number | boolean | string[]>,
     channels: { email: emailReady(), telegram: telegramReady(), stt: sttEnabled() },

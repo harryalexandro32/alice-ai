@@ -46,6 +46,7 @@
   <symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
 </svg>
 
@@ -83,16 +84,18 @@
     <h2 data-en="Import existing customers">Impor pelanggan lama</h2>
     <p class="help" data-en="People the business already knows should not be greeted like strangers. Paste their numbers, one per line, optionally followed by a comma and their name. When one of them writes, the bot skips the introduction and already knows the name. Importing the same number again just updates it.">Orang yang sudah dikenal bisnis ini tidak seharusnya disapa seperti orang asing. Tempel nomornya, satu per baris, boleh diikuti koma dan namanya. Saat salah satu dari mereka chat, bot melewati perkenalan dan sudah tahu namanya. Mengimpor nomor yang sama lagi hanya memperbaruinya.</p>
     <textarea rows="6" id="knownText" placeholder="081234567890, Pak Budi&#10;081298765432, Bu Sari&#10;081355501234"></textarea>
-    <label class="check" style="margin:12px 0 0"><input type="checkbox" id="knownOff"><span data-en="<b>Bot stays silent for these numbers</b> — staff handle them. (You can switch the bot on per customer later.)"><b>Bot diam untuk nomor-nomor ini</b> — staf yang menangani. (Bisa dinyalakan per pelanggan nanti.)</span></label>
+    <label class="check" style="margin:12px 0 0"><input type="checkbox" id="knownOff"><span class="ck"><span class="t" data-en="Bot stays silent for these numbers">Bot diam untuk nomor-nomor ini</span><small class="help" data-en="Staff handle them. (You can switch the bot on per customer later.)">Staf yang menangani. (Bisa dinyalakan per pelanggan nanti.)</small></span></label>
     <p class="help" id="knownCount" style="margin-top:10px"></p>
     <div class="actions"><button class="btn ghost" type="button" id="importCancel" data-en="Close">Tutup</button><button class="btn" id="knownImport"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Import">Impor</span></button></div>
   </form>
 </div>
 
+<!-- Bilah atas + bilah keadaan: satu kepala tetap (position: fixed). Tingginya diukur app.js ke --chrome-h. -->
+<header class="chrome" id="chrome">
 <div class="topbar">
-  <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><span class="mark">A</span><img class="logo" id="logoTop" alt=""></a>
+  <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><span class="mark">A</span></a>
   <div class="brand">Alice AI</div>
-  <span class="projwrap"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)" data-en-title="Project (one business, one WhatsApp number)"></select></span>
+  <span class="projwrap"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><img class="projlogo" id="logoTop" alt="" hidden><select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)" data-en-title="Project (one business, one WhatsApp number)"></select></span>
   <div class="spacer"></div>
   <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light / dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
   <div class="lang" id="lang" role="group" aria-label="Bahasa / Language"><span class="lang-ico"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></span><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
@@ -100,6 +103,7 @@
 </div>
 
 <div class="strip" id="strip" hidden></div>
+</header>
 
 <div class="app" id="app" hidden>
   <aside>
@@ -129,7 +133,6 @@
       </div>
       <div class="head-actions">
         <button class="btn ghost" id="tryBtn" type="button" hidden><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try talking">Coba bicara</span></button>
-        <button class="btn" id="save" type="button" disabled></button>
       </div>
     </div>
 
@@ -216,7 +219,7 @@
           </div>
         </div>
         <div class="card">
-          <div class="ch"><h2>Logo</h2><p class="help" data-en="Shown at the top of this dashboard. JPG, PNG or WebP, up to 4 MB. Applied after you save.">Tampil di bagian atas dashboard ini. JPG, PNG, atau WebP, maksimal 4 MB. Berlaku setelah disimpan.</p></div>
+          <div class="ch"><h2>Logo</h2><p class="help" data-en="Shown on the project switcher at the top of this dashboard. JPG, PNG or WebP, up to 4 MB. Applied after you save.">Tampil di pemilih proyek di bagian atas dashboard ini. JPG, PNG, atau WebP, maksimal 4 MB. Berlaku setelah disimpan.</p></div>
           <div class="cb">
             <div class="logo-row">
               <div class="logo-box" id="logoBox"></div>
@@ -231,7 +234,7 @@
             <label class="f"><span data-en="Greeting">Salam pembuka</span><textarea rows="6" data-key="greeting"></textarea><small data-en="Sent once, on the first message. It should already ask for everything in “Data collected” below.">Dikirim sekali, pada pesan pertama. Sebaiknya sudah meminta semua isian di “Data yang dikumpulkan” di bawah.</small></label>
             <label class="f"><span data-en="Greeting when the name is already known">Salam kalau namanya sudah diketahui</span><textarea rows="5" data-key="greetingKnown"></textarea><small data-en="When the WhatsApp profile name looks like a real person's name, this greeting is used instead: <code>{nama}</code> becomes that name and the bot only confirms it. Initials, nicknames, shop names and emoji are ignored. Leave empty to always use the normal greeting.">Kalau nama profil WhatsApp-nya tampak seperti nama orang, salam ini yang dipakai: <code>{nama}</code> diganti nama itu dan bot cukup memastikannya. Inisial, julukan, nama toko, dan emoji diabaikan. Kosongkan untuk selalu memakai salam biasa.</small></label>
             <div class="sub" data-en="Data collected">Data yang dikumpulkan</div>
-            <p class="help" style="margin-bottom:8px" data-en="Once everything is filled in, a summary goes to sales and is logged to Google Sheets. Row order = column order in the Sheet.">Begitu semuanya terisi, ringkasannya dikirim ke sales dan dicatat di Google Sheet. Urutan baris = urutan kolom di Sheet.</p>
+            <p class="help" style="margin-bottom:8px" data-en="Once everything is filled in, a summary goes to sales. Row order = the order in the summary and in the CSV download.">Begitu semuanya terisi, ringkasannya dikirim ke sales. Urutan baris = urutan di ringkasan dan di unduhan CSV.</p>
             <div class="scroll"><table class="grid" id="fields"></table></div>
           </div>
           <div class="cardfoot"><button class="btn ghost" id="addField" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Row">Baris</span></button><span data-en="“Key” = the column name in the system: lowercase, no spaces. Tick “Name” on the row that holds the person's name.">“Kunci” = nama kolom di sistem: huruf kecil tanpa spasi. Centang “Nama” pada baris yang berisi nama orangnya.</span></div>
@@ -245,7 +248,7 @@
           <div class="cb"><div class="scroll"><table class="grid" id="products"></table></div></div>
           <div class="cardfoot"><button class="btn ghost" id="addProduct" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Product">Produk</span></button><span id="knowLen"></span></div>
         </div>
-        <p class="help" style="margin:-6px 0 16px"><span data-en="Tip: upload brochures on the">Tip: unggah brosur di halaman</span> <a class="link" data-to="brosur" data-en="Brochures">Brosur</a> <span data-en="page — each PDF is matched to the products it mentions automatically.">— tiap PDF otomatis dipasangkan ke produk yang disebut di dalamnya.</span></p>
+        <p class="help" style="margin:-6px 0 16px"><span data-en="Tip: upload brochures on the">Tip: unggah brosur di halaman</span> <a class="link" data-to="brosur" data-en="Brochures">Brosur</a><span data-en=" page. Each PDF is matched to the products it mentions automatically.">. Tiap PDF otomatis dipasangkan ke produk yang disebut di dalamnya.</span></p>
         <details class="fold" id="detailFold">
           <summary><span data-en="Detailed technical data (optional)">Data teknis rinci (opsional)</span> <span class="count" id="detailCount"></span></summary>
           <div class="fold-body">
@@ -259,7 +262,7 @@
       <!-- ================= Pengetahuan: Rekomendasi ================= -->
       <section data-page="rekomendasi">
         <div class="card">
-          <div class="ch"><h2 data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</h2><p class="help" data-en="Before recommending a product, the bot asks these — only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini — hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p></div>
+          <div class="ch"><h2 data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</h2><p class="help" data-en="Before recommending a product, the bot asks these questions: only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini: hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="questions"></table></div></div>
           <div class="cardfoot"><button class="btn ghost" id="addQuestion" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Question">Pertanyaan</span></button></div>
         </div>
@@ -274,7 +277,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. Up to 4 MB per file. Turn on <b>Read by bot</b> to let the bot answer from that PDF's contents.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. Maksimal 4 MB per berkas. Nyalakan <b>Dibaca bot</b> kalau bot boleh menjawab dari isi PDF itu.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="pdfs"></table></div></div>
-          <div class="cardfoot"><button class="btn" id="pdfUpload" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload PDF">Unggah PDF</span></button><button class="btn ghost" id="pdfRematch" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Re-match all">Cocokkan ulang semua</span></button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read — attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try talking” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca — pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba bicara”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
+          <div class="cardfoot"><button class="btn" id="pdfUpload" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload PDF">Unggah PDF</span></button><button class="btn ghost" id="pdfRematch" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Re-match all">Cocokkan ulang semua</span></button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read. Attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try talking” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca. Pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba bicara”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
         </div>
       </section>
 
@@ -288,7 +291,7 @@
           <div class="ch"><h2 data-en="Other knowledge">Pengetahuan lain</h2><p class="help" data-en="Anything that is not a table: common questions, opening hours, how to order. Written in the bot's language.">Yang tidak berbentuk tabel: tanya-jawab umum, jam buka, cara pesan, dan sebagainya. Tulis apa adanya.</p></div>
           <div class="cb">
             <textarea rows="8" data-key="notes" placeholder="mis. Jam buka: Senin–Sabtu 08.00–17.00."></textarea>
-            <label class="check" style="margin:14px 0 0"><input type="checkbox" data-key="guardCodes"><span data-en="<b>Reject product codes that are not in this data.</b> Replies that mention a made-up product code are not sent."><b>Tolak kode produk yang tidak ada di data ini.</b> Balasan yang menyebut kode produk karangan tidak dikirim.</span></label>
+            <label class="check" style="margin:14px 0 0"><input type="checkbox" data-key="guardCodes"><span class="ck"><span class="t" data-en="Reject product codes that are not in this data">Tolak kode produk yang tidak ada di data ini</span><small class="help" data-en="Replies that mention a made-up product code are not sent.">Balasan yang menyebut kode produk karangan tidak dikirim.</small></span></label>
           </div>
         </div>
         <div class="card">
@@ -298,7 +301,7 @@
               <label class="f"><span data-en="Topics">Topik</span><input type="text" data-key="handoffTopics"></label>
               <label class="f"><span data-en="Label in the notification">Sebutan di notifikasi</span><input type="text" data-key="handoffLabel"></label>
             </div>
-            <label class="check" style="margin:0"><input type="checkbox" data-key="forbidPrices"><span data-en="<b>The bot may only quote prices written in the product list.</b> Replies with any other amount are not sent."><b>Bot hanya boleh menyebut harga yang tertulis di daftar produk.</b> Balasan dengan nominal lain tidak dikirim.</span></label>
+            <label class="check" style="margin:0"><input type="checkbox" data-key="forbidPrices"><span class="ck"><span class="t" data-en="The bot may only quote prices written in the product list">Bot hanya boleh menyebut harga yang tertulis di daftar produk</span><small class="help" data-en="Replies with any other amount are not sent.">Balasan dengan nominal lain tidak dikirim.</small></span></label>
           </div>
         </div>
         <div class="card">
@@ -325,7 +328,7 @@
               <label class="f"><span data-en="Bot WhatsApp number">Nomor WA bot</span><input type="text" id="projWa" placeholder="0812…"></label>
               <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="projSales" placeholder="0812… / self"><small data-en="Gets lead summaries on WhatsApp while the recipient list under Notifications is empty. “self” = the bot's own number.">Menerima ringkasan lead lewat WhatsApp selama daftar penerima di Notifikasi masih kosong. “self” = nomor bot sendiri.</small></label>
             </div>
-            <label class="check" style="margin:0"><input type="checkbox" id="projEnabled"><span data-en="<b>Project active.</b> Off: the server stops this project's bot."><b>Proyek aktif.</b> Mati: server menghentikan bot proyek ini.</span></label>
+            <label class="check" style="margin:0"><input type="checkbox" id="projEnabled"><span class="ck"><span class="t" data-en="Project active">Proyek aktif</span><small class="help" data-en="Off: the server stops this project's bot.">Mati: server menghentikan bot proyek ini.</small></span></label>
           </div>
           <div class="cardfoot"><button class="btn" type="button" id="projSave"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span data-en="Save project">Simpan proyek</span></button></div>
         </div>
@@ -333,7 +336,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="When a human admin steps in">Saat admin manusia ikut membalas</h2></div>
           <div class="cb">
-            <label class="check"><input type="checkbox" data-key="stopAfterHuman"><span data-en="<b>Once a human admin has replied to or messaged a customer — from the phone or from this dashboard — the bot stays out of that chat for good.</b> No more replies and no follow-ups to that customer, until you switch the bot back on in the conversation."><b>Begitu admin manusia membalas atau mengirimi pelanggan — dari HP atau dari dashboard ini — bot tidak ikut campur lagi di chat itu.</b> Tidak ada balasan maupun follow-up lagi ke pelanggan tersebut, sampai Anda mengaktifkan bot lagi di percakapannya.</span></label>
+            <label class="check"><input type="checkbox" data-key="stopAfterHuman"><span class="ck"><span class="t" data-en="The bot steps out once a human admin replies">Bot mundur begitu admin manusia membalas</span><small class="help" data-en="Once a human admin has replied to or messaged a customer, from the phone or from this dashboard, the bot stays out of that chat for good. No more replies and no follow-ups to that customer, until you switch the bot back on in the conversation.">Begitu admin manusia membalas atau mengirimi pelanggan, dari HP atau dari dashboard ini, bot tidak ikut campur lagi di chat itu. Tidak ada balasan maupun follow-up lagi ke pelanggan tersebut, sampai Anda mengaktifkan bot lagi di percakapannya.</small></span></label>
             <div class="row" style="margin-bottom:-14px"><label class="f"><span data-en="If turned off: bot stays quiet for (hours)">Kalau dimatikan: bot diam selama (jam)</span><input type="number" min="1" max="168" data-set="humanPauseHours"></label></div>
           </div>
         </div>
@@ -354,7 +357,7 @@
             </div>
             <label class="f"><span data-smart="1" data-en="Fallback sentence">Kalimat cadangan</span><span data-smart="0" data-en="Sentence that is sent" hidden>Kalimat yang dikirim</span><input type="text" data-key="followupClosing"><small data-smart="1" data-en="Used when the LLM is unavailable.">Dipakai kalau LLM sedang tidak bisa dipakai.</small><small data-smart="0" data-en="The end of the fixed reminder when the customer's data is complete but they have gone quiet." hidden>Ujung pesan pengingat saat data pelanggan sudah lengkap tapi ia diam.</small></label>
             <details class="fold">
-              <summary data-en="How it works">Cara kerjanya</summary>
+              <summary><span data-en="How it works">Cara kerjanya</span></summary>
               <div class="fold-body">
                 <p class="help" data-en="The wait is picked at random between the two values for each customer, so reminders do not all arrive at the same hour.">Lama tunggu diacak di antara kedua angka untuk tiap pelanggan, supaya pengingat tidak datang pada jam yang sama.</p>
                 <p class="help" data-en="Nothing is sent outside these hours.">Di luar jam tersebut tidak ada yang dikirim.</p>
@@ -371,7 +374,7 @@
           </div>
         </div>
         <details class="fold">
-          <summary data-en="Advanced">Lanjutan</summary>
+          <summary><span data-en="Advanced">Lanjutan</span></summary>
           <div class="fold-body">
             <p class="help" style="margin-bottom:12px" data-en="Test mode, limits and safeguards, reply rhythm, photo and voice analysis, LLM cost, alert history and the error log. Most businesses never need to change these.">Mode uji, batas dan pengaman, irama balasan, analisis foto dan suara, biaya LLM, riwayat peringatan, dan catatan galat. Kebanyakan bisnis tidak perlu mengubahnya.</p>
             <p style="margin:0 0 12px"><a class="btn ghost" data-to="lanjutan" data-en="Open advanced settings →">Buka pengaturan lanjutan →</a></p>
@@ -382,7 +385,7 @@
       <!-- ================= Pengaturan: WhatsApp ================= -->
       <section data-page="whatsapp">
         <div class="card">
-          <div class="ch"><h2 data-en="Link WhatsApp">Tautkan WhatsApp</h2><p class="help" data-en="Link this project's WhatsApp number here, without a terminal. On the phone: WhatsApp &gt; Linked devices &gt; Link a device, then scan the QR code — or choose “Link with phone number instead” and type the pairing code.">Tautkan nomor WhatsApp proyek ini dari sini, tanpa terminal. Di HP: WhatsApp &gt; Perangkat tertaut &gt; Tautkan perangkat, lalu pindai QR-nya — atau pilih “Tautkan dengan nomor telepon saja” dan ketik kode pairing-nya.</p></div>
+          <div class="ch"><h2 data-en="Link WhatsApp">Tautkan WhatsApp</h2><p class="help" data-en="Link this project's WhatsApp number here, without a terminal. On the phone: WhatsApp &gt; Linked devices &gt; Link a device, then scan the QR code, or choose “Link with phone number instead” and type the pairing code.">Tautkan nomor WhatsApp proyek ini dari sini, tanpa terminal. Di HP: WhatsApp &gt; Perangkat tertaut &gt; Tautkan perangkat, lalu pindai QR-nya, atau pilih “Tautkan dengan nomor telepon saja” dan ketik kode pairing-nya.</p></div>
           <div class="cb">
             <div class="wa">
               <div class="qr" id="waQr" hidden><img alt="QR WhatsApp" id="waQrImg"></div>
@@ -409,7 +412,7 @@
       <!-- ================= Pengaturan: Notifikasi ================= -->
       <section data-page="notifikasi">
         <div class="card">
-          <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot contacts — owner and staff — and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email, Telegram chat id. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot — pemilik dan staf — dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email, id chat Telegram. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
+          <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot contacts, the owner and staff, and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email, Telegram chat id. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot, yaitu pemilik dan staf, dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email, id chat Telegram. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
           <div class="cb">
             <div class="scroll"><table class="grid" id="recipients"></table></div>
             <div class="tblfoot"><button class="btn ghost" id="addRecipient" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Person">Orang</span></button></div>
@@ -419,10 +422,10 @@
           <div class="cardfoot" id="channels"></div>
         </div>
         <details class="fold">
-          <summary data-en="How to set up Telegram and email">Cara menyiapkan Telegram dan email</summary>
+          <summary><span data-en="How to set up Telegram and email">Cara menyiapkan Telegram dan email</span></summary>
           <div class="fold-body guide" style="padding-bottom:12px">
             <div data-only="id">
-              <b>WhatsApp</b> — tidak perlu disiapkan: isi nomornya di tabel (mis. 0812…); tulis <code>self</code> untuk nomor bot sendiri. Kabar soal WhatsApp-nya sendiri (terputus, dijeda) tidak bisa lewat WhatsApp, jadi pemilik sebaiknya juga punya Telegram atau email.
+              <b>WhatsApp</b>: tidak perlu disiapkan. Isi nomornya di tabel (mis. 0812…); tulis <code>self</code> untuk nomor bot sendiri. Kabar soal WhatsApp-nya sendiri (terputus, dijeda) tidak bisa lewat WhatsApp, jadi pemilik sebaiknya juga punya Telegram atau email.
               <br><br><b>Telegram</b>
               <ol>
                 <li>Di Telegram, buka <b>@BotFather</b>, kirim <code>/newbot</code>, ikuti langkahnya. Anda mendapat <b>token</b> seperti <code>123456:ABC…</code>.</li>
@@ -440,7 +443,7 @@
               Baris di bawah tabel menunjukkan jalur mana yang sudah siap menurut bot.
             </div>
             <div data-only="en">
-              <b>WhatsApp</b> — nothing to set up: enter the number in the table (e.g. 0812…); write <code>self</code> for the bot's own number. News about WhatsApp itself (disconnected, paused) cannot travel over WhatsApp, so the owner should also have Telegram or email.
+              <b>WhatsApp</b>: nothing to set up. Enter the number in the table (e.g. 0812…); write <code>self</code> for the bot's own number. News about WhatsApp itself (disconnected, paused) cannot travel over WhatsApp, so the owner should also have Telegram or email.
               <br><br><b>Telegram</b>
               <ol>
                 <li>In Telegram open <b>@BotFather</b>, send <code>/newbot</code> and follow the steps. You get a <b>token</b> like <code>123456:ABC…</code>.</li>
@@ -463,9 +466,9 @@
 
       <!-- ================= Pengaturan: Lanjutan ================= -->
       <section data-page="lanjutan">
-        <p class="help" style="margin:-6px 0 16px" data-en="Empty number fields follow the server default (shown in grey). Passwords and API keys are never stored here — they stay in <code>.env</code> on the server.">Kotak angka yang kosong mengikuti bawaan server (tampil abu-abu). Kata sandi dan kunci API tidak pernah disimpan di sini — tetap di <code>.env</code> di server.</p>
+        <p class="help" style="margin:-6px 0 16px" data-en="Empty number fields follow the server default (shown in grey). Passwords and API keys are never stored here. They stay in <code>.env</code> on the server.">Kotak angka yang kosong mengikuti bawaan server (tampil abu-abu). Kata sandi dan kunci API tidak pernah disimpan di sini. Semuanya tetap di <code>.env</code> di server.</p>
         <div class="card">
-          <div class="ch"><h2 data-en="Test mode">Mode uji</h2><p class="help" data-en="If you list numbers here, the bot serves <b>only</b> those numbers and ignores everyone else — useful when trying the bot on a number that already has real customers. Leave empty to serve everyone.">Kalau diisi, bot <b>hanya</b> melayani nomor-nomor ini dan mengabaikan yang lain — berguna saat mencoba bot di nomor yang sudah punya pelanggan sungguhan. Kosongkan untuk melayani semua orang.</p></div>
+          <div class="ch"><h2 data-en="Test mode">Mode uji</h2><p class="help" data-en="If you list numbers here, the bot serves <b>only</b> those numbers and ignores everyone else. This is useful when you try the bot on a number that already has real customers. Leave empty to serve everyone.">Kalau diisi, bot <b>hanya</b> melayani nomor-nomor ini dan mengabaikan yang lain. Ini berguna saat mencoba bot di nomor yang sudah punya pelanggan sungguhan. Kosongkan untuk melayani semua orang.</p></div>
           <div class="cb"><input type="text" data-set-list="onlyNumbers" placeholder="mis. 081234567890, 081298765432" data-en-ph="e.g. 081234567890, 081298765432"></div>
         </div>
         <div class="card">
@@ -488,8 +491,8 @@
               <label class="f"><span data-en="Fastest (seconds)">Paling cepat (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMin"></label>
               <label class="f"><span data-en="Slowest (seconds)">Paling lama (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMax"></label>
             </div>
-            <label class="check"><input type="checkbox" data-set-bool="llmVision"><span data-en="<b>Analyse photos customers send.</b> The photo is sent to the LLM so the bot can describe what it sees and recommend a product from it. Off: the bot only acknowledges the photo and notifies staff."><b>Analisis foto kiriman pelanggan.</b> Fotonya dikirim ke LLM supaya bot bisa menyebut apa yang terlihat dan menyarankan produk dari situ. Mati: bot hanya menerima fotonya dan mengabari staf.</span></label>
-            <label class="check" style="margin:0"><input type="checkbox" data-set-bool="transcribeVoice"><span data-en="<b>Transcribe voice notes.</b> Voice notes are turned into text and answered like typed messages (needs <code>STT_API_KEY</code> in the bot's <code>.env</code>). Off: the bot acknowledges the voice note and notifies staff."><b>Transkripsi pesan suara.</b> Pesan suara diubah jadi teks dan dijawab seperti ketikan (butuh <code>STT_API_KEY</code> di <code>.env</code> bot). Mati: bot menerima pesan suaranya dan mengabari staf.</span></label>
+            <label class="check"><input type="checkbox" data-set-bool="llmVision"><span class="ck"><span class="t" data-en="Analyse photos customers send">Analisis foto kiriman pelanggan</span><small class="help" data-en="The photo is sent to the LLM so the bot can describe what it sees and recommend a product from it. Off: the bot only acknowledges the photo and notifies staff.">Fotonya dikirim ke LLM supaya bot bisa menyebut apa yang terlihat dan menyarankan produk dari situ. Mati: bot hanya menerima fotonya dan mengabari staf.</small></span></label>
+            <label class="check" style="margin:0"><input type="checkbox" data-set-bool="transcribeVoice"><span class="ck"><span class="t" data-en="Transcribe voice notes">Transkripsi pesan suara</span><small class="help" data-en="Voice notes are turned into text and answered like typed messages (needs <code>STT_API_KEY</code> in the bot's <code>.env</code>). Off: the bot acknowledges the voice note and notifies staff.">Pesan suara diubah jadi teks dan dijawab seperti ketikan (butuh <code>STT_API_KEY</code> di <code>.env</code> bot). Mati: bot menerima pesan suaranya dan mengabari staf.</small></span></label>
           </div>
         </div>
         <div class="card" id="biaya">
@@ -509,13 +512,13 @@
           <div class="cardfoot"><span class="note" data-en="The cost here is an <b>estimate</b>: tokens × the rates above. The official bill is in your LLM provider account.">Biaya di sini adalah <b>perkiraan</b> dari jumlah token × tarif di atas. Tagihan resminya ada di akun penyedia LLM.</span></div>
         </div>
         <details class="fold" id="alertFold">
-          <summary data-en="Alert history">Riwayat peringatan</summary>
+          <summary><span data-en="Alert history">Riwayat peringatan</span></summary>
           <div class="fold-body"><div class="scroll"><table class="list" id="alerts"></table></div></div>
         </details>
         <details class="fold" id="errorFold">
-          <summary data-en="Error log">Catatan galat</summary>
+          <summary><span data-en="Error log">Catatan galat</span></summary>
           <div class="fold-body">
-            <p class="help" style="margin-bottom:10px" data-en="Every error and warning the bot wrote, newest first — the same lines as in its terminal. The full log is in the server journal (<code>journalctl -u alice-bot@&lt;project&gt;</code>).">Semua galat dan peringatan yang ditulis bot, terbaru dulu — baris yang sama dengan di terminalnya. Log lengkapnya ada di jurnal server (<code>journalctl -u alice-bot@&lt;proyek&gt;</code>).</p>
+            <p class="help" style="margin-bottom:10px" data-en="Every error and warning the bot wrote, newest first: the same lines as in its terminal. The full log is in the server journal (<code>journalctl -u alice-bot@&lt;project&gt;</code>).">Semua galat dan peringatan yang ditulis bot, terbaru dulu. Barisnya sama dengan di terminalnya. Log lengkapnya ada di jurnal server (<code>journalctl -u alice-bot@&lt;proyek&gt;</code>).</p>
             <div class="scroll"><table class="list" id="errors"></table></div>
           </div>
         </details>
@@ -547,6 +550,15 @@
     <button class="btn ghost" type="button" id="resetChat"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Reset">Ulang</span></button>
   </form>
 </aside>
+
+<!-- Bilah simpan: tetap di bawah layar, muncul hanya selama ada perubahan yang belum disimpan. -->
+<div class="savebar" id="savebar" aria-hidden="true">
+  <div class="savebar-in">
+    <span class="savebar-text" data-en="There are unsaved changes">Ada perubahan yang belum disimpan</span>
+    <button class="btn ghost" id="discard" type="button" tabindex="-1"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg><span data-en="Discard">Batalkan</span></button>
+    <button class="btn" id="save" type="button" tabindex="-1" disabled></button>
+  </div>
+</div>
 
 <input type="file" id="pickFile" hidden>
 <input type="file" id="pickPdfs" accept="application/pdf" multiple hidden>

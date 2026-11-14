@@ -188,14 +188,13 @@ export function greetingFor(c: Pick<Contact, 'wa_name' | 'lead'>): string {
 const STAFF_NOTIFY_GAP = 30 * MINUTE;
 
 /**
- * Kabari staf bahwa pelanggan ini menunggu manusia: notifikasi WA + baris Sheet
- * (lewat antrean) dan peringatan di dashboard. Tidak diulang tiap pesan.
+ * Kabari staf bahwa pelanggan ini menunggu manusia: notifikasi WA (lewat
+ * antrean) dan peringatan di dashboard. Tidak diulang tiap pesan.
  */
 async function notifyStaff(c: Contact, kind: string, lastMessage: string, at: number): Promise<Contact> {
   if (c.handoff_sent_at && at - c.handoff_sent_at < STAFF_NOTIFY_GAP) return c;
   const p = leadPayload(c, kind, lastMessage);
   await outboxAdd('sales', p, at);
-  await outboxAdd('sheet', p, at);
   // WhatsApp-nya sudah lewat antrean di atas; di sini hanya dashboard + Telegram.
   await raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}): "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
   return updateContact(c.phone, { handoff_sent_at: at });
@@ -426,7 +425,6 @@ export async function handleInbound(m: Inbound): Promise<void> {
     if (complete && !c.lead_sent_at) {
       const p = leadPayload(c, 'Lead lengkap', said);
       await outboxAdd('sales', p, at);
-      await outboxAdd('sheet', p, at);
       // WhatsApp lewat antrean di atas; email dan Telegram langsung.
       void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} | ${biz.brand}`, salesText(p));
       signalDashboard();

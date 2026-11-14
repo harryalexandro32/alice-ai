@@ -108,10 +108,6 @@ const base = {
   smtpFrom: str('SMTP_FROM'),
   alertEmailTo: str('ALERT_EMAIL_TO'),
 
-  sheetId: str('SHEET_ID'),
-  sheetTab: str('SHEET_TAB', 'Leads'),
-  googleCredentials: str('GOOGLE_CREDENTIALS', './google-service-account.json'),
-
   // Mode uji: kalau diisi, bot HANYA melayani nomor-nomor ini. Dipakai waktu
   // mencoba di nomor yang sudah punya pelanggan sungguhan. Diatur per proyek
   // di dashboard (Pengaturan).

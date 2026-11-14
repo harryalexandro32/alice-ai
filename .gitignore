@@ -3,7 +3,6 @@ node_modules/
 auth/
 data/
 *.log
-google-service-account.json
 .vercel
 
 .vercel
