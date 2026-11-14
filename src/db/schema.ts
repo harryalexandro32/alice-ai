@@ -76,7 +76,7 @@ export const projectStatus = pgTable('project_status', {
   qr: text('qr'),
   pairing_code: text('pairing_code'),
   self_phone: text('self_phone'),
-  /** Alasan / galat terakhir, untuk ditampilkan. */
+  /** Alasan / error terakhir, untuk ditampilkan. */
   detail: text('detail'),
   usage_calls: integer('usage_calls'),
   usage_limit: integer('usage_limit'),

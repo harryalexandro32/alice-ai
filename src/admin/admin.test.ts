@@ -243,7 +243,7 @@ const PNG = Buffer.from(
       assert.deepEqual(matchProducts(text, names), ['GFAF-40AB', 'GZ-200', 'Kipas Meja 12 inci'], '40A tidak ikut hanya karena 40AB ada; nama pendek dilewati');
       assert.deepEqual(matchProducts(squash('GFAF-40A dan GFAF-40AB'), names), ['GFAF-40A', 'GFAF-40AB']);
       assert.deepEqual(matchProducts('', names), []);
-      assert.equal(await pdfText(Buffer.from('%PDF-1.4 rusak')), '', 'PDF yang tidak terbaca = tanpa kecocokan, bukan galat');
+      assert.equal(await pdfText(Buffer.from('%PDF-1.4 rusak')), '', 'PDF yang tidak terbaca = tanpa kecocokan, bukan error');
 
       const real = join(process.cwd(), 'catalog-pdf', 'Industrial Fan - GFan.pdf');
       await put({ products: [{ name: 'GFAF-40A' }, { name: 'GFAF-40AB' }, { name: 'GZ-200' }] });
@@ -291,13 +291,18 @@ const PNG = Buffer.from(
       assert.equal((await sw(C, 'on')).status, 200);
       assert.equal(await humanHolds(C, Date.now()), false, 'dinyalakan lagi');
 
-      // Peringatan dan catatan galat tampil di dashboard.
+      // Warning dan catatan error tampil di dashboard.
       const { addAlert, addError } = await import('../store');
       await addAlert({ at: Date.now(), kind: 'butuh-staf', key: '+6281211110001', text: 'Bot tidak bisa menjawab: Budi — "bisa custom?"' });
-      await addError({ at: Date.now(), level: 'galat', text: '[alur] contoh galat' });
+      // Baris lama (sebelum level diganti ke bahasa Inggris) tetap tampil dengan level baru.
+      await addError({ at: Date.now(), level: 'galat', text: '[alur] contoh error lama' });
+      await addError({ at: Date.now(), level: 'error', text: '[alur] contoh error' });
       const al = await call('/api/gfan/alerts');
       assert.equal(al.body.alerts[0].kind, 'butuh-staf');
-      assert.equal(al.body.errors[0].text, '[alur] contoh galat');
+      assert.equal(al.body.errors[0].text, '[alur] contoh error');
+      assert.equal(al.body.errors[0].level, 'error');
+      assert.equal(al.body.errors[1].text, '[alur] contoh error lama');
+      assert.equal(al.body.errors[1].level, 'error', "level lama 'galat' tampil sebagai 'error'");
       assert.equal((await call('/api/gfan/state')).body.alerts.length, 1);
       assert.equal((await call('/api/gfan/alerts', {}, false)).status, 401);
       const leads = await call('/api/gfan/leads');
@@ -587,7 +592,7 @@ const PNG = Buffer.from(
       await deliverOutbox('reply');
       assert.deepEqual(out, [`${c?.address}: Halo Pak, saya Rina dari GFAN.\nAda yang bisa dibantu?`]);
       assert.deepEqual((await lead()).body.pending_replies, []);
-      // Yang terus gagal: tampil "gagal" di percakapan dan jadi peringatan.
+      // Yang terus gagal: tampil "gagal" di percakapan dan jadi warning.
       setReplySender(async () => { throw new Error('tidak tersambung'); });
       await reply('yang ini gagal');
       for (let i = 0; i < MAX_REPLY_ATTEMPTS; i++) await deliverOutbox('reply');

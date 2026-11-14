@@ -50,7 +50,7 @@ PORT=3000
 PROJECT=<proyek> npm run bot     # di server: systemctl restart alice-bot@<proyek>
 ```
 Log yang benar: `[cloud] nomor: … ` lalu `[cloud] webhook mendengarkan di port 3000 (/webhook) — SIAP`.
-Kalau baris nomor diganti PERINGATAN, token atau Phone number ID-nya salah.
+Kalau baris nomor diganti WARNING, token atau Phone number ID-nya salah.
 
 ### 4. Daftarkan webhook
 **WhatsApp → Configuration → Webhook → Edit**:

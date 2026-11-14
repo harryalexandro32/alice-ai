@@ -73,7 +73,7 @@ Penyedia lain sama saja: ganti host, port (465 = SSL; 587 = STARTTLS), pengguna,
 
 - Dashboard → Pengaturan → Notifikasi: baris di bawah tabel menulis jalur mana yang **siap**
   menurut bot (kredensialnya terisi). Itu belum berarti kirimannya sampai.
-- Dashboard → Pengaturan → **Lanjutan** → **Catatan galat**: kiriman yang gagal muncul sebagai
+- Dashboard → Pengaturan → **Lanjutan** → **Catatan error**: kiriman yang gagal muncul sebagai
   `[notifikasi] … gagal`, lengkap dengan alasannya (mis. sandi salah, id chat tidak dikenal).
 - Cara termudah mengetes: tanyakan ke bot sesuatu yang tidak ada di datanya dari nomor
   pelanggan uji — kabar "pelanggan butuh staf" seharusnya sampai ke semua jalur staf.

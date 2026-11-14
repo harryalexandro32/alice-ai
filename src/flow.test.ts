@@ -876,7 +876,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(A))?.stage, 'closing', 'hanya "baru" yang berpindah otomatis');
   }],
 
-  ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = peringatan', async () => {
+  ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {
     await say('halo');
     const out: { phone: string; address: string; text: string }[] = [];
     let ready = false;

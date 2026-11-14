@@ -859,7 +859,7 @@ export async function startAdmin(store: AdminStore): Promise<number> {
   const port = adminPort() as number;
   console.log(`[dashboard] http://${cfg.adminHost === '0.0.0.0' ? 'localhost' : cfg.adminHost}:${port}/`);
   if (cfg.adminHost !== '127.0.0.1' && cfg.adminHost !== 'localhost') {
-    console.log('[dashboard] PERINGATAN: terbuka ke jaringan. Taruh di belakang HTTPS.');
+    console.log('[dashboard] WARNING: terbuka ke jaringan. Taruh di belakang HTTPS.');
   }
   return port;
 }

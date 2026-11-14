@@ -137,7 +137,7 @@ function withoutDashes(transport: Transport): Transport {
  */
 export async function startApp(raw: Transport): Promise<void> {
   const transport = withoutDashes(raw);
-  // Mulai sekarang semua galat juga tersimpan untuk dashboard.
+  // Mulai sekarang semua error juga tersimpan untuk dashboard.
   installErrorLog();
   // Tiap panggilan LLM dicatat per hari, supaya biayanya terlihat di dashboard.
   setUsageRecorder(addUsage);
@@ -172,7 +172,7 @@ export async function startApp(raw: Transport): Promise<void> {
   // (staf sendiri yang mengetiknya), hanya lewat pengaman nomor di transport.
   setReplySender((to, text) => transport.send(to, text), transportConnected);
 
-  // Peringatan untuk pemilik. Yang soal WhatsApp-nya sendiri tidak dikirim
+  // Warning untuk pemilik. Yang soal WhatsApp-nya sendiri tidak dikirim
   // lewat WhatsApp: saat itu jalurnya justru sedang bermasalah.
   setAlertWhatsApp(makeWaSender(transport));
   setLlmProblemListener((text) => void raiseAlert('llm', text));
