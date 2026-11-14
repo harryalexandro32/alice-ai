@@ -18,14 +18,14 @@ export const gfan: Business = {
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Nama\n' +
     '2. Kota / alamat\n' +
-    '3. Kebutuhan (jenis kipas atau untuk ruangan apa)',
+    '3. Kebutuhan (untuk ruangan apa, luas ?m x ?m)',
 
   greetingKnown:
     'Halo, terima kasih sudah menghubungi GFAN Indonesia 🙏\n' +
     'Dengan Bapak/Ibu {nama}, betul?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Kota / alamat\n' +
-    '2. Kebutuhan (jenis kipas atau untuk ruangan apa)',
+    '2. Kebutuhan (untuk ruangan apa, luas ?m x ?m)',
 
   leadFields: [
     {
