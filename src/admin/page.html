@@ -483,18 +483,20 @@
           </div>
         </div>
         <div class="card" id="biaya">
-          <div class="ch"><h2 data-en="LLM usage &amp; cost">Pemakaian &amp; biaya LLM</h2><p class="help" id="usageRate"></p></div>
+          <div class="ch"><h2 data-en="LLM usage &amp; cost">Pemakaian &amp; biaya LLM</h2><p class="help" data-en="LLM cost and calls per day. The numbers, the charts and the table follow the range you pick.">Biaya dan panggilan LLM per hari. Angka, grafik, dan tabel mengikuti rentang yang dipilih.</p></div>
           <div class="cb">
+            <div class="filters usage-range" id="usageRange" role="group" aria-label="Rentang waktu"></div>
             <div class="tiles" id="usageTiles"></div>
+            <!-- Grafik digambar app.js (columnChart); tabel pemakaian adalah tampilan "Tabel" grafik biaya. -->
+            <div class="charts"><div id="chartCost"></div><div id="chartCalls"></div></div>
             <div class="row4">
               <label class="f"><span data-en="Input tokens (USD / 1M)">Token masuk (USD / 1 jt)</span><input type="number" min="0" max="100" step="0.001" data-set="llmPriceIn"></label>
               <label class="f"><span data-en="Cached input (USD / 1M)">Token masuk dari cache (USD / 1 jt)</span><input type="number" min="0" max="100" step="0.001" data-set="llmPriceCached"></label>
               <label class="f"><span data-en="Output tokens (USD / 1M)">Token keluar (USD / 1 jt)</span><input type="number" min="0" max="100" step="0.001" data-set="llmPriceOut"></label>
               <label class="f"><span data-en="Exchange rate (Rp per USD)">Kurs (Rp per USD)</span><input type="number" min="1000" max="100000" data-set="usdIdr"></label>
             </div>
-            <div class="scroll"><table class="list" id="usage"></table></div>
           </div>
-          <div class="cardfoot" data-en="The cost here is an <b>estimate</b>: tokens × the rates above. The official bill is in your LLM provider account.">Biaya di sini adalah <b>perkiraan</b> dari jumlah token × tarif di atas. Tagihan resminya ada di akun penyedia LLM.</div>
+          <div class="cardfoot"><span class="note" data-en="The cost here is an <b>estimate</b>: tokens × the rates above. The official bill is in your LLM provider account.">Biaya di sini adalah <b>perkiraan</b> dari jumlah token × tarif di atas. Tagihan resminya ada di akun penyedia LLM.</span></div>
         </div>
         <details class="fold" id="alertFold">
           <summary data-en="Alert history">Riwayat peringatan</summary>

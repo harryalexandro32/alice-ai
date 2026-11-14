@@ -1045,14 +1045,30 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
       root.append(svg('line', { class: 'gridline', x1: left, x2: W - mr, y1: gy, y2: gy }));
       if (!empty) root.append(svg('text', { x: left - 6, y: gy + 4, 'text-anchor': 'end' }, format(v)));
     }
-    // Label tanggal: sejarang yang perlu supaya tidak bertumpuk, hari terakhir selalu berlabel.
-    const lw = Math.max(...days.map((d) => textWidth(dayShort(d.day)))) + 10;
-    const every = Math.max(1, Math.ceil(lw / band));
+    // Label tanggal: tiap label punya ruang paling sedikit 44 px (atau selebar teksnya + 10 px),
+    // jadi hanya tiap hari ke-k yang berlabel. Hari pertama dan terakhir selalu berlabel;
+    // label di tepi digeser masuk (rata kiri / rata kanan) supaya tidak terpotong.
+    const LABEL_ROOM = 44, LABEL_GAP = 12;
+    const lw = Math.max(LABEL_ROOM, ...days.map((d) => textWidth(dayShort(d.day)) + 10));
+    const k = Math.max(1, Math.ceil(lw / band));
+    const last = days.length - 1;
+    const labels = [];
     days.forEach((d, i) => {
-      if ((days.length - 1 - i) % every) return;
-      const t = dayShort(d.day);
-      root.append(edgeText(left + band * (i + 0.5), H - 6, t, textWidth(t), W));
+      if (i % k && i !== last) return;
+      const t = dayShort(d.day), w = textWidth(t), cx = left + band * (i + 0.5);
+      // Di tengah batangnya; digeser masuk (rata kiri/kanan) hanya kalau akan keluar dari tepi.
+      let x0 = cx - w / 2, anchor = 'middle', ax = cx;
+      if (x0 + w > W) { x0 = W - w; anchor = 'end'; ax = W; }
+      if (x0 < 0) { x0 = 0; anchor = 'start'; ax = 0; }
+      const lab = { t, x0, x1: x0 + w, anchor, ax };
+      // Kalau bertabrakan dengan label sebelumnya: buang yang sebelumnya bila ini hari terakhir, kalau tidak buang yang ini.
+      while (labels.length && lab.x0 < labels[labels.length - 1].x1 + LABEL_GAP) {
+        if (i !== last) return;
+        labels.pop();
+      }
+      labels.push(lab);
     });
+    for (const lab of labels) root.append(svg('text', { x: lab.ax, y: H - 6, 'text-anchor': lab.anchor }, lab.t));
     if (empty) {
       root.append(svg('text', { class: 'empty', x: left + pw / 2, y: mt + ph / 2, 'text-anchor': 'middle' }, T('Belum ada data', 'No data yet')));
       plot.replaceChildren(root, tip);
@@ -1747,50 +1763,107 @@ async function loadAlerts() {
 }
 
 // ---------- pemakaian & biaya ----------
+/** Data /usage terakhir; dipakai lagi saat rentang diganti, tanpa memuat ulang. */
+let usageData = null;
+/** Rentang grafik, kotak, dan tabel biaya (hari). */
+let usageRange = 30;
+const USAGE_RANGES = [7, 30, 90];
+
 async function loadUsage() {
-  const tiles = $('usageTiles');
-  const table = $('usage');
   try {
-    const u = (await api('usage')).usage;
-    if (!u) {
-      tiles.replaceChildren();
-      $('usageRate').textContent = T('Belum ada pemakaian yang tercatat.', 'No usage recorded yet.');
-      table.replaceChildren();
-      return;
-    }
-    // Token masuk yang kena cache jauh lebih murah, jadi dihitung terpisah.
-    const cost = (d) => ((d.promptTokens - d.cachedTokens) * u.price.in + d.cachedTokens * u.price.cached + d.completionTokens * u.price.out) / 1e6;
-    const sum = (days) => days.reduce((a, d) => ({
-      calls: a.calls + d.calls, promptTokens: a.promptTokens + d.promptTokens, cachedTokens: a.cachedTokens + d.cachedTokens,
-      completionTokens: a.completionTokens + d.completionTokens, usd: a.usd + cost(d),
-    }), { calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, usd: 0 });
-    const dayStr = (back) => new Date(Date.now() - back * 86400000).toLocaleDateString('en-CA');
-    const since = (n) => u.days.filter((d) => d.day > dayStr(n));
-
-    const tile = (k, days) => {
-      const s = sum(days);
-      return el('div', { className: 'tile' }, el('div', { className: 'k', textContent: k }),
-        el('div', { className: 'v', textContent: idr(s.usd * u.usdIdr) }),
-        el('div', { className: 's', textContent: usd(s.usd) + ' · ' + int(s.calls) + T(' balasan · ', ' replies · ') + int(s.promptTokens + s.completionTokens) + ' token' }));
-    };
-    tiles.replaceChildren(tile(T('Hari ini', 'Today'), since(1)), tile(T('7 hari terakhir', 'Last 7 days'), since(7)), tile(T('30 hari terakhir', 'Last 30 days'), since(30)));
-
-    $('usageRate').textContent = 'Model ' + u.model + T(' · tarif per 1 juta token: masuk ', ' · rates per 1M tokens: input ') + usd(u.price.in) + T(', masuk dari cache ', ', cached input ') + usd(u.price.cached) +
-      T(', keluar ', ', output ') + usd(u.price.out) + T(' · kurs Rp ', ' · exchange rate Rp ') + int(u.usdIdr) + T(' per USD. Tarif dan kurs diatur di bawah.', ' per USD. Rates and exchange rate are set below.');
-
-    const th = (t, num) => el('th', { textContent: t, className: num ? 'num' : '' });
-    const td = (t, num) => el('td', { textContent: t, className: num ? 'num' : '' });
-    const max = Math.max(...u.days.map(cost), 0);
-    const line = (label, d, c, bar) => el('tr', {}, td(label), td(int(d.calls), 1), td(int(d.promptTokens), 1), td(int(d.cachedTokens), 1),
-      td(int(d.completionTokens), 1), td(usd(c), 1), td(idr(c * u.usdIdr), 1),
-      el('td', { style: 'width:120px;vertical-align:middle' }, bar && max ? el('div', { className: 'bar', style: 'width:' + Math.round((c / max) * 100) + '%' }) : null));
-    const rows = u.days.map((d) => line(new Date(d.day + 'T00:00:00').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), d, cost(d), true));
-    const total = sum(u.days);
-    table.replaceChildren(
-      el('thead', {}, el('tr', {}, th(T('Tanggal', 'Date')), th(T('Balasan', 'Replies'), 1), th(T('Token masuk', 'Input tokens'), 1), th(T('…dari cache', '…cached'), 1), th(T('Token keluar', 'Output tokens'), 1), th(T('Biaya (USD)', 'Cost (USD)'), 1), th(T('Biaya (Rp)', 'Cost (Rp)'), 1), th(''))),
-      el('tbody', {}, ...(rows.length ? rows : [emptyRow(8, T('Belum ada pemakaian yang tercatat.', 'No usage recorded yet.'))])),
-      ...(rows.length ? [el('tfoot', {}, line(T('Jumlah (', 'Total (') + u.days.length + T(' hari)', ' days)'), total, total.usd, false))] : []));
+    usageData = { u: (await api('usage')).usage };
+    renderUsage();
   } catch (e) { toast(e.message, true); }
+}
+
+/** Geser tanggal "YYYY-MM-DD" sekian hari (dihitung di UTC, jadi aman dari geser zona waktu). */
+const shiftDay = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+
+function renderUsage() {
+  if (!usageData) return;
+  const u = usageData.u;
+  const price = u ? u.price : { in: 0, cached: 0, out: 0 };
+  const rate = u ? u.usdIdr : 0;
+  const n = usageRange;
+
+  // Pilihan rentang: tombol seperti saringan di Percakapan.
+  $('usageRange').setAttribute('aria-label', T('Rentang waktu', 'Time range'));
+  $('usageRange').replaceChildren(...USAGE_RANGES.map((r) => {
+    const b = el('button', { type: 'button', className: r === n ? 'on' : '', textContent: r + T(' hari', ' days') });
+    b.setAttribute('aria-pressed', String(r === n));
+    b.addEventListener('click', () => { if (usageRange !== r) { usageRange = r; renderUsage(); } });
+    return b;
+  }));
+
+  // Hari terakhir = hari ini menurut peramban, atau hari data terbaru kalau zona waktu bot sudah lebih dulu.
+  const raw = u ? u.days : [];
+  const today = new Date().toLocaleDateString('en-CA');
+  const last = raw.length && raw[0].day > today ? raw[0].day : today;
+  const first = shiftDay(last, 1 - n);
+  const byDay = new Map(raw.map((d) => [d.day, d]));
+  const zero = { calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
+  // Hari tanpa pemakaian diisi 0; terlama dulu (paling kiri di grafik).
+  const days = [];
+  for (let i = 0; i < n; i++) {
+    const day = shiftDay(first, i);
+    days.push({ ...zero, ...byDay.get(day), day });
+  }
+  const used = raw.filter((d) => d.day >= first && d.day <= last);
+
+  // Biaya dalam USD per bagian. Token masuk yang kena cache jauh lebih murah, jadi dihitung terpisah.
+  const parts = (d) => ({
+    in: ((d.promptTokens - d.cachedTokens) * price.in) / 1e6,
+    cached: (d.cachedTokens * price.cached) / 1e6,
+    out: (d.completionTokens * price.out) / 1e6,
+  });
+  const cost = (d) => { const p = parts(d); return p.in + p.cached + p.out; };
+  const sum = (list) => list.reduce((a, d) => ({
+    calls: a.calls + d.calls, promptTokens: a.promptTokens + d.promptTokens, cachedTokens: a.cachedTokens + d.cachedTokens,
+    completionTokens: a.completionTokens + d.completionTokens, usd: a.usd + cost(d),
+  }), { ...zero, usd: 0 });
+
+  // Kotak angka: hari ini, seluruh rentang, dan rata-rata per hari dalam rentang.
+  const total = sum(used);
+  const tile = (k, v, s) => el('div', { className: 'tile' }, el('div', { className: 'k', textContent: k }), el('div', { className: 'v', textContent: v }), el('div', { className: 's', textContent: s }));
+  const todaySum = sum(used.filter((d) => d.day === last));
+  $('usageTiles').replaceChildren(
+    tile(T('Hari ini', 'Today'), idr(todaySum.usd * rate),
+      usd(todaySum.usd) + ' · ' + int(todaySum.calls) + T(' balasan · ', ' replies · ') + int(todaySum.promptTokens + todaySum.completionTokens) + ' token'),
+    tile(T(n + ' hari terakhir', 'Last ' + n + ' days'), idr(total.usd * rate),
+      usd(total.usd) + ' · ' + int(total.calls) + T(' balasan · ', ' replies · ') + int(total.promptTokens + total.completionTokens) + ' token'),
+    tile(T('Rata-rata per hari', 'Average per day'), idr((total.usd * rate) / n),
+      usd(total.usd / n) + ' · ' + (total.calls / n).toLocaleString(locale(), { maximumFractionDigits: 1 }) + T(' balasan per hari', ' replies per day')));
+
+  // Grafik biaya: tiga bagian bertumpuk dalam Rupiah, urutan seri tetap.
+  const host = $('chartCost');
+  columnChart({ el: host, title: T('Biaya per hari (Rp)', 'Cost per day (Rp)'), stacked: true, format: idr,
+    help: T('Perkiraan biaya LLM, ' + n + ' hari terakhir.', 'Estimated LLM cost, last ' + n + ' days.'),
+    days: days.map((d) => { const p = parts(d); return { day: d.day, in: p.in * rate, cached: p.cached * rate, out: p.out * rate }; }),
+    series: [
+      { key: 'in', label: 'Input', slot: 1 },
+      { key: 'cached', label: T('Input dari cache', 'Cached input'), slot: 2 },
+      { key: 'out', label: 'Output', slot: 3 }] });
+  // Satu baris keterangan tarif dan kurs di bawah grafik.
+  if (u) {
+    host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note', textContent: 'Model ' + u.model + T(' · tarif per 1 juta token: input ', ' · rates per 1M tokens: input ') + usd(price.in) +
+      T(', dari cache ', ', cached ') + usd(price.cached) + ', output ' + usd(price.out) + T(' · kurs Rp ', ' · exchange rate Rp ') + int(rate) + T(' per USD', ' per USD') }));
+  }
+
+  // Tampilan "Tabel" grafik biaya = tabel pemakaian lengkap (hari dengan pemakaian, terbaru di atas).
+  const th = (t, num) => el('th', { textContent: t, className: num ? 'num' : '' });
+  const td = (t, num) => el('td', { textContent: t, className: num ? 'num' : '' });
+  const line = (label, d, c) => el('tr', {}, el('td', { textContent: label, style: 'white-space:nowrap' }), td(int(d.calls), 1), td(int(d.promptTokens), 1), td(int(d.cachedTokens), 1),
+    td(int(d.completionTokens), 1), td(usd(c), 1), td(idr(c * rate), 1));
+  const rows = used.map((d) => line(dayLong(d.day), d, cost(d)));
+  host.querySelector(':scope > .cb > .scroll').replaceChildren(el('table', { className: 'list' },
+    el('thead', {}, el('tr', {}, th(T('Tanggal', 'Date')), th(T('Balasan', 'Replies'), 1), th(T('Token masuk', 'Input tokens'), 1), th(T('…dari cache', '…cached'), 1), th(T('Token keluar', 'Output tokens'), 1), th(T('Biaya (USD)', 'Cost (USD)'), 1), th(T('Biaya (Rp)', 'Cost (Rp)'), 1))),
+    el('tbody', {}, ...(rows.length ? rows : [emptyRow(7, T('Belum ada data', 'No data yet'))])),
+    ...(rows.length ? [el('tfoot', {}, line(T('Jumlah ' + n + ' hari', 'Total, ' + n + ' days'), total, total.usd))] : [])));
+
+  // Grafik jumlah panggilan: satu seri, tanpa legenda, rentang yang sama.
+  columnChart({ el: $('chartCalls'), title: T('Panggilan LLM per hari', 'LLM calls per day'),
+    help: T('Jumlah panggilan ke LLM, ' + n + ' hari terakhir.', 'Number of LLM calls, last ' + n + ' days.'),
+    days, series: [{ key: 'calls', label: T('Panggilan', 'Calls'), slot: 1 }] });
 }
 
 // ---------- WhatsApp & keadaan bot ----------
