@@ -8,6 +8,47 @@
 </head>
 <body>
 
+<!-- Ikon: satu sprite SVG, garis 2px, ujung bulat, warna mengikuti teks (currentColor lewat .i di app.css).
+     Digambar sendiri dengan gaya Feather/Lucide. Dipakai lewat <use href="#i-nama">; di app.js lewat icon(nama). -->
+<svg hidden xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v12h5v-6h4v6h5V9"/></symbol>
+  <symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"/></symbol>
+  <symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></symbol>
+  <symbol id="i-book-plus" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M12 7v6M9 10h6"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8M7.5 5.5l9 5"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15v4M17 17h4M5 3v3M3.5 4.5h3"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.95 5.31L10.51 2.62L13.49 2.62L14.05 5.31L15.29 5.82L17.58 4.31L19.69 6.42L18.18 8.71L18.69 9.95L21.38 10.51L21.38 13.49L18.69 14.05L18.18 15.29L19.69 17.58L17.58 19.69L15.29 18.18L14.05 18.69L13.49 21.38L10.51 21.38L9.95 18.69L8.71 18.18L6.42 19.69L4.31 17.58L5.82 15.29L5.31 14.05L2.62 13.49L2.62 10.51L5.31 9.95L5.82 8.71L4.31 6.42L6.42 4.31L8.71 5.82z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-toggle" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="6"/><circle cx="16" cy="12" r="3"/></symbol>
+  <symbol id="i-smartphone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+  <symbol id="i-pause-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.5 9.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><path d="M17.5 10.5a6 6 0 1 1-7 7M9 6.5v5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5z"/><path d="m2 12 10 5 10-5M2 17l10 5 10-5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4v16l14-8z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M16 7l3 3M18.5 4.5l2 2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+</svg>
+
 <div class="login" id="login">
   <form id="loginForm">
     <div class="mark">A</div>
@@ -44,18 +85,18 @@
     <textarea rows="6" id="knownText" placeholder="081234567890, Pak Budi&#10;081298765432, Bu Sari&#10;081355501234"></textarea>
     <label class="check" style="margin:12px 0 0"><input type="checkbox" id="knownOff"><span data-en="<b>Bot stays silent for these numbers</b> — staff handle them. (You can switch the bot on per customer later.)"><b>Bot diam untuk nomor-nomor ini</b> — staf yang menangani. (Bisa dinyalakan per pelanggan nanti.)</span></label>
     <p class="help" id="knownCount" style="margin-top:10px"></p>
-    <div class="actions"><button class="btn ghost" type="button" id="importCancel" data-en="Close">Tutup</button><button class="btn" id="knownImport" data-en="Import">Impor</button></div>
+    <div class="actions"><button class="btn ghost" type="button" id="importCancel" data-en="Close">Tutup</button><button class="btn" id="knownImport"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Import">Impor</span></button></div>
   </form>
 </div>
 
 <div class="topbar">
-  <a class="home" id="homeLink" href="/" aria-label="Beranda"><span class="mark">A</span><img class="logo" id="logoTop" alt=""></a>
+  <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><span class="mark">A</span><img class="logo" id="logoTop" alt=""></a>
   <div class="brand">Alice AI</div>
-  <select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)"></select>
+  <span class="projwrap"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)" data-en-title="Project (one business, one WhatsApp number)"></select></span>
   <div class="spacer"></div>
-  <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap">☾</button>
-  <div class="lang" id="lang" role="group" aria-label="Bahasa / Language"><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
-  <button class="btn ghost" id="logout" type="button" data-en="Sign out">Keluar</button>
+  <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light / dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
+  <div class="lang" id="lang" role="group" aria-label="Bahasa / Language"><span class="lang-ico"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></span><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
+  <button class="btn ghost" id="logout" type="button" title="Keluar" aria-label="Keluar" data-en-title="Sign out"><svg class="i" aria-hidden="true"><use href="#i-log-out"/></svg><span class="lbl" data-en="Sign out">Keluar</span></button>
 </div>
 
 <div class="strip" id="strip" hidden></div>
@@ -63,19 +104,19 @@
 <div class="app" id="app" hidden>
   <aside>
     <nav id="nav">
-      <a data-nav="beranda"><span data-en="Home">Beranda</span><span class="badge" id="homeBadge"></span></a>
-      <a data-nav="percakapan" data-en="Conversations">Percakapan</a>
-      <div class="nav-group" data-en="Bot knowledge">Pengetahuan bot</div>
-      <a data-nav="identitas" class="sub" data-en="Identity">Identitas</a>
-      <a data-nav="produk" class="sub" data-en="Products">Produk</a>
-      <a data-nav="rekomendasi" class="sub" data-en="Recommendations">Rekomendasi</a>
-      <a data-nav="brosur" class="sub" data-en="Brochures">Brosur</a>
-      <a data-nav="lainnya" class="sub" data-en="Other">Lainnya</a>
-      <div class="nav-group" data-en="Settings">Pengaturan</div>
-      <a data-nav="pengaturan" class="sub" data-en="General">Umum</a>
-      <a data-nav="whatsapp" class="sub">WhatsApp</a>
-      <a data-nav="notifikasi" class="sub" data-en="Notifications">Notifikasi</a>
-      <a data-nav="lanjutan" class="sub" data-en="Advanced">Lanjutan</a>
+      <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span><span class="badge" id="homeBadge"></span></a>
+      <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span></a>
+      <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span data-en="Bot knowledge">Pengetahuan bot</span></div>
+      <a data-nav="identitas" class="sub"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg><span data-en="Identity">Identitas</span></a>
+      <a data-nav="produk" class="sub"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
+      <a data-nav="rekomendasi" class="sub"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="Recommendations">Rekomendasi</span></a>
+      <a data-nav="brosur" class="sub"><svg class="i" aria-hidden="true"><use href="#i-file-text"/></svg><span data-en="Brochures">Brosur</span></a>
+      <a data-nav="lainnya" class="sub"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg><span data-en="Other">Lainnya</span></a>
+      <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg><span data-en="Settings">Pengaturan</span></div>
+      <a data-nav="pengaturan" class="sub"><svg class="i" aria-hidden="true"><use href="#i-toggle"/></svg><span data-en="General">Umum</span></a>
+      <a data-nav="whatsapp" class="sub"><svg class="i" aria-hidden="true"><use href="#i-smartphone"/></svg><span>WhatsApp</span></a>
+      <a data-nav="notifikasi" class="sub"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg><span data-en="Notifications">Notifikasi</span></a>
+      <a data-nav="lanjutan" class="sub"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg><span data-en="Advanced">Lanjutan</span></a>
     </nav>
   </aside>
 
@@ -87,7 +128,7 @@
         <p id="desc"></p>
       </div>
       <div class="head-actions">
-        <button class="btn ghost" id="tryBtn" type="button" hidden data-en="Try talking">Coba bicara</button>
+        <button class="btn ghost" id="tryBtn" type="button" hidden><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try talking">Coba bicara</span></button>
         <button class="btn" id="save" type="button" disabled></button>
       </div>
     </div>
@@ -114,8 +155,8 @@
           <div class="cb">
             <div class="leadbar">
               <input type="search" id="leadSearch" placeholder="Cari nomor, nama, kota, kebutuhan, ringkasan, catatan…" data-en-ph="Search number, name, city, need, summary, note…">
-              <button class="btn ghost" id="leadExport" type="button" data-en="Download CSV">Unduh CSV</button>
-              <button class="btn ghost" id="importOpen" type="button" data-en="Import existing customers">Impor pelanggan lama</button>
+              <button class="btn ghost" id="leadExport" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg><span data-en="Download CSV">Unduh CSV</span></button>
+              <button class="btn ghost" id="importOpen" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Import existing customers">Impor pelanggan lama</span></button>
             </div>
             <div class="filters" id="leadFilters" role="group" aria-label="Saring"></div>
             <p class="help" id="leadCount" style="margin:8px 0 10px"></p>
@@ -136,7 +177,7 @@
             <div class="convctl">
               <label class="inline"><span data-en="Stage">Tahap</span><select id="convStage"></select></label>
               <button class="btn ghost" type="button" id="convBot"></button>
-              <button class="btn ghost" type="button" id="convHandled" data-en="Mark as handled">Tandai sudah ditangani</button>
+              <button class="btn ghost" type="button" id="convHandled"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span data-en="Mark as handled">Tandai sudah ditangani</span></button>
             </div>
             <label class="f" style="margin:12px 0 0"><span data-en="Note">Catatan</span><textarea rows="2" id="convNote" placeholder="Catatan untuk tim, mis. minta penawaran Senin" data-en-ph="Note for the team, e.g. wants a quote on Monday"></textarea><small id="convNoteState"></small></label>
           </div>
@@ -147,7 +188,7 @@
             <div class="thread" id="thread"></div>
             <form class="replybox" id="replyForm">
               <textarea rows="2" id="replyText" maxlength="4000" placeholder="Tulis balasan… (Enter untuk baris baru, Ctrl+Enter untuk kirim)" data-en-ph="Write a reply… (Enter for a new line, Ctrl+Enter to send)"></textarea>
-              <button class="btn" id="replySend" data-en="Send">Kirim</button>
+              <button class="btn" id="replySend"><svg class="i" aria-hidden="true"><use href="#i-send"/></svg><span data-en="Send">Kirim</span></button>
             </form>
             <p class="help" id="replyBlocked" hidden data-en="This customer has never messaged the bot's number, so they cannot be answered from here yet. Reply from the WhatsApp app.">Pelanggan ini belum pernah chat ke nomor bot, jadi belum bisa dibalas dari sini. Balas dari aplikasi WhatsApp.</p>
             <p class="help" id="replyHelp" data-en="Sent from the bot's number. Once you reply, the bot steps back in this chat, exactly as when you reply from the phone.">Dikirim dari nomor bot. Begitu Anda membalas, bot mundur di chat ini, sama seperti membalas dari HP.</p>
@@ -176,8 +217,8 @@
           <div class="cb">
             <div class="logo-row">
               <div class="logo-box" id="logoBox"></div>
-              <button class="btn ghost" type="button" id="logoPick" data-en="Upload logo">Unggah logo</button>
-              <button class="btn danger" type="button" id="logoClear" data-en="Remove">Hapus</button>
+              <button class="btn ghost" type="button" id="logoPick"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload logo">Unggah logo</span></button>
+              <button class="btn danger" type="button" id="logoClear"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg><span data-en="Remove">Hapus</span></button>
             </div>
           </div>
         </div>
@@ -190,7 +231,7 @@
             <p class="help" style="margin-bottom:8px" data-en="Once everything is filled in, a summary goes to sales and is logged to Google Sheets. Row order = column order in the Sheet.">Begitu semuanya terisi, ringkasannya dikirim ke sales dan dicatat di Google Sheet. Urutan baris = urutan kolom di Sheet.</p>
             <div class="scroll"><table class="grid" id="fields"></table></div>
           </div>
-          <div class="cardfoot"><button class="btn ghost" id="addField" type="button" data-en="+ Row">+ Baris</button><span data-en="“Key” = the column name in the system: lowercase, no spaces. Tick “Name” on the row that holds the person's name.">“Kunci” = nama kolom di sistem: huruf kecil tanpa spasi. Centang “Nama” pada baris yang berisi nama orangnya.</span></div>
+          <div class="cardfoot"><button class="btn ghost" id="addField" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Row">Baris</span></button><span data-en="“Key” = the column name in the system: lowercase, no spaces. Tick “Name” on the row that holds the person's name.">“Kunci” = nama kolom di sistem: huruf kecil tanpa spasi. Centang “Nama” pada baris yang berisi nama orangnya.</span></div>
         </div>
       </section>
 
@@ -199,7 +240,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="Product list">Daftar produk</h2><p class="help" data-en="One row per product. Fill in price and stock so the bot can answer them; leave them empty and the bot hands those questions to your team. Photos and the PDF are what the bot can send to customers on WhatsApp. You can paste rows straight from Excel.">Satu baris per produk. Isi harga dan stok supaya bot bisa menjawabnya; kalau dikosongkan, bot menyerahkan pertanyaan itu ke tim Anda. Foto dan PDF adalah yang bisa dikirim bot ke pelanggan lewat WhatsApp. Baris bisa ditempel langsung dari Excel.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="products"></table></div></div>
-          <div class="cardfoot"><button class="btn ghost" id="addProduct" type="button" data-en="+ Product">+ Produk</button><span id="knowLen"></span></div>
+          <div class="cardfoot"><button class="btn ghost" id="addProduct" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Product">Produk</span></button><span id="knowLen"></span></div>
         </div>
         <p class="help" style="margin:-6px 0 16px"><span data-en="Tip: upload brochures on the">Tip: unggah brosur di halaman</span> <a class="link" data-to="brosur" data-en="Brochures">Brosur</a> <span data-en="page — each PDF is matched to the products it mentions automatically.">— tiap PDF otomatis dipasangkan ke produk yang disebut di dalamnya.</span></p>
         <details class="fold" id="detailFold">
@@ -207,7 +248,7 @@
           <div class="fold-body">
             <p class="help" style="margin-bottom:12px" data-en="Specification tables the bot can quote exactly (watts, airflow, dimensions…). Anything the bot should be able to answer in chat must be written here, in the product list, or in a PDF that is “Read by bot”. Delete a group if the PDF alone is enough.">Tabel spesifikasi yang bisa dikutip bot dengan persis (watt, aliran udara, ukuran…). Apa pun yang harus bisa dijawab bot di chat perlu tertulis di sini, di daftar produk, atau di PDF yang “Dibaca bot”. Hapus kelompoknya kalau PDF saja sudah cukup.</p>
             <div id="catalog"></div>
-            <p style="margin:0 0 12px"><button class="btn ghost" id="addSeries" type="button" data-en="+ Group">+ Kelompok</button></p>
+            <p style="margin:0 0 12px"><button class="btn ghost" id="addSeries" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Group">Kelompok</span></button></p>
           </div>
         </details>
       </section>
@@ -217,7 +258,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</h2><p class="help" data-en="Before recommending a product, the bot asks these — only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini — hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="questions"></table></div></div>
-          <div class="cardfoot"><button class="btn ghost" id="addQuestion" type="button" data-en="+ Question">+ Pertanyaan</button></div>
+          <div class="cardfoot"><button class="btn ghost" id="addQuestion" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Question">Pertanyaan</span></button></div>
         </div>
         <div class="card">
           <div class="ch"><h2 data-en="How the bot analyses and recommends">Cara bot menganalisis dan menyarankan</h2><p class="help" data-en="Write it the way you would teach a new employee: the formula, the reference numbers, and which product fits which situation.">Tulis seperti Anda mengajari karyawan baru: rumusnya, angka acuannya, dan produk mana untuk keadaan apa.</p></div>
@@ -230,7 +271,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. Up to 4 MB per file. Turn on <b>Read by bot</b> to let the bot answer from that PDF's contents.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. Maksimal 4 MB per berkas. Nyalakan <b>Dibaca bot</b> kalau bot boleh menjawab dari isi PDF itu.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="pdfs"></table></div></div>
-          <div class="cardfoot"><button class="btn" id="pdfUpload" type="button" data-en="Upload PDF">Unggah PDF</button><button class="btn ghost" id="pdfRematch" type="button" data-en="Re-match all">Cocokkan ulang semua</button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read — attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try talking” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca — pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba bicara”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
+          <div class="cardfoot"><button class="btn" id="pdfUpload" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload PDF">Unggah PDF</span></button><button class="btn ghost" id="pdfRematch" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Re-match all">Cocokkan ulang semua</span></button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read — attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try talking” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca — pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba bicara”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
         </div>
       </section>
 
@@ -260,7 +301,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</h2><p class="help" data-en="How you want the bot to write and behave, one rule per row. Say it the way you would brief a new admin: the tone you like, what to avoid, an example sentence, what to do right away without asking. Use “Try talking” to see the effect.">Cara Anda ingin bot menulis dan bersikap, satu aturan per baris. Tulis seperti memberi arahan ke admin baru: nada yang disukai, yang harus dihindari, contoh kalimat, hal yang langsung dikerjakan tanpa bertanya. Pakai “Coba bicara” untuk melihat hasilnya.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="rules"></table></div></div>
-          <div class="cardfoot"><button class="btn ghost" id="addRule" type="button" data-en="+ Rule">+ Aturan</button></div>
+          <div class="cardfoot"><button class="btn ghost" id="addRule" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Rule">Aturan</span></button></div>
         </div>
       </section>
 
@@ -283,7 +324,7 @@
             </div>
             <label class="check" style="margin:0"><input type="checkbox" id="projEnabled"><span data-en="<b>Project active.</b> Off: the server stops this project's bot."><b>Proyek aktif.</b> Mati: server menghentikan bot proyek ini.</span></label>
           </div>
-          <div class="cardfoot"><button class="btn" type="button" id="projSave" data-en="Save project">Simpan proyek</button></div>
+          <div class="cardfoot"><button class="btn" type="button" id="projSave"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><span data-en="Save project">Simpan proyek</span></button></div>
         </div>
 
         <div class="card">
@@ -338,9 +379,9 @@
                 <div class="help" id="waDetail"></div>
                 <div class="pair" id="waPairBox">
                   <input type="text" id="waNumber" placeholder="0812…" aria-label="Nomor WA bot">
-                  <button class="btn ghost" type="button" id="waPair" data-en="Request pairing code">Minta kode pairing</button>
+                  <button class="btn ghost" type="button" id="waPair"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg><span data-en="Request pairing code">Minta kode pairing</span></button>
                 </div>
-                <button class="btn danger" type="button" id="waReset" data-en="Disconnect &amp; link again">Putuskan &amp; tautkan ulang</button>
+                <button class="btn danger" type="button" id="waReset"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Disconnect &amp; link again">Putuskan &amp; tautkan ulang</span></button>
               </div>
             </div>
           </div>
@@ -358,7 +399,7 @@
           <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot contacts — owner and staff — and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email, Telegram chat id. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot — pemilik dan staf — dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email, id chat Telegram. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
           <div class="cb">
             <div class="scroll"><table class="grid" id="recipients"></table></div>
-            <div class="tblfoot"><button class="btn ghost" id="addRecipient" type="button" data-en="+ Person">+ Orang</button></div>
+            <div class="tblfoot"><button class="btn ghost" id="addRecipient" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Person">Orang</span></button></div>
             <div class="sub" data-en="Which news goes to whom">Kabar mana ke siapa</div>
             <div class="scroll"><table class="list" id="routes"></table></div>
           </div>
@@ -469,7 +510,7 @@
       <section data-page="notfound">
         <div class="card"><div class="cb">
           <p id="notFoundText"></p>
-          <p style="margin:12px 0 0"><a class="btn" href="/" data-en="Back to home">Kembali ke beranda</a></p>
+          <p style="margin:12px 0 0"><a class="btn" href="/"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Back to home">Kembali ke beranda</span></a></p>
         </div></div>
       </section>
 
@@ -482,13 +523,13 @@
 <aside class="drawer" id="uji" aria-label="Coba bicara" aria-hidden="true">
   <div class="drawer-head">
     <div><h2 data-en="Talk to the bot">Coba bicara dengan bot</h2><p class="help" data-en="Uses the profile that is <b>already saved</b>, without sending anything to WhatsApp. The bot itself always answers in Indonesian.">Memakai profil yang <b>sudah disimpan</b>, tanpa mengirim apa pun ke WhatsApp.</p></div>
-    <button class="btn ghost icon" type="button" id="ujiClose" aria-label="Tutup" title="Tutup">×</button>
+    <button class="btn ghost icon" type="button" id="ujiClose" aria-label="Tutup" title="Tutup" data-en-title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
   </div>
   <div class="chat" id="chat"></div>
   <form class="send" id="sendForm">
     <input type="text" id="sendText" placeholder="mis. gudang 10 x 20 tinggi 6 meter, cocoknya yang mana?" autocomplete="off">
-    <button class="btn" data-en="Send">Kirim</button>
-    <button class="btn ghost" type="button" id="resetChat" data-en="Reset">Ulang</button>
+    <button class="btn"><svg class="i" aria-hidden="true"><use href="#i-send"/></svg><span data-en="Send">Kirim</span></button>
+    <button class="btn ghost" type="button" id="resetChat"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Reset">Ulang</span></button>
   </form>
 </aside>
 
