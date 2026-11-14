@@ -50,9 +50,9 @@ export const cfg = {
   adminPort: num('ADMIN_PORT', 3100),
   adminHost: str('ADMIN_HOST', '127.0.0.1'),
 
-  // Penyimpanan bersama untuk dashboard yang di-hosting terpisah (Vercel Blob).
-  blobToken: str('BLOB_READ_WRITE_TOKEN'),
-  blobAccess: (str('BLOB_ACCESS', 'private') === 'public' ? 'public' : 'private') as 'public' | 'private',
+  // Alamat lain yang boleh memakai dashboard ini lewat proxy (mis. Vercel):
+  // "https://alice.lukicenturi.com". Host-nya sendiri selalu boleh.
+  adminOrigins: str('ADMIN_ORIGINS').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean),
 
   llmApiKey: str('LLM_API_KEY'),
   llmBaseUrl: str('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, ''),

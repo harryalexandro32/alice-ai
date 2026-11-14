@@ -168,10 +168,13 @@ export function createAdminHandler(store: AdminStore) {
       return json(503, { error: 'Dashboard belum diatur: ADMIN_PASSWORD kosong atau kurang dari 8 karakter.' });
     }
 
-    // Permintaan yang mengubah sesuatu harus datang dari halaman ini sendiri.
+    // Permintaan yang mengubah sesuatu harus datang dari halaman ini sendiri:
+    // host yang sama, atau alamat proxy yang didaftarkan di ADMIN_ORIGINS.
     if (method !== 'GET') {
       const origin = req.headers.origin;
-      if (origin && new URL(origin).host !== req.headers.host) return json(403, { error: 'asal tidak dikenal' });
+      if (origin && new URL(origin).host !== req.headers.host && !cfg.adminOrigins.includes(origin)) {
+        return json(403, { error: 'asal tidak dikenal' });
+      }
     }
 
     if (path === '/admin/api/login' && method === 'POST') {

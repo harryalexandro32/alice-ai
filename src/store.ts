@@ -99,12 +99,6 @@ export function openDb(path: string): void {
       key TEXT NOT NULL DEFAULT '',
       text TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS quota (
-      day TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      n INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (day, kind)
-    );
     CREATE TABLE IF NOT EXISTS errors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       at INTEGER NOT NULL,
@@ -259,17 +253,6 @@ export function switchAppliedAt(phone: string): number {
 
 export function markSwitchApplied(phone: string, at: number): void {
   db.prepare('INSERT INTO switch_applied (phone, at) VALUES (?, ?) ON CONFLICT(phone) DO UPDATE SET at = excluded.at').run(phone, at);
-}
-
-/** Pakai satu jatah harian (penyimpanan bersama); mengembalikan jumlah terpakai. */
-export function quotaUse(day: string, kind: string): number {
-  db.prepare('INSERT INTO quota (day, kind, n) VALUES (?, ?, 1) ON CONFLICT(day, kind) DO UPDATE SET n = n + 1').run(day, kind);
-  return quotaUsed(day, kind);
-}
-
-export function quotaUsed(day: string, kind: string): number {
-  const r = db.prepare('SELECT n FROM quota WHERE day = ? AND kind = ?').get(day, kind) as { n: number } | undefined;
-  return r ? Number(r.n) : 0;
 }
 
 /**

@@ -1,0 +1,9 @@
+# Cadangan harian database + profil + sesi WhatsApp (lihat backup.sh).
+[Unit]
+Description=Alice AI - cadangan data
+
+[Service]
+Type=oneshot
+User=alice
+WorkingDirectory=/opt/alice-ai
+ExecStart=/opt/alice-ai/deploy/backup.sh

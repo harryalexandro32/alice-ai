@@ -16,12 +16,10 @@ import { initBiz } from './business';
 import { cfg, MINUTE } from './config';
 import { humanPause } from './pace';
 import { waTargets } from './notify';
-import { remoteEnabled } from './remote';
-import { pullProfile, pushSoon, startSync } from './sync';
-import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
+import { handleHumanReply, handleInbound, setSender } from './flow';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
-import { raiseAlert, setAlertWhatsApp, setDashboardSignal } from './alerts';
+import { raiseAlert, setAlertWhatsApp } from './alerts';
 import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
 import { setGuardListener } from './transport/sendguard';
@@ -160,12 +158,7 @@ export async function startApp(raw: Transport): Promise<void> {
     setFatalListener((text) => void raiseAlert('wa-putus', text, { whatsapp: false }));
   }
 
-  if (remoteEnabled()) {
-    // Dashboard-nya di-hosting terpisah; bot ini hanya mengikuti apa yang disimpan di sana.
-    await startSync();
-    setBeforeTurn(() => pullProfile());
-    setDashboardSignal(pushSoon);
-  } else if (cfg.adminPassword) {
+  if (cfg.adminPassword) {
     await startAdmin(localStore()).catch((e) =>
       console.error(`[dashboard] tidak bisa dinyalakan: ${e instanceof Error ? e.message : e}`)
     );

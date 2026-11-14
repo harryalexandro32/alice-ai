@@ -27,7 +27,10 @@ administrator) yang menjalankan `npm start` setiap kali Anda masuk ke Windows.
   kalau perlu atur Windows supaya masuk otomatis setelah menyala ulang.
 - Selama tugas ini terpasang, jangan menjalankan `npm start` kedua secara manual.
 
-## Linux (server klien): systemd
+## Linux (server): systemd
+
+Untuk server produksi, pakai skrip dan berkas siap pakai di `deploy/` — lihat
+[deploy.md](deploy.md). Intinya sama dengan di bawah ini.
 
 Simpan sebagai `/etc/systemd/system/alice-ai.service`, sesuaikan pengguna dan foldernya:
 

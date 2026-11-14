@@ -1,0 +1,27 @@
+# /etc/systemd/system/alice-ai.service — bot WhatsApp + dashboard, satu proses.
+# systemd adalah pengawasnya: nyala lagi kalau mati, log di journald.
+#   journalctl -u alice-ai -f
+
+[Unit]
+Description=Alice AI - bot WhatsApp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alice
+Group=alice
+WorkingDirectory=/opt/alice-ai
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run bot
+Restart=always
+RestartSec=5
+# Berkas sesi WhatsApp (auth/) dan database hanya boleh dibaca pemiliknya.
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/alice-ai
+
+[Install]
+WantedBy=multi-user.target

@@ -997,7 +997,6 @@ function renderStatus() {
     : [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Kabar lead lewat WA ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
         ['Google Sheet', st.sheet ? T('siap', 'ready') : T('belum diatur', 'not set')],
         [T('Transkripsi pesan suara', 'Voice note transcription'), st.channels && st.channels.stt ? T('siap', 'ready') : T('belum diatur di .env bot (STT_API_KEY)', 'not set in the bot\'s .env (STT_API_KEY)')],
-        ...(st.quota ? [[T('Jatah penyimpanan dashboard', 'Dashboard storage quota'), st.quota]] : []),
         [T('Yang dibalas', 'Who gets a reply'), st.onlyNumbers ? T('MODE UJI: hanya ', 'TEST MODE: only ') + st.onlyNumbers + T(' nomor', ' numbers') : T('semua nomor', 'every number')],
         [T('Panggilan LLM hari ini', 'LLM calls today'), st.usage.calls + T(' dari batas ', ' of limit ') + st.usage.limit],
         ...(st.guard ? [[T('Pengaman nomor', 'Number safeguard'), st.guard]] : [])];

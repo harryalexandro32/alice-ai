@@ -91,18 +91,15 @@ src/
   app.ts                gabung pesan beruntun, urutan per nomor, putaran 5 menit
 ```
 
-## Dashboard online (Vercel)
+## Produksi: server + dashboard online
 
-Dashboard bisa di-hosting terpisah dari bot: `api/index.ts` + `vercel.json` menjalankan penangan
-yang sama sebagai fungsi Vercel, dengan Vercel Blob (privat) sebagai penyimpanan bersama.
+Bot dan dashboard jalan sebagai **satu proses** di satu server (Hetzner), dengan SQLite + folder
+`data/` sebagai satu-satunya tempat data. Tidak ada penyimpanan bersama dan tidak ada sinkron.
 
-- Dashboard menulis `<bisnis>/profile.json` dan foto ke Blob.
-- Bot dengan `BLOB_READ_WRITE_TOKEN` yang sama menarik profil **tepat sebelum membalas** (plus tiap
-  10 menit), mengunduh foto ke `data/<bisnis>/media/`, dan mengirim salinan lead + statusnya paling
-  sering tiap 15 menit.
-- Bot itu sendiri tidak bisa jalan di Vercel selama memakai Baileys (butuh proses yang hidup terus).
+- `alice-api.lukicenturi.com` — Caddy (HTTPS otomatis) di depan dashboard bot.
+- `alice.lukicenturi.com` — proyek Vercel yang hanya **meneruskan** permintaan ke alamat di atas
+  (`vercel.json`). Alamat ini didaftarkan di `ADMIN_ORIGINS` pada `.env` bot.
+- Push ke `master` → GitHub Actions menguji, lalu memasang ke server lewat SSH (`deploy/`).
+- Cadangan harian database, profil, dan sesi WhatsApp ke `backups/` (`deploy/backup.sh`).
 
-Deploy ulang setelah mengubah kode: `npx vercel deploy --prod`. Env di Vercel: `ADMIN_PASSWORD`,
-`LLM_API_KEY` (untuk tab Uji coba), `BUSINESS`, dan `BLOB_READ_WRITE_TOKEN` (otomatis dari store).
-Saat pindah ke server klien: kosongkan `BLOB_READ_WRITE_TOKEN`, dan dashboard kembali jalan di
-samping bot dengan data lokal.
+Panduan lengkap: [docs/deploy.md](docs/deploy.md).
