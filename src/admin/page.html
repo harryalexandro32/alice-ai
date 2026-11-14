@@ -215,6 +215,8 @@
   .projsel { max-width: 220px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); font-weight: 600; }
   .wa { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
   .wa .qr { width: 232px; height: 232px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 8px; display: grid; place-items: center; flex: none; }
+  /* Atribut hidden kalah oleh display di atas: kotak QR harus benar-benar hilang saat sudah tersambung. */
+  .wa .qr[hidden] { display: none; }
   .wa .qr img { width: 100%; height: 100%; image-rendering: pixelated; }
   .wa .info { flex: 1; min-width: 240px; }
   .wa .code { font-family: ui-monospace, Consolas, monospace; font-size: 26px; font-weight: 700; letter-spacing: .12em; margin: 4px 0 8px; }

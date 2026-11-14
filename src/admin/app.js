@@ -1031,6 +1031,11 @@ function renderWa() {
   $('waSeen').textContent = w && w.last_seen_at ? T('laporan terakhir ', 'last report ') + when(w.last_seen_at) : '';
   const showQr = w && !stale && w.state === 'qr' && w.qr && typeof qrcode === 'function';
   $('waQr').hidden = !showQr;
+  if (!showQr) {
+    // Jangan sisakan gambar kosong (ikon rusak) saat QR tidak lagi berlaku.
+    $('waQrImg').removeAttribute('src');
+    delete $('waQrImg').dataset.qr;
+  }
   if (showQr && $('waQrImg').dataset.qr !== w.qr) {
     const q = qrcode(0, 'L');
     q.addData(w.qr);
