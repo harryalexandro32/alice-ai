@@ -449,6 +449,10 @@ export interface Metrics {
   replyMedianSec: number | null;
   /** Pelanggan yang dikirimi follow-up, dan berapa yang membalas dalam 48 jam. */
   followup: { sent: number; answered: number };
+  /** Jumlah baris pesan per hari menurut arahnya (masuk, dibalas bot, dibalas admin), terlama dulu. */
+  messagesByDay: { day: string; in: number; out: number; human: number }[];
+  /** Jumlah kontak per tahap pipeline, semua kontak proyek ini (tidak dibatasi jendela). */
+  stages: Record<Stage, number>;
 }
 
 /**
@@ -504,11 +508,30 @@ export async function metrics(days: string[], since: number, tz: string): Promis
     FROM messages f
     WHERE f.project = ${p} AND f.kind = 'followup' AND ${inWindow(sql.raw('f.at'))}`))[0];
 
+  const msgRows = rowsOf<{ day: string; dir: string; n: number }>(await db().execute(sql`
+    SELECT ${dayOf(sql.raw('m.at'))} AS day, m.dir AS dir, count(*)::int AS n
+    FROM messages m
+    WHERE m.project = ${p} AND ${inWindow(sql.raw('m.at'))}
+    GROUP BY 1, 2`));
+  const msgs = new Map<string, { in: number; out: number; human: number }>();
+  for (const r of msgRows) {
+    const d = msgs.get(String(r.day)) ?? { in: 0, out: 0, human: 0 };
+    if (r.dir === 'in' || r.dir === 'out' || r.dir === 'human') d[r.dir] += Number(r.n);
+    msgs.set(String(r.day), d);
+  }
+
+  const stageRows = rowsOf<{ stage: string; n: number }>(await db().execute(sql`
+    SELECT c.stage AS stage, count(*)::int AS n FROM contacts c WHERE c.project = ${p} GROUP BY 1`));
+  const stages = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>;
+  for (const r of stageRows) if ((STAGES as readonly string[]).includes(r.stage)) stages[r.stage as Stage] += Number(r.n);
+
   return {
     days: days.map((day) => ({ day, conversations: byDay.get(day) ?? 0 })),
     handed: { total: Number(handed?.total ?? 0), count: Number(handed?.count ?? 0) },
     replyMedianSec: median?.median === null || median?.median === undefined ? null : Math.round(Number(median.median)),
     followup: { sent: Number(fu?.sent ?? 0), answered: Number(fu?.answered ?? 0) },
+    messagesByDay: days.map((day) => ({ day, ...(msgs.get(day) ?? { in: 0, out: 0, human: 0 }) })),
+    stages,
   };
 }
 
