@@ -15,6 +15,22 @@ const el = (tag, props = {}, ...kids) => {
   return n;
 };
 
+// ---------- ikon ----------
+// Ikon dari sprite SVG di page.html (<symbol id="i-…">). Nama ikon selalu ditulis
+// di kode ini, tidak pernah dari pengguna, jadi aman diurai sebagai HTML.
+const icon = (name) => '<svg class="i" aria-hidden="true"><use href="#i-' + name + '"/></svg>';
+/** Ikon sebagai simpul DOM, untuk dipasang lewat el(…) atau append. */
+function ico(name) {
+  const t = document.createElement('template');
+  t.innerHTML = icon(name);
+  return t.content.firstChild;
+}
+/** Isi tombol (atau tautan) dengan ikon + teks; teksnya tetap lewat textContent. */
+function withIcon(node, name, text) {
+  node.replaceChildren(ico(name), text);
+  return node;
+}
+
 // ---------- bahasa tampilan (hanya dashboard; bot tetap berbahasa Indonesia) ----------
 let lang = 'id';
 try { if (localStorage.getItem('lang') === 'en') lang = 'en'; } catch { /* penyimpanan peramban diblokir */ }
@@ -33,7 +49,14 @@ function applyLang() {
     if (n.dataset.idPh === undefined) n.dataset.idPh = n.placeholder;
     n.placeholder = lang === 'en' ? n.dataset.enPh : n.dataset.idPh;
   }
-  for (const b of $('lang').children) b.classList.toggle('on', b.dataset.lang === lang);
+  // Tombol ikon (dan tombol yang di HP hanya ikon) memakai title + aria-label sebagai namanya.
+  for (const n of document.querySelectorAll('[data-en-title]')) {
+    if (n.dataset.idTitle === undefined) n.dataset.idTitle = n.title || n.getAttribute('aria-label') || '';
+    const t = lang === 'en' ? n.dataset.enTitle : n.dataset.idTitle;
+    n.title = t;
+    n.setAttribute('aria-label', t);
+  }
+  for (const b of $('lang').querySelectorAll('button')) b.classList.toggle('on', b.dataset.lang === lang);
 }
 
 // ---------- tema terang / gelap ----------
@@ -44,7 +67,7 @@ try {
 } catch { /* tetap terang */ }
 function applyTheme() {
   document.documentElement.dataset.theme = theme;
-  $('theme').textContent = theme === 'dark' ? '☀' : '☾';
+  $('theme').replaceChildren(ico(theme === 'dark' ? 'sun' : 'moon'));
 }
 applyTheme();
 $('theme').addEventListener('click', () => {
@@ -151,7 +174,7 @@ function setDirty(v, key) {
   if (v && key) changed.add(key);
   if (!v) changed.clear();
   $('save').disabled = !v;
-  $('save').textContent = v ? T('Simpan & terapkan', 'Save & apply') : T('Tersimpan', 'Saved');
+  withIcon($('save'), 'check', v ? T('Simpan & terapkan', 'Save & apply') : T('Tersimpan', 'Saved'));
   $('save').hidden = NO_SAVE.includes(page) && !v;
 }
 
@@ -310,12 +333,13 @@ function renderPdfs() {
       renderPdfs();
     });
     const chips = el('div', { className: 'chips' }, ...using.map((p) => {
-      const rm = el('button', { type: 'button', textContent: '×', title: T('Lepas dari produk ini', 'Detach from this product') });
+      const rm = el('button', { type: 'button', title: T('Lepas dari produk ini', 'Detach from this product') }, ico('x'));
+      rm.setAttribute('aria-label', rm.title);
       rm.addEventListener('click', () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); });
-      return el('span', { className: 'chip' }, p.name, rm);
+      return el('span', { className: 'chip' }, el('span', { className: 'raw', textContent: p.name }), rm);
     }), add);
 
-    const re = el('button', { className: 'btn ghost sm', type: 'button', textContent: T('Cocokkan ulang', 'Re-match') });
+    const re = el('button', { className: 'btn ghost sm', type: 'button' }, ico('refresh'), T('Cocokkan ulang', 'Re-match'));
     re.addEventListener('click', async () => {
       re.disabled = true;
       try {
@@ -324,7 +348,7 @@ function renderPdfs() {
         await afterAssign(wasDirty, [matchNote(f.name, r.readable, assignPdf(f.id, r.matches))]);
       } catch (e) { toast(e.message, true); re.disabled = false; }
     });
-    const del = el('button', { className: 'btn danger sm', type: 'button', textContent: T('Hapus', 'Delete'), style: 'margin-left:6px' });
+    const del = el('button', { className: 'btn danger sm', type: 'button', style: 'margin-left:6px' }, ico('trash'), T('Hapus', 'Delete'));
     del.addEventListener('click', async () => {
       if (dirty) return toast(T('Simpan dulu perubahan lain sebelum menghapus PDF.', 'Save your other changes before deleting a PDF.'), true);
       if (!confirm(T('Hapus "', 'Delete "') + f.name + '"?' + (using.length ? ' ' + using.length + T(' produk akan kehilangan PDF-nya.', ' products will lose their PDF.') : ''))) return;
@@ -427,8 +451,8 @@ const cellInput = (value, onInput, placeholder = '') => {
   input.addEventListener('input', () => { fit(); onInput(input.value); });
   return input;
 };
-const xBtn = (title, onClick) => {
-  const b = el('button', { className: 'x', type: 'button', textContent: '×', title });
+const xBtn = (title, onClick, name = 'trash') => {
+  const b = el('button', { className: 'x', type: 'button', title }, ico(name));
   b.setAttribute('aria-label', title);
   b.addEventListener('click', onClick);
   return b;
@@ -558,7 +582,8 @@ function renderProducts() {
       return el('td', { className: ci === 0 ? 'first' : ci === 1 ? 'wide' : '' }, input);
     });
 
-    const add = el('button', { className: 'add', type: 'button', textContent: '+', title: T('Tambah foto', 'Add photo') });
+    const add = el('button', { className: 'add', type: 'button', title: T('Tambah foto', 'Add photo') }, ico('plus'));
+    add.setAttribute('aria-label', add.title);
     add.addEventListener('click', () => {
       if (p.photos.length >= 6) return toast(T('Maksimal 6 foto per produk.', '6 photos per product max.'), true);
       pick(IMAGES, (f) => {
@@ -569,7 +594,8 @@ function renderProducts() {
       });
     });
     const thumbs = el('div', { className: 'thumbs' }, ...p.photos.map((id, pi) => {
-      const rm = el('button', { type: 'button', textContent: '×', title: T('Lepas foto', 'Remove photo') });
+      const rm = el('button', { type: 'button', title: T('Lepas foto', 'Remove photo') }, ico('x'));
+      rm.setAttribute('aria-label', rm.title);
       rm.addEventListener('click', () => { p.photos.splice(pi, 1); touchProducts(); renderProducts(); });
       return el('span', { className: 'th' }, el('img', { src: mediaUrl(id), alt: p.name, loading: 'lazy' }), rm);
     }), add);
@@ -578,7 +604,7 @@ function renderProducts() {
     const cur = fileOf(p.pdf);
     if (cur) {
       pdf = el('div', { className: 'pdf' }, el('a', { href: mediaUrl(p.pdf), target: '_blank', rel: 'noopener', textContent: '📄 ' + cur.name, title: cur.name }),
-        xBtn(T('Lepas PDF', 'Remove PDF'), () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); }));
+        xBtn(T('Lepas PDF', 'Remove PDF'), () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); }, 'x'));
     } else {
       const sel = el('select', {}, el('option', { value: '', textContent: T('— tanpa PDF —', '— no PDF —') }),
         el('option', { value: '+', textContent: T('⬆ Unggah PDF…', '⬆ Upload PDF…') }),
@@ -688,9 +714,9 @@ function tableNode(t) {
     redraw: () => { touchCatalog(); draw(); },
   });
   draw();
-  const addRow = el('button', { className: 'btn ghost sm', type: 'button', textContent: T('+ Baris', '+ Row') });
+  const addRow = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Baris', 'Row'));
   addRow.addEventListener('click', () => { t.rows.push(t.columns.map(() => '')); touchCatalog(); draw(); focusCell(t.rows.length - 1, 0); });
-  const addCol = el('button', { className: 'btn ghost sm', type: 'button', textContent: T('+ Kolom', '+ Column') });
+  const addCol = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Kolom', 'Column'));
   addCol.addEventListener('click', () => {
     if (t.columns.length >= 16) return toast(T('Maksimal 16 kolom.', '16 columns max.'), true);
     t.columns.push(T('Kolom ', 'Column ') + (t.columns.length + 1));
@@ -717,7 +743,7 @@ function seriesNode(s, si) {
   s.tables.forEach((t, ti) => {
     const { table, addRow, addCol } = tableNode(t);
     const tTitle = cellInput(t.title, (v) => { t.title = v; touchCatalog(); }, T('judul tabel, mis. Spesifikasi teknis', 'table title, e.g. Spesifikasi teknis'));
-    const delT = el('button', { className: 'btn danger sm', type: 'button', textContent: T('Hapus tabel', 'Delete table') });
+    const delT = el('button', { className: 'btn danger sm', type: 'button' }, ico('trash'), T('Hapus tabel', 'Delete table'));
     delT.addEventListener('click', () => {
       if (t.rows.length && !confirm(T('Hapus tabel "', 'Delete table "') + t.title + T('" beserta barisnya?', '" and its rows?'))) return;
       s.tables.splice(ti, 1);
@@ -727,7 +753,7 @@ function seriesNode(s, si) {
     body.append(el('div', { className: 'tblhead' }, tTitle), el('div', { className: 'scroll' }, table), el('div', { className: 'tblfoot' }, addRow, addCol, delT));
   });
 
-  const addT = el('button', { className: 'btn ghost sm', type: 'button', textContent: T('+ Tabel', '+ Table') });
+  const addT = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Tabel', 'Table'));
   addT.addEventListener('click', () => {
     if (s.tables.length >= 6) return toast(T('Maksimal 6 tabel per kelompok.', '6 tables per group max.'), true);
     const first = s.tables[0];
@@ -735,7 +761,7 @@ function seriesNode(s, si) {
     touchCatalog();
     renderCatalog();
   });
-  const delS = el('button', { className: 'btn danger sm', type: 'button', textContent: T('Hapus kelompok', 'Delete group') });
+  const delS = el('button', { className: 'btn danger sm', type: 'button' }, ico('trash'), T('Hapus kelompok', 'Delete group'));
   delS.addEventListener('click', () => {
     if (!confirm(T('Hapus kelompok "', 'Delete group "') + (s.name || blank) + T('" beserta semua tabelnya? Bot tidak akan bisa lagi menjawab spesifikasi di dalamnya.', '" and all its tables? The bot will no longer be able to answer the specifications in it.'))) return;
     profile.catalog.splice(si, 1);
@@ -944,7 +970,7 @@ function renderLeads() {
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }) : null);
     const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '—' })),
       el('td', { className: 'sum', textContent: c.summary || '—' }), status,
-      el('td', {}, el('label', { className: 'switch' }, box, el('small', { textContent: why }))),
+      el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip warn', textContent: why }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
     // Klik di mana saja pada baris (selain kontrolnya) membuka percakapannya.
     tr.addEventListener('click', (e) => {
@@ -1055,7 +1081,7 @@ function renderConvHead() {
     : c.hold === 'tombol' ? [T('Bot dijeda di chat ini', 'Bot paused in this chat'), 'warn'] : [T('Bot aktif', 'Bot active'), 'ok'];
   $('convHold').textContent = holdText + (c.needsSales ? T(' · perlu staf', ' · needs staff') : '');
   $('convHold').className = 'chip ' + (c.needsSales ? 'danger' : holdCls);
-  $('convBot').textContent = c.hold ? T('Aktifkan bot lagi', 'Turn the bot back on') : T('Jeda bot di chat ini', 'Pause the bot in this chat');
+  withIcon($('convBot'), c.hold ? 'play' : 'pause', c.hold ? T('Aktifkan bot lagi', 'Turn the bot back on') : T('Jeda bot di chat ini', 'Pause the bot in this chat'));
   $('convHandled').hidden = !c.needsSales;
   if ($('convStage').options.length !== STAGES.length || $('convStage').dataset.lang !== lang) {
     $('convStage').replaceChildren(...STAGES.map((s) => el('option', { value: s, textContent: stageLabel(s) })));
@@ -1231,8 +1257,8 @@ function renderHandoffs() {
   $('questionList').replaceChildren(...(list.length ? list.map((g) => {
     const box = el('textarea', { rows: 2, maxLength: 4000, placeholder: T('Tulis jawabannya seperti Anda menjawab pelanggan…', 'Write the answer as you would tell the customer…') });
     box.setAttribute('aria-label', T('Jawaban', 'Answer'));
-    const add = el('button', { type: 'button', className: 'btn', textContent: T('Tambahkan ke pengetahuan', 'Add to knowledge') });
-    const skip = el('button', { type: 'button', className: 'btn ghost', textContent: T('Abaikan', 'Ignore') });
+    const add = el('button', { type: 'button', className: 'btn' }, ico('book-plus'), T('Tambahkan ke pengetahuan', 'Add to knowledge'));
+    const skip = el('button', { type: 'button', className: 'btn ghost' }, ico('x'), T('Abaikan', 'Ignore'));
     add.addEventListener('click', () => void resolveQuestion(g, 'ditambahkan', box.value, [add, skip]));
     skip.addEventListener('click', () => void resolveQuestion(g, 'diabaikan', '', [add, skip]));
     return el('div', { className: 'qitem' }, el('div', { className: 'q', textContent: g.question }),
@@ -1306,7 +1332,7 @@ function renderHome() {
   // Perlu perhatian: pelanggan yang menunggu staf, lalu masalah bot 24 jam terakhir.
   const rows = [];
   for (const c of (leadData ? leadData.rows : []).filter((x) => x.needsSales)) {
-    const done = el('button', { className: 'btn ghost', type: 'button', textContent: T('✓ Sudah ditangani', '✓ Handled') });
+    const done = el('button', { className: 'btn ghost', type: 'button' }, ico('check-circle'), T('Sudah ditangani', 'Handled'));
     done.addEventListener('click', async () => {
       done.disabled = true;
       try {
@@ -1557,20 +1583,21 @@ function renderStrip() {
   if (!state) return;
   const st = state.status;
   const p = state.project;
-  const chip = (cls, text, href) => el('a', { className: 'chip ' + cls, href, textContent: text });
+  const chip = (cls, text, href, name) => el('a', { className: 'chip ' + cls, href }, ico(name), text);
   const out = [];
   // Keadaan WhatsApp: laporan /wa kalau sudah ada (lebih baru), selain itu dari keadaan bot.
   const w = wa && wa.wa ? { state: wa.wa.state, at: wa.wa.last_seen_at } : st ? { state: st.wa, at: st.reportedAt } : null;
   const waHref = pathOf('whatsapp');
-  if (!w || !w.at) out.push(chip('warn', T('WhatsApp: bot belum pernah melapor', 'WhatsApp: bot has never reported'), waHref));
-  else if (Date.now() - w.at > 120000) out.push(chip('danger', T('Bot tidak melapor', 'Bot not reporting'), waHref));
-  else if (w.state === 'connected') out.push(chip('ok', T('WhatsApp tersambung', 'WhatsApp connected'), waHref));
-  else out.push(chip('warn', T('WhatsApp belum tertaut', 'WhatsApp not linked') + ' · ' + waLabel(w.state), waHref));
-  if (p && p.paused) out.push(chip('danger', T('Bot dijeda', 'Bot paused'), pathOf('pengaturan')));
-  if (st && st.onlyNumbers) out.push(chip('warn', T('MODE UJI', 'TEST MODE') + ' · ' + st.onlyNumbers + T(' nomor', ' numbers'), pathOf('lanjutan')));
-  if (!state.testReady) out.push(chip('warn', T('LLM belum diatur', 'LLM not configured'), waHref));
+  if (!w || !w.at) out.push(chip('warn', T('WhatsApp: bot belum pernah melapor', 'WhatsApp: bot has never reported'), waHref, 'smartphone'));
+  else if (Date.now() - w.at > 120000) out.push(chip('danger', T('Bot tidak melapor', 'Bot not reporting'), waHref, 'smartphone'));
+  else if (w.state === 'connected') out.push(chip('ok', T('WhatsApp tersambung', 'WhatsApp connected'), waHref, 'smartphone'));
+  else out.push(chip('warn', T('WhatsApp belum tertaut', 'WhatsApp not linked') + ' · ' + waLabel(w.state), waHref, 'smartphone'));
+  if (p && p.paused) out.push(chip('danger', T('Bot dijeda', 'Bot paused'), pathOf('pengaturan'), 'pause-circle'));
+  if (st && st.onlyNumbers) out.push(chip('warn', T('MODE UJI', 'TEST MODE') + ' · ' + st.onlyNumbers + T(' nomor', ' numbers'), pathOf('lanjutan'), 'flask'));
+  if (!state.testReady) out.push(chip('warn', T('LLM belum diatur', 'LLM not configured'), waHref, 'alert'));
   const month = state.month || { idr: 0 };
-  out.push(chip('', idr(month.idr) + T(' bulan ini', ' this month'), pathOf('lanjutan') + '#biaya'));
+  // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
+  out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#biaya', 'coins'));
   $('strip').replaceChildren(...out);
 }
 
