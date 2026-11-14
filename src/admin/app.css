@@ -4,6 +4,12 @@
   --blue: #0051c3; --blue-dark: #003681; --blue-soft: #e8f0fc; --orange: #f6821f;
   --ok: #1c7c3c; --ok-soft: #e6f4ea; --warn: #9a5b00; --warn-soft: #fdf1dc; --danger: #b3261e; --danger-soft: #fce8e6;
   --radius: 6px; --topbar: 52px;
+  /* Tinggi kepala tetap (bilah atas + bilah keadaan); app.js menimpanya dengan ukuran sebenarnya. */
+  --chrome-h: calc(var(--topbar) + 37px);
+  /* Tinggi bilah simpan di bawah layar; app.js menimpanya dengan ukuran sebenarnya. */
+  --savebar-h: 57px;
+  /* Panah pilihan (select): chevron berwarna --muted; tema gelap punya versinya sendiri. */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c6166' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   /* Satu tinggi untuk semua tombol, kotak isian, dan pilihan; yang kecil untuk isian di dalam tabel. */
   --control-h: 36px; --control-h-sm: 30px; --control-px: 12px; --control-fs: 14px;
   --field: #ffffff; --surface2: #fafafb; --surface3: #f3f4f5; --hover: #f2f3f4; --code: #f0f1f2; --chip: #eef0f1;
@@ -23,6 +29,7 @@
   --field: #15181a; --surface2: #202427; --surface3: #23272b; --hover: #24282c; --code: #2a2f33; --chip: #2a2f33;
   --inverse: #0b0c0d; --off: #4a5056; --ink2: #cfd3d7; --field-line: #454b51; --dash: #555c63; --warn-line: #5c4a22; --focus: #2f5ea8;
   --bubble-in: #202427; --bubble-out: #1a2c47; --bubble-human: #17301f;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a2a8ae' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500; --viz-track: #184f95;
   --viz-on-1: #121416; --viz-on-2: #121416; --viz-on-3: #121416; --viz-on-4: #121416;
 }
@@ -30,7 +37,7 @@
 :root[data-theme=dark] .btn.ghost, :root[data-theme=dark] .btn.danger { background: var(--card); }
 :root[data-theme=dark] .btn.ghost { color: var(--blue-dark); }
 :root[data-theme=dark] nav a.on { color: var(--blue-dark); }
-:root[data-theme=dark] .lang button, :root[data-theme=dark] .lang-ico { background: var(--card); }
+:root[data-theme=dark] .lang button, :root[data-theme=dark] .lang-ico, :root[data-theme=dark] .projwrap { background: var(--card); }
 :root[data-theme=dark] .lang button.on { background: var(--blue); }
 /* Saringan aktif di tema gelap: teks putih di atas biru terang kurang kontras untuk huruf 11px. */
 :root[data-theme=dark] .filters button.on { background: var(--blue-soft); border-color: var(--blue); color: var(--blue-dark); }
@@ -51,8 +58,8 @@ a.link:hover { text-decoration: underline; }
 .i { width: 16px; height: 16px; flex: none; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
 .chip .i { width: 14px; height: 14px; }
 .chip:has(> .i:first-child) { padding-left: 7px; }
-/* Tautan ke bagian (#biaya, #pertanyaan) tidak tertutup bilah atas yang menempel. */
-[id] { scroll-margin-top: calc(var(--topbar) + 52px); }
+/* Tautan ke bagian (#biaya, #pertanyaan) tidak tertutup kepala yang tetap. */
+[id] { scroll-margin-top: calc(var(--chrome-h) + 16px); }
 
 /* ---- kontrol: tinggi, padding, sudut, dan huruf yang sama ---- */
 button, .btn, input:not([type=checkbox]):not([type=radio]), select {
@@ -79,28 +86,33 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 .thumbs .th button .i { width: 10px; height: 10px; }
 
 /* ---- kerangka ---- */
-.topbar { position: sticky; top: 0; z-index: 10; height: var(--topbar); background: var(--field); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 20px; }
+/* Kepala tetap: tidak pernah ikut tergulung, juga di halaman panjang. */
+.chrome { position: fixed; top: 0; left: 0; right: 0; z-index: 10; }
+.topbar { height: var(--topbar); background: var(--field); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 20px; }
 .home { display: flex; align-items: center; text-decoration: none; flex: none; }
 .mark { width: 24px; height: 24px; border-radius: 6px; background: var(--orange); flex: none; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; }
-.logo { height: 28px; max-width: 120px; object-fit: contain; flex: none; display: none; }
-.has-logo .logo { display: block; }
-.has-logo .topbar .mark { display: none; }
 .brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
 .topbar .spacer { flex: 1; }
-.projwrap { position: relative; display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
-.projwrap > .i { position: absolute; left: 10px; color: var(--muted); pointer-events: none; }
-.projsel { width: auto; max-width: 240px; min-width: 0; font-weight: 600; border: 1px solid var(--line); background: var(--field); padding-left: 32px; }
+/* Pemilih proyek: bingkai tombolnya ada di .projwrap, isinya ikon (atau logo proyek) lalu pilihan tanpa bingkai. */
+.projwrap { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; height: var(--control-h); padding-left: 10px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); }
+.projwrap:focus-within { outline: 2px solid var(--focus); border-color: var(--blue); }
+.projwrap > .i { color: var(--muted); pointer-events: none; }
+.has-logo .projwrap > .i { display: none; }
+.projlogo { height: 22px; width: auto; max-width: 60px; border-radius: 4px; object-fit: contain; flex: none; display: block; }
+.projsel { width: auto; max-width: 240px; min-width: 0; height: calc(var(--control-h) - 2px); font-weight: 600; border: 0; background-color: transparent; padding-left: 0; }
+.projwrap .projsel:focus { outline: 0; }
 .lang { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; flex: none; height: var(--control-h); }
 .lang button { background: var(--field); border: 0; padding: 0 10px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; border-radius: 0; }
 .lang button.on { background: var(--blue); color: #fff; }
 .lang-ico { display: inline-flex; align-items: center; padding: 0 4px 0 9px; background: var(--field); color: var(--muted); }
 
 /* Bilah keadaan: tampil di semua halaman proyek. */
-.strip { position: sticky; top: var(--topbar); z-index: 9; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 7px 20px; min-height: 37px; background: var(--surface2); border-bottom: 1px solid var(--line); }
+.strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 7px 20px; min-height: 37px; background: var(--surface2); border-bottom: 1px solid var(--line); }
 .strip a { text-decoration: none; }
 
-.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: calc(100% - var(--topbar)); }
-aside { background: var(--field); border-right: 1px solid var(--line); padding: 12px 10px 20px; position: sticky; top: calc(var(--topbar) + 37px); height: calc(100vh - var(--topbar) - 37px); overflow-y: auto; }
+.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100vh; padding-top: var(--chrome-h); }
+aside { background: var(--field); border-right: 1px solid var(--line); padding: 12px 10px 20px; position: sticky; top: var(--chrome-h); height: calc(100vh - var(--chrome-h)); overflow-y: auto; }
 .nav-group { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; }
 .nav-group .i { width: 14px; height: 14px; }
 nav a { display: flex; align-items: center; gap: 6px; min-height: var(--control-h); border-radius: var(--radius); color: var(--ink2); padding: 0 10px; text-decoration: none; cursor: pointer; }
@@ -149,7 +161,11 @@ label.inline select { width: auto; min-width: 140px; font-weight: 400; }
 .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .row5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
 .check { display: flex; gap: 9px; align-items: flex-start; margin-bottom: 12px; }
-.check input { margin-top: 3px; }
+.check input { margin-top: 3px; flex: none; }
+/* Kotak centang dengan judul + keterangan: judul tebal di baris sendiri, keterangan lebih kecil dan pudar di bawahnya. */
+.check .ck { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.check .ck .t { font-weight: 600; }
+.check .ck small.help { font-size: 13px; line-height: 1.45; }
 div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
 /* Kartu Follow-up: satu kalimat dengan kotak angka di dalamnya. Tinggi baris = tinggi kotak + jarak,
    jadi baris yang terbungkus di HP tetap rata dan kotaknya sejajar dengan teks. */
@@ -169,7 +185,7 @@ div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
 .guide b { color: var(--ink); }
 .logo-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .logo-box { width: 120px; height: 120px; flex: none; padding: 8px; border: 1px dashed var(--dash); border-radius: var(--radius); display: grid; place-items: center; background: var(--surface2); color: var(--faint); font-size: 12px; text-align: center; overflow: hidden; }
-.logo-box img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; }
+.logo-box img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; border-radius: 6px; }
 .links { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .tilelink { display: block; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; text-decoration: none; color: var(--ink); cursor: pointer; background: var(--surface2); }
 .tilelink:hover { border-color: var(--blue); background: var(--blue-soft); }
@@ -193,48 +209,69 @@ table.leads tbody tr:hover td { background: var(--hover); }
 td.who a { font-weight: 600; }
 td.who small { display: block; color: var(--muted); }
 /* tabel isian: tiap sel adalah kotak isian, seperti lembar kerja */
-table.grid { border: 1px solid var(--line); border-radius: var(--radius); border-collapse: separate; border-spacing: 0; width: 100%; }
+/* table-layout: fixed: lebar kolom dari CSS, bukan dari isi, jadi tabel tidak melebar melewati kartunya.
+   Wadah .scroll baru bergulung ke samping di layar sempit (lihat min-width di bagian HP). */
+table.grid { border: 1px solid var(--line); border-radius: var(--radius); border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 table.grid th, table.grid td { border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); padding: 0; vertical-align: middle; }
 table.grid tr > :last-child { border-right: 0; }
 table.grid tbody tr:last-child td { border-bottom: 0; }
 table.grid thead th { background: var(--surface3); border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--muted); text-align: left; }
-table.grid thead th.lbl { padding: 7px 10px; white-space: nowrap; }
-table.grid input[type=text] { border: 0; border-radius: 0; background: transparent; padding: 0 10px; width: 100%; }
+table.grid thead th.lbl { padding: 7px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.grid input[type=text] { border: 0; border-radius: 0; background: transparent; padding: 0 10px; width: 100%; min-width: 0; }
 table.grid thead input[type=text] { font-weight: 600; color: var(--ink2); font-size: 12.5px; }
 table.grid input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--field); }
-table.grid select { border: 0; background: transparent; width: auto; min-width: 96px; border-radius: 0; }
+table.grid select { border: 0; background-color: transparent; width: 100%; min-width: 0; border-radius: 0; }
 table.grid textarea { border: 0; border-radius: 0; background: transparent; min-height: 0; }
+/* Sel teks panjang: membungkus dan tumbuh mengikuti isinya (field-sizing), tanpa pegangan ubah ukuran. */
+table.grid textarea.cellbox { display: block; width: 100%; resize: none; field-sizing: content; min-height: var(--control-h); max-height: 160px; padding: 7px 10px; line-height: 1.45; }
+table.grid textarea.cellbox:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--field); }
+table.grid .hc input[type=text] { flex: 1; min-width: 0; }
+/* Lebar kolom per tabel; kolom tanpa lebar berbagi sisanya. */
+#products th:nth-child(1) { width: 18%; }
+#products th:nth-child(3), #products th:nth-child(4) { width: 12%; }
+#products th:nth-child(5) { width: 120px; }
+#products th:nth-child(6) { width: 170px; }
+#fields th:nth-child(1) { width: 20%; }
+#fields th:nth-child(4) { width: 70px; }
+#recipients th:nth-child(2) { width: 130px; }
 table.grid td.first input { font-weight: 600; }
-table.grid td.wide { width: 40%; }
 table.grid .hc { display: flex; align-items: center; }
 .x { background: none; border: 0; color: var(--faint); cursor: pointer; padding: 4px 8px; font-size: 15px; border-radius: 4px; }
 .x:hover { color: var(--danger); background: var(--danger-soft); }
-table.grid td.act, table.grid th.act { width: 1%; white-space: nowrap; text-align: center; padding: 2px 4px; }
+table.grid td.act, table.grid th.act { width: 44px; white-space: nowrap; text-align: center; padding: 2px 4px; }
 table.grid td.center { text-align: center; padding: 0 10px; }
-.thumbs { display: flex; gap: 4px; align-items: center; padding: 3px 8px; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: center; padding: 6px 8px; }
 .thumbs .th { position: relative; flex: none; }
 .thumbs img { width: 30px; height: 30px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); display: block; cursor: zoom-in; background: var(--code); }
 .thumbs .th button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; background: var(--inverse); color: #fff; font-size: 11px; line-height: 16px; padding: 0; cursor: pointer; display: none; }
 .thumbs .th:hover button, .thumbs .th button:focus { display: inline-flex; }
 .thumbs .add { width: 30px; height: 30px; flex: none; border: 1px dashed var(--dash); border-radius: 4px; background: var(--field); color: var(--blue); cursor: pointer; font-size: 17px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .thumbs .add:hover { border-color: var(--blue); background: var(--blue-soft); }
-.pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 150px; }
-.pdf a { color: var(--blue); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-size: 13px; }
+.pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 0; }
+.pdf a { color: var(--blue); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; font-size: 13px; }
 .pdf a:hover { text-decoration: underline; }
-.pdf select { border: 0; background: transparent; padding: 0 4px; color: var(--muted); font-size: 13px; min-width: 140px; }
+.pdf select { border: 0; background-color: transparent; padding-left: 4px; color: var(--muted); font-size: 13px; min-width: 0; width: 100%; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .chips .chip { padding-right: 3px; gap: 2px; background: var(--blue-soft); color: var(--blue-dark); }
 .chips .chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 3px; font-size: 13px; opacity: .6; }
 .chips .chip button:hover { opacity: 1; }
 .chips select { width: auto; border: 1px dashed var(--dash); font-size: 12px; color: var(--muted); border-radius: 99px; height: var(--control-h-sm); }
 
+/* Semua pilihan (select): panah sendiri dengan jarak tetap dari tepi kanan, bukan panah bawaan peramban.
+   Ditaruh setelah aturan tabel supaya padding kanan tidak tertimpa padding kontrol kecil. */
+select, table.list select, table.grid select, .pdf select, .chips select {
+  appearance: none; -webkit-appearance: none; padding-right: 34px;
+  background-image: var(--select-arrow); background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 12px;
+}
+
 /* ---- lipatan ---- */
 details.series, details.fold { background: var(--field); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
 details.fold { margin-bottom: 16px; }
 details > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
 details > summary::-webkit-details-marker { display: none; }
-details > summary::before { content: "▸"; color: var(--faint); font-size: 12px; width: 10px; }
-details[open] > summary::before { content: "▾"; }
+/* Panah lipatan: ikon chevron-right dari sprite (dipasang app.js lewat decorateSummaries), diputar 90° saat terbuka. */
+details > summary .chev { color: var(--faint); transition: transform .15s; }
+details[open] > summary .chev { transform: rotate(90deg); }
 details[open] > summary { border-bottom: 1px solid var(--line-soft); }
 details > summary .count { font-weight: 400; color: var(--muted); font-size: 13px; }
 details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2); border-radius: 0 0 var(--radius) var(--radius); }
@@ -341,12 +378,14 @@ tr.stale td { background: var(--danger-soft); }
 /* ---- coba bicara (panel samping) ---- */
 .drawer-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 18; display: none; }
 .drawer-bg.on { display: block; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); background: var(--card); border-left: 1px solid var(--line); z-index: 19; display: flex; flex-direction: column; padding: 16px; gap: 10px; transform: translateX(100%); transition: transform .2s; visibility: hidden; }
+/* Setinggi layar penuh (100dvh: juga saat bilah alamat HP muncul/hilang); daftar pesan bergulung di dalam,
+   kotak ketik tetap di bawah. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; height: 100vh; height: 100dvh; width: min(440px, 100vw); background: var(--card); border-left: 1px solid var(--line); z-index: 19; display: flex; flex-direction: column; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); gap: 10px; transform: translateX(100%); transition: transform .2s; visibility: hidden; }
 .drawer.on { transform: none; visibility: visible; }
 .drawer-head { display: flex; gap: 10px; align-items: flex-start; }
 .drawer-head > div { flex: 1; }
 .drawer-head h2 { font-size: 16px; margin: 0 0 3px; }
-.chat { flex: 1; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface3); padding: 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.chat { flex: 1; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface3); padding: 12px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
 .msg { max-width: 86%; padding: 8px 11px; border-radius: 10px; white-space: pre-wrap; word-break: break-word; }
 .msg.in { align-self: flex-end; background: var(--blue-soft); }
 .msg.out { align-self: flex-start; background: var(--field); border: 1px solid var(--line); }
@@ -354,8 +393,22 @@ tr.stale td { background: var(--danger-soft); }
 .msg.bad { background: var(--warn-soft); border: 1px solid var(--warn-line); color: var(--warn); }
 .msg img { display: block; max-width: 180px; border-radius: 6px; margin-top: 6px; }
 .msg a.doc { display: block; margin-top: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--blue); text-decoration: none; background: var(--surface2); }
-.send { display: flex; gap: 8px; }
+.send { display: flex; gap: 8px; flex: none; }
+.drawer-head { flex: none; }
 .send input { flex: 1; min-width: 0; }
+
+/* ---- bilah simpan (bawah layar) ---- */
+/* Selebar kolom isi di layar lebar (mulai setelah menu samping 228px), selebar layar di HP.
+   Tersembunyi di bawah tepi layar; naik saat ada perubahan (.on). */
+.savebar { position: fixed; left: 228px; right: 0; bottom: 0; z-index: 12; background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -2px 10px rgba(0,0,0,.08);
+  transform: translateY(100%); visibility: hidden; transition: transform .2s, visibility .2s; padding-bottom: env(safe-area-inset-bottom); }
+.savebar.on { transform: none; visibility: visible; }
+/* Tinggi bilah dari isinya (bukan dari --savebar-h: variabel itu hasil ukuran bilah ini). */
+.savebar-in { max-width: 1180px; padding: 10px 32px; display: flex; align-items: center; gap: 8px; }
+.savebar-text { margin-right: auto; color: var(--muted); min-width: 0; }
+/* Selama bilah simpan tampil: isi halaman dan kabar singkat tidak tertutup olehnya. */
+.has-savebar .content { padding-bottom: calc(var(--savebar-h) + 40px); }
+.has-savebar .toast { bottom: calc(var(--savebar-h) + 16px); }
 
 /* ---- lapisan ---- */
 .toast { position: fixed; right: 20px; bottom: 20px; background: var(--inverse); color: #fff; padding: 10px 16px; border-radius: var(--radius); opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; max-width: min(360px, calc(100vw - 40px)); z-index: 30; }
@@ -381,10 +434,16 @@ tr.stale td { background: var(--danger-soft); }
 .wa { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
 .wa .qr { width: 232px; height: 232px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 8px; display: grid; place-items: center; flex: none; max-width: 100%; }
 .wa .qr img { width: 100%; height: 100%; image-rendering: pixelated; }
-.wa .info { flex: 1; min-width: 220px; }
-.wa .code { font-family: ui-monospace, Consolas, monospace; font-size: 26px; font-weight: 700; letter-spacing: .12em; margin: 4px 0 8px; }
-.wa .pair { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 8px; }
-.wa .pair input { max-width: 220px; }
+/* Kolom keterangan: lencana keadaan, kode pairing, rincian, kotak nomor + tombol, dan tombol putuskan
+   berjarak sama (gap). Baris yang kosong tidak ikut memakan jarak. */
+.wa .info { flex: 1; min-width: 220px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.wa .info > * { max-width: 100%; }
+.wa .info > :empty { display: none; }
+.wa .info .sub { margin: 0 0 4px; }
+.wa .code { font-family: ui-monospace, Consolas, monospace; font-size: 26px; font-weight: 700; letter-spacing: .12em; margin: 0; }
+.wa .pair { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; align-self: stretch; }
+.wa .pair input { max-width: 220px; flex: 1 1 160px; }
+.wa #waReset { margin-top: 6px; }
 .pausebar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .pausebar.on { color: var(--danger); font-weight: 600; }
 
@@ -400,7 +459,7 @@ tr.stale td { background: var(--danger-soft); }
   nav a, nav a.sub { white-space: nowrap; padding: 0 10px; flex: none; }
   .nav-group { display: none; }
   .badge { margin-left: 4px; }
-  .strip { position: static; padding: 6px 14px; }
+  .strip { padding: 6px 14px; }
   .pagehead { padding: 14px 16px 12px; }
   .pagehead h1 { font-size: 20px; }
   .content { padding: 16px 16px 60px; }
@@ -417,13 +476,24 @@ tr.stale td { background: var(--danger-soft); }
   #attention td.sum { flex-basis: 100%; min-width: 0; max-width: none; }
   #attention td.acts { text-align: left; width: auto; }
   #attention .acts-in { flex-wrap: wrap; }
+  .savebar { left: 0; }
+  .savebar-in { padding: 10px 16px; }
   .card > .ch { padding: 14px 14px 0; }
   .card > .cb { padding: 12px 14px 16px; }
   .cardfoot { padding: 10px 14px; }
+}
+/* Layar sempit: tabel isian yang banyak kolomnya diberi lebar minimum, jadi wadahnya yang bergulung ke samping. */
+@media (max-width: 720px) {
+  #products { min-width: 900px; }
+  #fields, #recipients { min-width: 600px; }
 }
 @media (max-width: 420px) {
   .lang button { padding: 0 7px; }
   #logout { width: var(--control-h); padding: 0; }
   #logout .lbl, .lang-ico { display: none; }
+  /* HP sempit: teks bilah simpan di baris sendiri, dua tombolnya berbagi baris di bawahnya. */
+  .savebar-in { flex-wrap: wrap; gap: 6px 8px; padding: 8px 12px; }
+  .savebar-text { flex-basis: 100%; font-size: 13px; }
+  .savebar-in .btn { flex: 1; }
   .tiles.four { grid-template-columns: 1fr; }
 }

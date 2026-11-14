@@ -45,7 +45,6 @@ export interface BotStatus {
   llm: string | null;
   usage: { calls: number; limit: number };
   sales: string | null;
-  sheet: boolean;
   onlyNumbers: number;
   /** Keadaan pengaman nomor (jalur Baileys), satu baris. */
   guard?: string;

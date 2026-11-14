@@ -21,7 +21,7 @@ import { cfg, HOUR, MINUTE, normPhone } from './config';
 import { handleHumanReply, handleInbound, setSender, type Sender } from './flow';
 import { runFollowups } from './followup';
 import { llmEnabled, llmUsageToday } from './llm/provider';
-import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
+import { deliverOutbox, setSalesNotifier } from './sinks/outbox';
 import { closeDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { getContact, getProfile, getProject, saveProfile, type Project } from './store';
@@ -56,7 +56,6 @@ async function main() {
     console.log(`\n📣 KE SALES:\n${text}\n`);
     return true;
   });
-  setSheetWriter(async (row) => console.log(`\n📊 BARIS SHEET: ${row.join(' | ')}\n`));
 
   let phone = '+6281200000001';
   console.log(`Mode latihan bot ${biz.brand}. Ketik seperti calon pelanggan. /keluar untuk selesai.`);

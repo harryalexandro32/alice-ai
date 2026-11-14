@@ -4,7 +4,7 @@ Mesin asisten penjualan WhatsApp yang bisa dipakai ulang untuk bisnis apa pun:
 
 1. **Salam** untuk chat pertama.
 2. **Mengumpulkan data lead** (field-nya ditentukan profil bisnis), lalu mengirimnya ke nomor WA
-   sales dan Google Sheet.
+   sales. Semua lead juga tampil di dashboard (Percakapan) dan bisa diunduh sebagai CSV.
 3. **Follow-up** kalau pelanggan diam (bawaan: jam ke-23, sekali, hanya jam 08–20).
 4. **Tanya-jawab** lewat LLM (bawaan DeepSeek) dari pengetahuan milik bisnis itu saja.
 
@@ -131,10 +131,6 @@ Mesin tidak menyebut nama klien, produk, maupun field lead. Semua itu ada di sat
    proyek di dashboard.
 4. `PROJECT=<bibit> npm run eval` sampai jawabannya benar, baru tautkan WhatsApp-nya.
 
-Judul kolom Sheet: Waktu, Jenis, Nomor, lalu satu kolom per `leadFields`, Perlu sales, Pesan terakhir.
-Simpan kunci akun layanan sebagai `google-service-account.json` dan bagikan Sheet-nya (Editor) ke
-email akun itu.
-
 ## Susunan
 
 ```
@@ -149,7 +145,7 @@ src/
   brain.ts              prompt dirakit dari profil + pagar balasan
   flow.ts               pesan masuk -> balasan; salam, data lead, serah-terima
   followup.ts           jadwal & pengiriman follow-up
-  sinks/                antrean lead -> WA sales + Google Sheet (dicoba ulang)
+  sinks/                antrean lead -> WA sales, balasan dari dashboard (dicoba ulang)
   transport/            baileys.ts, cloud.ts — keduanya memenuhi types.ts
   app.ts                gabung pesan beruntun, urutan per nomor, putaran 5 menit
 ```

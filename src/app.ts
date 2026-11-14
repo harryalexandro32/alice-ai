@@ -32,8 +32,7 @@ import type { Transport, TransportInbound } from './transport/types';
  * Nomornya boleh nomor bot itu sendiri ("self", atau diisi nomor yang sama):
  * staf membalas pelanggan dari aplikasi WhatsApp di nomor itu. Baileys bisa
  * mengirim ke chat "diri sendiri". Cloud API tidak bisa — di sana kabarnya
- * dilewat; catatannya ada di Google Sheet, di dashboard, dan di percakapan itu
- * sendiri. False = sengaja tidak dikirim; melempar = gagal.
+ * dilewat; catatannya ada di dashboard dan di percakapan itu sendiri. False = sengaja tidak dikirim; melempar = gagal.
  */
 export function makeWaSender(transport: Transport): (phone: string, text: string) => Promise<boolean> {
   let warned = false;
@@ -45,7 +44,7 @@ export function makeWaSender(transport: Transport): (phone: string, text: string
       if (!warned) {
         console.log(
           `[lead] nomor penerima = nomor bot, dan jalur ${transport.name} tidak bisa mengirimi diri sendiri. ` +
-            'Lead tetap tercatat di Google Sheet; percakapannya terlihat di aplikasi WhatsApp.'
+            'Lead tetap tercatat di dashboard; percakapannya terlihat di aplikasi WhatsApp.'
         );
         warned = true;
       }

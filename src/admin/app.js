@@ -25,6 +25,18 @@ function ico(name) {
   t.innerHTML = icon(name);
   return t.content.firstChild;
 }
+/**
+ * Panah di depan tiap judul lipatan (details > summary): ikon chevron-right, diputar CSS saat terbuka.
+ * Dipanggil saat halaman dimuat dan setiap kali ada lipatan baru (mis. kelompok data teknis).
+ */
+function decorateSummaries(root = document) {
+  for (const s of root.querySelectorAll('details > summary')) {
+    if (s.firstElementChild && s.firstElementChild.classList.contains('chev')) continue;
+    const c = ico('chevron-right');
+    c.classList.add('chev');
+    s.prepend(c);
+  }
+}
 /** Isi tombol (atau tautan) dengan ikon + teks; teksnya tetap lewat textContent. */
 function withIcon(node, name, text) {
   node.replaceChildren(ico(name), text);
@@ -102,8 +114,6 @@ const ROUTES = {
 };
 /** Halaman Pengetahuan: di sini tombol "Coba bicara" tersedia. */
 const KNOWLEDGE = ['identitas', 'produk', 'rekomendasi', 'brosur', 'lainnya'];
-/** Halaman tanpa isian profil: tombol Simpan disembunyikan selama tidak ada perubahan. */
-const NO_SAVE = ['beranda', 'percakapan', 'chat', 'whatsapp', 'notfound'];
 
 const pathOf = (pg, pid = project) => '/' + pid + (ROUTES[pg] ? '/' + ROUTES[pg] : '');
 const convPath = (phone, pid = project) => '/' + pid + '/percakapan/' + encodeURIComponent(phone);
@@ -169,13 +179,18 @@ async function api(path, opts = {}) {
   return data;
 }
 
+/** Tandai ada (atau tidak ada) perubahan; bilah simpan di bawah layar muncul selama ada perubahan. */
 function setDirty(v, key) {
   dirty = v;
   if (v && key) changed.add(key);
   if (!v) changed.clear();
   $('save').disabled = !v;
-  withIcon($('save'), 'check', v ? T('Simpan & terapkan', 'Save & apply') : T('Tersimpan', 'Saved'));
-  $('save').hidden = NO_SAVE.includes(page) && !v;
+  withIcon($('save'), 'check', T('Simpan & terapkan', 'Save & apply'));
+  $('savebar').classList.toggle('on', v);
+  $('savebar').setAttribute('aria-hidden', String(!v));
+  // Selama tersembunyi, tombolnya tidak bisa dicapai dengan Tab.
+  for (const b of [$('save'), $('discard')]) b.tabIndex = v ? 0 : -1;
+  document.body.classList.toggle('has-savebar', v);
 }
 
 // ---------- isian sederhana ----------
@@ -339,7 +354,7 @@ function assignPdf(id, names) {
 }
 
 const matchNote = (name, readable, r) =>
-  !readable ? name + T(': tidak terbaca (hasil pindai?) — pasangkan sendiri.', ': not readable (a scan?) — attach it by hand.')
+  !readable ? name + T(': tidak terbaca (hasil pindai?). Pasangkan sendiri.', ': not readable (a scan?). Attach it by hand.')
     : name + T(': dipasang ke ', ': attached to ') + r.set + T(' produk', ' products') +
       (r.taken ? T(', ', ', ') + r.taken + T(' sudah punya PDF lain', ' already had another PDF') : '') + '.';
 
@@ -461,10 +476,12 @@ $('pickFile').addEventListener('change', async () => {
 const IMAGES = 'image/jpeg,image/png,image/webp';
 
 // ---------- logo ----------
+// Logo proyek tampil di tombol pemilih proyek (bilah atas), menggantikan ikon lapisan.
 function renderLogo() {
   const src = mediaUrl(profile.logo);
   document.body.classList.toggle('has-logo', Boolean(src));
-  if (src) $('logoTop').src = src;
+  if (src) $('logoTop').src = src; else $('logoTop').removeAttribute('src');
+  $('logoTop').hidden = !src;
   $('logoBox').replaceChildren(src ? el('img', { src, alt: 'Logo' }) : T('belum ada logo', 'no logo yet'));
   $('logoClear').style.display = src ? '' : 'none';
 }
@@ -477,13 +494,17 @@ $('logoPick').addEventListener('click', () => pick(IMAGES, (f) => {
 $('logoClear').addEventListener('click', () => { profile.logo = ''; setDirty(true, 'logo'); renderLogo(); });
 
 // ---------- tabel isian ----------
+// Lebar kolom diatur CSS (table-layout: fixed); kotak isian selalu selebar selnya.
 const cellInput = (value, onInput, placeholder = '') => {
   const input = el('input', { type: 'text', value: value || '', placeholder });
-  // Lebar kolom mengikuti isinya, supaya kode dan judul kolom tidak terpotong.
-  const fit = () => (input.style.minWidth = Math.min(36, Math.max(4, (input.value || placeholder).length) + 3) + 'ch');
-  fit();
-  input.addEventListener('input', () => { fit(); onInput(input.value); });
+  input.addEventListener('input', () => onInput(input.value));
   return input;
+};
+/** Sel teks panjang (mis. keterangan produk): membungkus ke baris berikutnya dan tumbuh mengikuti isinya. */
+const cellText = (value, onInput, placeholder = '') => {
+  const box = el('textarea', { className: 'cellbox', rows: 1, value: value || '', placeholder });
+  box.addEventListener('input', () => onInput(box.value));
+  return box;
 };
 const xBtn = (title, onClick, name = 'trash') => {
   const b = el('button', { className: 'x', type: 'button', title }, ico(name));
@@ -494,9 +515,9 @@ const xBtn = (title, onClick, name = 'trash') => {
 const headRow = (labels) => el('thead', {}, el('tr', {}, ...labels.map((t) => el('th', { className: 'lbl', textContent: t })), el('th', { className: 'act' })));
 
 /** Enter = turun satu baris; tempel dari Excel = isi banyak sel. `rows` = daftar baris, `get/set` = akses sel. */
-function sheetKeys(table, opts) {
+function gridKeys(table, opts) {
   const focusCell = (r, c) => {
-    const n = table.querySelector('input[data-r="' + r + '"][data-c="' + c + '"]');
+    const n = table.querySelector('[data-r="' + r + '"][data-c="' + c + '"]');
     if (n) { n.focus(); n.select(); }
   };
   table.addEventListener('keydown', (e) => {
@@ -610,10 +631,11 @@ function renderProducts() {
 
   const body = el('tbody', {}, ...list.map((p, ri) => {
     const cells = P_COLS.map((k, ci) => {
-      const input = cellInput(p[k], (v) => { p[k] = v; touchProducts(); }, ri === 0 || !p.name ? ph[ci] : '');
+      const make = k === 'description' ? cellText : cellInput;
+      const input = make(p[k], (v) => { p[k] = v; touchProducts(); }, ri === 0 || !p.name ? ph[ci] : '');
       input.dataset.r = ri;
       input.dataset.c = ci;
-      return el('td', { className: ci === 0 ? 'first' : ci === 1 ? 'wide' : '' }, input);
+      return el('td', { className: ci === 0 ? 'first' : '' }, input);
     });
 
     const add = el('button', { className: 'add', type: 'button', title: T('Tambah foto', 'Add photo') }, ico('plus'));
@@ -640,7 +662,7 @@ function renderProducts() {
       pdf = el('div', { className: 'pdf' }, el('a', { href: mediaUrl(p.pdf), target: '_blank', rel: 'noopener', textContent: '📄 ' + cur.name, title: cur.name }),
         xBtn(T('Lepas PDF', 'Remove PDF'), () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); }, 'x'));
     } else {
-      const sel = el('select', {}, el('option', { value: '', textContent: T('— tanpa PDF —', '— no PDF —') }),
+      const sel = el('select', {}, el('option', { value: '', textContent: T('Tanpa PDF', 'No PDF') }),
         el('option', { value: '+', textContent: T('⬆ Unggah PDF…', '⬆ Upload PDF…') }),
         ...pdfs.map((f) => el('option', { value: f.id, textContent: f.name })));
       sel.addEventListener('change', () => {
@@ -673,7 +695,7 @@ function renderProducts() {
   updateKnowLen();
 }
 
-focusProduct = sheetKeys($('products'), {
+focusProduct = gridKeys($('products'), {
   max: 300,
   count: () => profile.products.length,
   cols: () => P_COLS.length,
@@ -738,8 +760,10 @@ function tableNode(t) {
       return el('tr', {}, ...cells, el('td', { className: 'act' }, xBtn(T('Hapus baris', 'Delete row'), () => { t.rows.splice(ri, 1); touchCatalog(); draw(); })));
     }));
     table.replaceChildren(el('thead', {}, head), body);
+    // Kolom sama lebar (table-layout: fixed), paling sempit 110 px; lebih dari itu wadahnya bergulung ke samping.
+    table.style.minWidth = t.columns.length * 110 + 44 + 'px';
   }
-  const focusCell = sheetKeys(table, {
+  const focusCell = gridKeys(table, {
     max: 200,
     count: () => t.rows.length,
     cols: () => t.columns.length,
@@ -765,7 +789,7 @@ function seriesNode(s, si) {
   const blank = T('(kelompok baru)', '(new group)');
   const title = el('span', { textContent: s.name || blank });
   const count = el('span', { className: 'count', textContent: s.tables.length + T(' tabel', ' tables') });
-  const name = cellInput(s.name, (v) => { s.name = v; title.textContent = v || blank; touchCatalog(); }, T('mis. Exhaust Fan Industri — Seri A', 'e.g. Exhaust Fan Industri — Seri A'));
+  const name = cellInput(s.name, (v) => { s.name = v; title.textContent = v || blank; touchCatalog(); }, T('mis. Exhaust Fan Industri, Seri A', 'e.g. Exhaust Fan Industri, Seri A'));
   const facts = el('textarea', { rows: Math.max(2, s.facts.length + 1), value: s.facts.join('\n'), placeholder: T('Satu kalimat per baris: bahan, pemakaian, rentang ukuran, …', 'One sentence per line: material, use, size range, …') });
   facts.addEventListener('input', () => { s.facts = facts.value.split('\n').map((f) => f.trim()).filter(Boolean); touchCatalog(); });
 
@@ -812,6 +836,7 @@ function seriesNode(s, si) {
 
 function renderCatalog() {
   $('catalog').replaceChildren(...profile.catalog.map(seriesNode));
+  decorateSummaries($('catalog'));
   updateKnowLen();
 }
 
@@ -848,7 +873,7 @@ $('sendForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = $('sendText').value.trim();
   if (!text) return;
-  if (dirty) addMsg('note', T('Ada perubahan yang belum disimpan — jawaban di bawah masih memakai profil lama.', 'There are unsaved changes — the answer below still uses the old profile.'));
+  if (dirty) addMsg('note', T('Ada perubahan yang belum disimpan. Jawaban di bawah masih memakai profil lama.', 'There are unsaved changes. The answer below still uses the old profile.'));
   $('sendText').value = '';
   addMsg('in', text);
   const wait = addMsg('note', T('sedang mengetik…', 'typing…'));
@@ -905,7 +930,7 @@ const dayLabel = (at) => new Date(at).toLocaleDateString(locale(), { weekday: 'l
 const int = (n) => Math.round(n).toLocaleString(locale());
 const usd = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: n < 1 ? 4 : 2, maximumFractionDigits: n < 1 ? 4 : 2 });
 const idr = (n) => 'Rp ' + n.toLocaleString(locale(), { maximumFractionDigits: n < 100 ? 1 : 0 });
-const pct = (a, b) => (b ? Math.round((a * 100) / b) + '%' : '—');
+const pct = (a, b) => (b ? Math.round((a * 100) / b) + '%' : '-');
 const emptyRow = (cols, text) => el('tr', {}, el('td', { colSpan: cols, style: 'color:var(--muted)', textContent: text }));
 
 // ---------- grafik ----------
@@ -1173,7 +1198,7 @@ function stackedBar100({ el: host, title, help, parts }) {
   table.append(el('table', { className: 'list' },
     el('thead', {}, el('tr', {}, el('th', { textContent: T('Tahap', 'Stage') }), el('th', { className: 'num', textContent: T('Jumlah', 'Count') }), el('th', { className: 'num', textContent: '%' }))),
     el('tbody', {}, ...parts.map((p) => el('tr', {}, td(el('a', { href: p.href, textContent: p.label })), td(int(p.value), true), td(pct(p.value, total), true)))),
-    el('tfoot', {}, el('tr', {}, td('Total'), td(int(total), true), td(total ? '100%' : '—', true)))));
+    el('tfoot', {}, el('tr', {}, td('Total'), td(int(total), true), td(total ? '100%' : '-', true)))));
 
   const draw = (W) => {
     const H = 30, bh = 28;
@@ -1324,8 +1349,8 @@ function renderLeads() {
       name ? el('small', { textContent: c.phone }) : null);
     const status = el('td', {}, el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }),
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }) : null);
-    const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '—' })),
-      el('td', { className: 'sum', textContent: c.summary || '—' }), status,
+    const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
+      el('td', { className: 'sum', textContent: c.summary || '-' }), status,
       el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip warn', textContent: why }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
     // Klik di mana saja pada baris (selain kontrolnya) membuka percakapannya.
@@ -1666,7 +1691,7 @@ async function loadHome() {
 
 /** Lama waktu dalam detik -> "45 dtk" / "3 mnt" / "1 jam". */
 function duration(s) {
-  if (s === null || s === undefined) return '—';
+  if (s === null || s === undefined) return '-';
   if (s < 60) return s + T(' dtk', ' s');
   if (s < 3600) return Math.round(s / 60) + T(' mnt', ' min');
   return T('≥ 1 jam', '≥ 1 h');
@@ -1720,7 +1745,7 @@ function renderHome() {
     const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka chat', 'Open chat'));
     rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
       el('td', {}, el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff') })),
-      el('td', { className: 'sum', textContent: c.summary || '—' }),
+      el('td', { className: 'sum', textContent: c.summary || '-' }),
       el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
   }
   // Petunjuk satu baris di atas daftar, hanya kalau ada pelanggan yang menunggu staf.
@@ -1911,7 +1936,7 @@ const WA_STATES = {
   conflict: () => [T('sesi direbut sesi lain', 'session taken over'), 'danger'],
   stopped: () => [T('bot berhenti', 'bot stopped'), 'danger'],
 };
-const waLabel = (s) => (WA_STATES[s] ? WA_STATES[s]()[0] : s || '—');
+const waLabel = (s) => (WA_STATES[s] ? WA_STATES[s]()[0] : s || '-');
 const showPhone = (p) => (p ? (/^\d+$/.test(p) ? '+' + p : p) : T('nomor belum diketahui', 'number not known yet'));
 let waTimer = null;
 let wa = null;
@@ -1931,7 +1956,6 @@ function renderStatus() {
     const ab = cut >= 0 ? guard.slice(cut + ' · antiban: '.length) : '';
     info = [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Kabar lead lewat WA ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
       ['LLM', state.testReady ? T('siap', 'ready') : T('belum diatur (LLM_API_KEY di .env)', 'not set (LLM_API_KEY in .env)')],
-      ['Google Sheet', st.sheet ? T('siap', 'ready') : T('belum diatur', 'not set')],
       [T('Transkripsi pesan suara', 'Voice note transcription'), st.channels && st.channels.stt ? T('siap', 'ready') : T('belum diatur di .env bot (STT_API_KEY)', 'not set in the bot\'s .env (STT_API_KEY)')],
       [T('Yang dibalas', 'Who gets a reply'), st.onlyNumbers ? T('MODE UJI: hanya ', 'TEST MODE: only ') + st.onlyNumbers + T(' nomor', ' numbers') : T('semua nomor', 'every number')],
       [T('Panggilan LLM hari ini', 'LLM calls today'), st.usage.calls + T(' dari batas ', ' of limit ') + st.usage.limit],
@@ -1980,7 +2004,7 @@ function renderWa() {
   // Kode pairing hanya berguna selama belum tersambung, dan hanya di jalur Baileys.
   $('waPairBox').hidden = connected || cloud;
   if (!$('waNumber').value && p && p.wa_number) $('waNumber').value = p.wa_number;
-  $('waFoot').textContent = w ? [T('Jalur: ', 'Channel: ') + (w.transport || (p && p.transport) || '—'), w.version ? T('versi bot ', 'bot version ') + w.version : '',
+  $('waFoot').textContent = w ? [T('Jalur: ', 'Channel: ') + (w.transport || (p && p.transport) || '-'), w.version ? T('versi bot ', 'bot version ') + w.version : '',
     w.started_at ? T('dinyalakan ', 'started ') + when(w.started_at) : ''].filter(Boolean).join(' · ') : T('Bot proyek ini belum pernah melapor. Di server, bot dinyalakan dalam ±1 menit setelah proyek dibuat.', 'This project\'s bot has never reported. On the server it starts within a minute after the project is created.');
 }
 
@@ -2353,6 +2377,26 @@ async function save(quiet = false) {
 }
 $('save').addEventListener('click', () => void save());
 
+// Batalkan: muat ulang profil dari server, jadi semua isian kembali ke yang tersimpan.
+$('discard').addEventListener('click', async () => {
+  $('discard').disabled = true;
+  try {
+    state = await api('state');
+    profile = state.profile;
+    setDirty(false);
+    renderAll();
+    toast(T('Perubahan dibatalkan.', 'Changes discarded.'));
+  } catch (e) { toast(e.message, true); }
+  $('discard').disabled = false;
+});
+
+// Cmd/Ctrl+S menyimpan, sama dengan tombol "Simpan & terapkan".
+document.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() !== 's' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+  e.preventDefault();
+  if (dirty && profile && !$('save').disabled) void save();
+});
+
 window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
 
 /** Mulai: daftar proyek (sekaligus memeriksa sesi), lalu halaman sesuai alamat. */
@@ -2379,6 +2423,18 @@ $('logout').addEventListener('click', async () => {
   location.href = '/login';
 });
 
+// Kepala tetap (bilah atas + bilah keadaan) dan bilah simpan: tingginya berubah saat bilah keadaan muncul
+// atau saat isinya membungkus di HP, jadi diukur terus dan ditulis ke variabel CSS (--chrome-h untuk jarak
+// atas halaman dan menu samping, --savebar-h untuk jarak bawah isi dan letak kabar singkat).
+function watchHeight(node, name) {
+  const put = () => document.documentElement.style.setProperty(name, Math.ceil(node.getBoundingClientRect().height) + 'px');
+  if (typeof ResizeObserver === 'function') new ResizeObserver(put).observe(node);
+  put();
+}
+
 applyLang();
+decorateSummaries();
+watchHeight($('chrome'), '--chrome-h');
+watchHeight($('savebar'), '--savebar-h');
 if (location.pathname === '/login') showLogin();
 load().catch(() => {});

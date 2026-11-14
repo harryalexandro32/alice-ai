@@ -1,10 +1,10 @@
 /**
- * Antrean keluar: notifikasi WA ke sales, baris Google Sheet, dan balasan
- * staf yang diketik di dashboard.
+ * Antrean keluar: notifikasi WA ke sales dan balasan staf yang diketik di
+ * dashboard.
  *
- * Lead dicatat ke antrean dulu, baru dikirim. Sheet yang sedang error atau
- * WhatsApp yang sedang putus tidak boleh menghilangkan lead, dan tidak boleh
- * menahan balasan ke pelanggan. Yang gagal dicoba lagi di putaran berikutnya.
+ * Lead dicatat ke antrean dulu, baru dikirim. WhatsApp yang sedang putus tidak
+ * boleh menghilangkan lead, dan tidak boleh menahan balasan ke pelanggan. Yang
+ * gagal dicoba lagi di putaran berikutnya.
  *
  * Balasan dari dashboard (jenis `reply`) ditulis dashboard, dikirim bot: proses
  * bot memeriksanya tiap beberapa detik (app.ts). Selama WhatsApp belum
@@ -13,9 +13,8 @@
 
 import { raiseAlert } from '../alerts';
 import { biz } from '../business';
-import { localStamp, now } from '../clock';
+import { now } from '../clock';
 import { outboxDone, outboxFailed, outboxPending, type OutboxKind } from '../store';
-import { appendSheetRow, sheetConfigured } from './sheet';
 
 export interface LeadPayload {
   kind: string;
@@ -60,8 +59,6 @@ export const MAX_REPLY_ATTEMPTS = 5;
 let notify: SalesNotifier | null = null;
 let replySender: ReplySender | null = null;
 let replyReady: () => boolean = () => true;
-let appendRow: (row: string[]) => Promise<void> = appendSheetRow;
-let sheetOn: () => boolean = sheetConfigured;
 
 export function setSalesNotifier(fn: SalesNotifier): void {
   notify = fn;
@@ -74,11 +71,6 @@ export function setSalesNotifier(fn: SalesNotifier): void {
 export function setReplySender(fn: ReplySender | null, ready: () => boolean = () => true): void {
   replySender = fn;
   replyReady = ready;
-}
-/** Tes & mode latihan: ganti penulis Sheet. */
-export function setSheetWriter(fn: (row: string[]) => Promise<void>): void {
-  appendRow = fn;
-  sheetOn = () => true;
 }
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
@@ -93,18 +85,6 @@ export function salesText(p: LeadPayload): string {
     `Pesan terakhir: "${p.lastMessage}"\n` +
     `Chat: ${waLink(p.phone)}`
   );
-}
-
-/** Kolom: Waktu, Jenis, Nomor, <field profil…>, Perlu sales, Pesan terakhir. */
-export function sheetRow(p: LeadPayload): string[] {
-  return [
-    localStamp(p.at),
-    p.kind,
-    p.phone,
-    ...p.fields.map(([, v]) => v ?? ''),
-    p.needsSales ? 'ya' : '',
-    p.lastMessage,
-  ];
 }
 
 async function deliverReply(id: number, attempts: number, p: ReplyPayload): Promise<void> {
@@ -130,16 +110,16 @@ async function deliverOnce(only?: OutboxKind): Promise<void> {
       if (row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverReply(row.id, row.attempts, row.payload as ReplyPayload);
       continue;
     }
+    if (row.kind !== 'sales') {
+      // Jenis yang tidak dikenal lagi (mis. baris lama dari versi sebelumnya): tutup, jangan dicoba terus.
+      await outboxDone(row.id, now());
+      console.log(`[outbox] ${row.kind} #${row.id} dilewat: jenis ini tidak dipakai lagi`);
+      continue;
+    }
     const p = row.payload as LeadPayload;
     try {
-      if (row.kind === 'sales') {
-        if (!notify) throw new Error('pengirim notifikasi belum terpasang');
-        await notify(salesText(p), kindOf(p));
-      } else if (!sheetOn()) {
-        console.log('[outbox] Sheet belum diatur, baris dilewat');
-      } else {
-        await appendRow(sheetRow(p));
-      }
+      if (!notify) throw new Error('pengirim notifikasi belum terpasang');
+      await notify(salesText(p), kindOf(p));
       await outboxDone(row.id, now());
     } catch (e) {
       await outboxFailed(row.id).catch(() => {});
