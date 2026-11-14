@@ -22,8 +22,8 @@ import { deliverExternal, recipientPhones } from './notify';
 import { currentProject } from './project';
 import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
-  addMessage, contactByAddress, countInboundSince, createContact, getContact, humanSeenAt, isBotOff, markHuman,
-  outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact,
+  addHandoff, addMessage, contactByAddress, countInboundSince, createContact, getContact, humanSeenAt, isBotOff, markHuman,
+  outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact, type MessageKind,
 } from './store';
 import { askMissing, handoffText, mediaAck, noDash, NON_TEXT } from './texts';
 import type { MediaKind } from './transport/types';
@@ -142,7 +142,7 @@ export function holdFrom(
 export const projectPaused = (): boolean => currentProject().row.paused;
 
 /**
- * Tombol "bot aktif / diam" untuk satu pelanggan (halaman Lead). Menyalakan =
+ * Tombol "bot aktif / diam" untuk satu pelanggan (halaman Percakapan). Menyalakan =
  * melepas semua penahan saat itu (kalau admin membalas lagi nanti, bot mundur
  * lagi); mematikan = diam sampai dinyalakan lagi. False kalau kontaknya tidak ada.
  */
@@ -199,6 +199,19 @@ async function notifyStaff(c: Contact, kind: string, lastMessage: string, at: nu
   // WhatsApp-nya sudah lewat antrean di atas; di sini hanya dashboard + Telegram.
   await raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}): "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
   return updateContact(c.phone, { handoff_sent_at: at });
+}
+
+/**
+ * Catat pertanyaan yang dioper ke staf, supaya pemilik bisa menjawabnya sekali
+ * di dashboard dan jawabannya masuk ke pengetahuan bot. Gagal mencatat tidak
+ * boleh menghentikan balasan ke pelanggan.
+ */
+async function recordQuestion(phone: string, question: string, at: number): Promise<void> {
+  try {
+    await addHandoff(phone, question, at);
+  } catch (e) {
+    console.error(`[alur] ${phone}: pertanyaan untuk staf tidak tercatat: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 export async function handleInbound(m: Inbound): Promise<void> {
@@ -277,7 +290,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
   // Pesan suara ditranskripsi (kalau layanannya diatur): isinya lalu dijawab
   // seperti pesan ketikan, dan staf tidak perlu dikabari.
   let heard: string | null = null;
-  if (media === 'suara' && m.fetchMedia && sttEnabled() && hasBrain()) {
+  if (media === 'suara' && m.fetchMedia && sttEnabled() && cfg.transcribeVoice && hasBrain()) {
     try {
       const got = await m.fetchMedia();
       heard = got ? await transcribe(got.data, got.mime) : null;
@@ -403,6 +416,10 @@ export async function handleInbound(m: Inbound): Promise<void> {
       }
     }
 
+    // Pertanyaan yang tidak bisa dijawab bot sendiri (dioper ke staf, atau
+    // topik yang harus dijawab manusia) dicatat untuk halaman Pengetahuan.
+    if ((handoff || result?.intent === 'handoff') && text) await recordQuestion(c.phone, text, at);
+
     // Lead lengkap -> kabari sekali. Butuh manusia sebelum lengkap -> kabari
     // juga sekali, dengan data seadanya, supaya tidak ada yang menunggu.
     const complete = missingFields(c).length === 0;
@@ -426,17 +443,30 @@ export async function handleInbound(m: Inbound): Promise<void> {
 }
 
 /**
+ * Manusia mengambil alih chat ini: bot mundur (jeda + tanda "admin membalas"),
+ * pesannya dicatat sebagai pesan manusia, follow-up yang menunggu batal, dan
+ * lead yang masih "baru" pindah ke "dihubungi". Dipakai balasan dari HP
+ * (handleHumanReply) dan dari dashboard, supaya keduanya selalu sama persis.
+ * Mengembalikan kontak dan id pesan yang dicatat, atau null kalau alamat ini
+ * belum dikenal.
+ */
+export async function applyHumanReply(
+  address: string, text: string, at: number, kind?: MessageKind
+): Promise<{ contact: Contact; messageId: number | null } | null> {
+  await setPause(address, at + cfg.humanPauseHours * HOUR);
+  await markHuman(address, at);
+  const c = await contactByAddress(address);
+  if (!c) return null;
+  const messageId = await addMessage(c.phone, 'human', text || '[bukan teks]', at, null, kind);
+  const contact = await updateContact(c.phone, { last_dir: 'human', followup_state: 'idle', ...(c.stage === 'baru' ? { stage: 'dihubungi' as const } : {}) });
+  return { contact, messageId };
+}
+
+/**
  * Pemilik membalas sendiri dari HP. Bot mundur untuk kontak ini, dan follow-up
  * yang sedang menunggu batal — manusia yang sekarang memegang percakapannya.
  */
 export async function handleHumanReply(m: { address: string; text: string }): Promise<void> {
-  const at = now();
-  await setPause(m.address, at + cfg.humanPauseHours * HOUR);
-  await markHuman(m.address, at);
-  const c = await contactByAddress(m.address);
-  if (c) {
-    await addMessage(c.phone, 'human', m.text || '[bukan teks]', at);
-    await updateContact(c.phone, { last_dir: 'human', followup_state: 'idle' });
-  }
+  const c = (await applyHumanReply(m.address, m.text, now()))?.contact;
   console.log(`[alur] ${c?.phone ?? m.address}: dibalas manusia, bot ${biz.stopAfterHuman ? 'tidak ikut campur lagi di chat ini' : `diam ${cfg.humanPauseHours} jam`}`);
 }

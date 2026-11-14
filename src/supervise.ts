@@ -95,7 +95,7 @@ function start(): void {
     // Jalan lama lalu mati = kejadian baru; mati terus-menerus = jeda makin panjang.
     if (Date.now() - startedAt > 10 * 60_000) delay = 5_000;
     say(`bot BERHENTI (kode ${code ?? '-'}${signal ? `, sinyal ${signal}` : ''}); dinyalakan lagi dalam ${delay / 1000} detik`);
-    void tell(`Bot berhenti (kode ${code ?? '-'}) dan dinyalakan lagi dalam ${delay / 1000} detik. Kalau ini terus berulang, lihat halaman "Peringatan & log" di dashboard atau berkas log di mesin bot.`);
+    void tell(`Bot berhenti (kode ${code ?? '-'}) dan dinyalakan lagi dalam ${delay / 1000} detik. Kalau ini terus berulang, lihat Pengaturan > Lanjutan > Catatan galat di dashboard atau berkas log di mesin bot.`);
     setTimeout(start, delay);
     delay = Math.min(delay * 2, 5 * 60_000);
   });

@@ -63,22 +63,27 @@ Lalu:
    Caddy mengurus sertifikat HTTPS sendiri begitu DNS-nya mengarah.
 2. Isi `LLM_API_KEY` (dan Telegram/SMTP/STT kalau dipakai) di `/opt/alice-ai/.env`, lalu
    `systemctl restart alice-admin 'alice-bot@*'`.
-3. Buka dashboard → Pengaturan → **WhatsApp** dan tautkan nomornya (lihat di bawah).
+3. Buka `https://alice.lukicenturi.com/gfan/pengaturan/whatsapp` dan tautkan nomornya (lihat di bawah).
 
 ## Proyek baru
 
 Di dashboard: pemilih proyek di bilah atas → **＋ Proyek baru…**. Isi:
 
 - **Id**: 2–32 huruf kecil, angka, atau tanda minus (mis. `toko-budi`). Dipakai di alamat
-  dashboard, nama layanan (`alice-bot@toko-budi`), dan folder `data/toko-budi/`, `auth/toko-budi/`.
+  dashboard (`https://alice.lukicenturi.com/toko-budi`), nama layanan (`alice-bot@toko-budi`), dan
+  folder `data/toko-budi/`, `auth/toko-budi/`. Kata yang dipakai alamat dashboard atau dialihkan
+  Caddy ke bot (`api`, `login`, `logout`, `assets`, `admin`, `health`, `webhook`, `robots.txt`,
+  `favicon.ico`) ditolak.
 - **Nama**, **bibit profil** (`generic` = mulai kosong; `gfan` = menyalin data produk GFAN),
   **nomor WA bot**, **nomor sales** (`self` = nomor bot sendiri).
 
-Dalam ±1 menit `alice-reconcile.timer` menyalakan `alice-bot@<id>`. Lead proyek baru mulai kosong.
+Dalam ±1 menit `alice-reconcile.timer` menyalakan `alice-bot@<id>`, dan dashboard membuka
+`/<id>/pengaturan/whatsapp` untuk menautkan nomornya. Lead proyek baru mulai kosong.
 
 ## Menautkan WhatsApp dari dashboard
 
-Pengaturan → **WhatsApp** (halaman ini memeriksa keadaan bot tiap 3 detik selama belum tersambung):
+Pengaturan → **WhatsApp** (`/<proyek>/pengaturan/whatsapp`; halaman ini memeriksa keadaan bot tiap
+3 detik selama belum tersambung):
 
 - **QR**: begitu bot jalan dan belum tertaut, QR-nya tampil. Di HP: WhatsApp → Perangkat tertaut →
   Tautkan perangkat → pindai.
@@ -93,14 +98,36 @@ ada laporan lebih dari 2 menit: bot mati atau proyeknya nonaktif).
 
 ## Menjeda bot
 
-- **Satu chat**: halaman Lead → tombol **Bot**. Mati = bot diam di chat itu sampai dinyalakan lagi;
-  nyala = semua penahan dilepas (termasuk jeda karena admin membalas). Berlaku seketika.
-- **Semua chat**: Pengaturan → Proyek → **Bot dijeda untuk semua chat**. Pesan dan kontak tetap
+- **Satu chat**: Percakapan → tombol **Bot** di barisnya, atau **Jeda bot di chat ini** / **Aktifkan
+  bot lagi** di halaman percakapannya. Mati = bot diam di chat itu sampai dinyalakan lagi; nyala =
+  semua penahan dilepas (termasuk jeda karena admin membalas). Berlaku seketika.
+- **Admin membalas dari dashboard**: halaman percakapan → kotak balasan. Bot mundur di chat itu
+  persis seperti admin yang membalas dari HP; balasannya dikirim proses bot dalam ±3 detik selama
+  WhatsApp tersambung (menunggu di antrean selama belum).
+- **Semua chat**: Pengaturan → Umum → Proyek → **Bot dijeda untuk semua chat**. Pesan dan kontak tetap
   dicatat, tapi bot tidak membalas dan tidak mengirim follow-up. Bot memuatnya dalam ±5 detik.
 - **Admin membalas dari HP**: tetap seperti biasa — bot mundur selama `HUMAN_PAUSE_HOURS`, atau
   selamanya untuk chat itu kalau “begitu admin membalas, bot tidak ikut campur lagi” dicentang.
-- **Hentikan bot proyek**: Pengaturan → Proyek → hilangkan centang **Proyek aktif**; reconcile
+- **Hentikan bot proyek**: Pengaturan → Umum → Proyek → hilangkan centang **Proyek aktif**; reconcile
   mematikan layanannya dalam ±1 menit.
+
+## Alamat dashboard
+
+Satu alamat per menu, dengan id proyek di depan (semuanya dilayani `page.html` yang sama; router di
+`src/admin/app.js` membaca alamatnya):
+
+- `https://alice.lukicenturi.com/` → proyek yang terakhir dibuka (cookie `last_project`), atau
+  `/login` kalau belum masuk.
+- `/gfan` (Beranda), `/gfan/percakapan`, `/gfan/percakapan/+62812…`,
+  `/gfan/pengetahuan/{identitas,produk,rekomendasi,brosur,lainnya}`,
+  `/gfan/pengaturan`, `/gfan/pengaturan/{whatsapp,notifikasi,lanjutan}`.
+- `/assets/app.js`, `/assets/app.css`, `/assets/qrcode.js`; data lewat `/api/login`,
+  `/api/projects`, `/api/<proyek>/…`.
+- Alamat lama `/admin` dan `/admin/*` dialihkan (301) ke `/`.
+
+Cookie sesi `admin_session` berlaku untuk `Path=/`. Caddy tetap meneruskan `/webhook*` dan
+`/health` ke port 3000 (jalur Cloud API) dan sisanya ke dashboard; karena itu `health` dan
+`webhook` tidak pernah sah sebagai id proyek.
 
 ## Dashboard di Vercel
 

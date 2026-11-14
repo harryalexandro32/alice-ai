@@ -7,7 +7,8 @@
  *   - Chat pribadi bisa datang sebagai @lid; nomornya ada di key.senderPn.
  *   - Tiap pesan yang dibuang disebut alasannya di log.
  *   - Jeda minimum antar kiriman.
- *   - Batas kiriman dan jeda setelah tanda bahaya: sendguard.ts.
+ *   - Batas kiriman dan jeda setelah tanda bahaya: sendguard.ts, ditambah
+ *     kelas AntiBan dari pustaka baileys-antiban (lihat syncAntiBan).
  *   - Pesan pelanggan ditandai terbaca sebelum "sedang mengetik…" muncul,
  *     seperti orang yang membuka chat dulu baru membalas.
  *
@@ -29,15 +30,17 @@ import makeWASocket, {
   useMultiFileAuthState,
   type WASocket,
 } from '@whiskeysockets/baileys';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 
+import { AntiBan } from 'baileys-antiban';
 import pino from 'pino';
 
 import qrcode from 'qrcode-terminal';
 
 import { cfg } from '../config';
 import { recordError } from '../errlog';
-import { afterSend, beforeSend, onDisconnect, onOpen, onSendError } from './sendguard';
+import { antibanPaused, guardedSend, onDisconnect, onOpen, setAntiBan } from './sendguard';
 import type { MediaKind, SendOptions, Transport, TransportHandlers, TransportState } from './types';
 
 /** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
@@ -158,6 +161,60 @@ const waLogger = pino(
   }
 ).child({ class: 'baileys' });
 
+/**
+ * Pengaman dari pustaka baileys-antiban. Yang dipakai hanya kelas AntiBan
+ * (beforeSend/afterSend di guardedSend), bukan wrapSocket, supaya tidak ada
+ * yang terpasang diam-diam ke socket.
+ *
+ * Pilihan setelannya:
+ *   - preset "conservative", dengan batas per menit/jam/hari dari Pengaturan
+ *     proyek (waMaxPer*), jadi angka di dashboard tetap satu-satunya sumber;
+ *   - pemanasan 7 hari mulai 20 kiriman di hari pertama; jeda otomatis begitu
+ *     risikonya "tinggi"; pesan yang persis sama paling banyak 8 kali sejam;
+ *   - keadaannya disimpan per proyek di <folder sesi>/antiban-state.json;
+ *   - log pustakanya dimatikan (keadaannya tampil di dashboard).
+ * Yang SENGAJA tidak dipakai (bagian pustaka itu yang menyamarkan atau
+ * berpura-pura): sinyal "legitimasi" dan salah ketik buatan, penjaga grup,
+ * proxy, webhook, dan layanan "human entropy". Semuanya kelas terpisah yang
+ * tidak dibuat di sini; profil grup juga dimatikan (bot hanya chat pribadi).
+ */
+let antiban: AntiBan | null = null;
+let antibanKey = '';
+
+/** Buat AntiBan (lagi) kalau belum ada, atau kalau batas di Pengaturan berubah. */
+function syncAntiBan(): void {
+  const key = [cfg.waMaxPerMinute, cfg.waMaxPerHour, cfg.waMaxPerDay, cfg.waAuthDir].join('/');
+  if (antiban && key === antibanKey) return;
+  const old = antiban;
+  mkdirSync(cfg.waAuthDir, { recursive: true });
+  const next = new AntiBan({
+    preset: 'conservative',
+    maxPerMinute: cfg.waMaxPerMinute,
+    maxPerHour: cfg.waMaxPerHour,
+    maxPerDay: cfg.waMaxPerDay,
+    warmupDays: 7,
+    day1Limit: 20,
+    autoPauseAt: 'high',
+    maxIdenticalMessages: 8,
+    groupProfiles: false,
+    persist: join(cfg.waAuthDir, 'antiban-state.json'),
+    logging: false,
+    onAtRisk: (s) => antibanPaused(`risiko ${s.risk}: ${s.recommendation}`),
+  });
+  // Batas berubah: hitungan yang sudah berjalan dibawa ke yang baru.
+  if (old) {
+    try {
+      next.importState(old.exportState());
+    } catch (e) {
+      console.error(`[pengaman] keadaan antiban tidak terbawa: ${e instanceof Error ? e.message : e}`);
+    }
+    old.destroy();
+  }
+  antiban = next;
+  antibanKey = key;
+  setAntiBan(next);
+}
+
 let onFatal: ((text: string) => void) | null = null;
 /** Dipasang app.ts: sambungan yang tidak akan pulih sendiri harus sampai ke pemilik. */
 export function setFatalListener(fn: ((text: string) => void) | null): void {
@@ -170,6 +227,7 @@ async function connect(): Promise<void> {
   if (current.state !== 'starting') setState({ state: 'starting', ...(current.detail ? { detail: current.detail } : {}) });
   const { state, saveCreds } = await useMultiFileAuthState(cfg.waAuthDir);
   creds = state.creds;
+  syncAntiBan();
   const { version } = await fetchLatestBaileysVersion();
 
   const s = makeWASocket({
@@ -353,15 +411,12 @@ async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<v
 
   // Melempar kalau kiriman sedang dijeda atau batasnya tercapai: pemanggil
   // mencatatnya sebagai gagal kirim, dan bot diam untuk pesan ini.
-  const wait = Math.max(beforeSend(), lastSentAt + MIN_GAP_MS - Date.now(), 0);
-  if (wait) await new Promise((r) => setTimeout(r, wait));
-  lastSentAt = Date.now();
-
-  lastSentText.set(jid, text);
-  let res;
-  try {
+  syncAntiBan();
+  const res = await guardedSend(jid, text, { minWaitMs: lastSentAt + MIN_GAP_MS - Date.now(), pacedMs: opts?.pacedMs }, async () => {
+    lastSentAt = Date.now();
+    lastSentText.set(jid, text);
     await markRead(jid);
-    res = await s.sendMessage(
+    return s.sendMessage(
       jid,
       !opts?.image
         ? { text }
@@ -369,11 +424,7 @@ async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<v
           ? { document: readFileSync(opts.image), mimetype: 'application/pdf', fileName: opts.fileName ?? 'dokumen.pdf', caption: text }
           : { image: readFileSync(opts.image), caption: text }
     );
-  } catch (e) {
-    onSendError(e);
-    throw e;
-  }
-  afterSend();
+  });
   if (opts?.image && res?.key.id) {
     const id = res.key.id;
     const what = `lampiran "${opts.fileName ?? text.slice(0, 40)}" ke ${jid}`;
@@ -436,6 +487,10 @@ export const baileysTransport: Transport = {
       old.end(undefined);
     }
     rmSync(cfg.waAuthDir, { recursive: true, force: true });
+    // Tautan baru bisa berarti nomor baru: pemanasan antiban mulai dari awal.
+    antiban?.destroy();
+    antiban = null;
+    setAntiBan(null);
     selfNumber = null;
     creds = null;
     retryDelayMs = 2_000;

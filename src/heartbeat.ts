@@ -69,6 +69,9 @@ function snapshot(): StatusPatch {
   };
 }
 
+/** WhatsApp proses bot ini sedang tersambung (menurut laporan transport terakhir). */
+export const transportConnected = (): boolean => last.state === 'connected';
+
 /** Tulis laporan sekarang. */
 export function beat(): Promise<void> {
   return writeStatus(snapshot());

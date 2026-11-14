@@ -1,14 +1,20 @@
 /**
- * Antrean keluar untuk lead: notifikasi WA ke sales dan baris Google Sheet.
+ * Antrean keluar: notifikasi WA ke sales, baris Google Sheet, dan balasan
+ * staf yang diketik di dashboard.
  *
  * Lead dicatat ke antrean dulu, baru dikirim. Sheet yang sedang error atau
  * WhatsApp yang sedang putus tidak boleh menghilangkan lead, dan tidak boleh
  * menahan balasan ke pelanggan. Yang gagal dicoba lagi di putaran berikutnya.
+ *
+ * Balasan dari dashboard (jenis `reply`) ditulis dashboard, dikirim bot: proses
+ * bot memeriksanya tiap beberapa detik (app.ts). Selama WhatsApp belum
+ * tersambung balasan itu menunggu; yang terus gagal dicatat sebagai peringatan.
  */
 
+import { raiseAlert } from '../alerts';
 import { biz } from '../business';
 import { localStamp, now } from '../clock';
-import { outboxDone, outboxFailed, outboxPending } from '../store';
+import { outboxDone, outboxFailed, outboxPending, type OutboxKind } from '../store';
 import { appendSheetRow, sheetConfigured } from './sheet';
 
 export interface LeadPayload {
@@ -27,18 +33,47 @@ export interface LeadPayload {
  */
 export type SalesNotifier = (text: string, kind?: 'lead' | 'butuh-staf') => Promise<boolean>;
 
+/** Balasan staf dari dashboard, dikirim bot apa adanya. */
+export interface ReplyPayload {
+  phone: string;
+  address: string;
+  text: string;
+  by: 'dashboard';
+  /** Id pesan 'human' yang dicatat dashboard untuk balasan ini. */
+  message_id?: number | null;
+}
+
+/** Mengirim satu balasan ke pelanggan; melempar = gagal, coba lagi nanti. */
+export type ReplySender = (to: { phone: string; address: string }, text: string) => Promise<void>;
+
 /** Lead yang sudah lengkap = "lead"; selebihnya pelanggan yang menunggu staf. */
 export const kindOf = (p: Pick<LeadPayload, 'kind'>): 'lead' | 'butuh-staf' => (p.kind === 'Lead lengkap' ? 'lead' : 'butuh-staf');
 
 const MAX_ATTEMPTS = 20;
+/**
+ * Balasan dari dashboard dicoba lebih sedikit: ia diperiksa tiap 3 detik, dan
+ * staf yang menunggu di halaman percakapan lebih butuh tahu cepat bahwa
+ * balasannya gagal daripada menunggu percobaan ke-20.
+ */
+export const MAX_REPLY_ATTEMPTS = 5;
 
 let notify: SalesNotifier | null = null;
+let replySender: ReplySender | null = null;
+let replyReady: () => boolean = () => true;
 let appendRow: (row: string[]) => Promise<void> = appendSheetRow;
 let sheetOn: () => boolean = sheetConfigured;
-let current: Promise<void> | null = null;
 
 export function setSalesNotifier(fn: SalesNotifier): void {
   notify = fn;
+}
+
+/**
+ * Dipasang app.ts: cara mengirim balasan dari dashboard, dan apakah WhatsApp
+ * sedang tersambung. Selama `ready()` false, balasan menunggu tanpa dihitung gagal.
+ */
+export function setReplySender(fn: ReplySender | null, ready: () => boolean = () => true): void {
+  replySender = fn;
+  replyReady = ready;
 }
 /** Tes & mode latihan: ganti penulis Sheet. */
 export function setSheetWriter(fn: (row: string[]) => Promise<void>): void {
@@ -72,8 +107,29 @@ export function sheetRow(p: LeadPayload): string[] {
   ];
 }
 
-async function deliverOnce(): Promise<void> {
-  for (const row of await outboxPending(MAX_ATTEMPTS)) {
+async function deliverReply(id: number, attempts: number, p: ReplyPayload): Promise<void> {
+  try {
+    if (!replySender) throw new Error('pengirim balasan belum terpasang');
+    await replySender({ phone: p.phone, address: p.address }, p.text);
+    await outboxDone(id, now());
+    console.log(`[outbox] balasan dashboard #${id} terkirim ke ${p.phone}`);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    await outboxFailed(id).catch(() => {});
+    console.error(`[outbox] balasan dashboard #${id} ke ${p.phone} gagal: ${why}`);
+    if (attempts + 1 >= MAX_REPLY_ATTEMPTS) {
+      await raiseAlert('kiriman-gagal', `${p.phone}: "${p.text.slice(0, 200)}" (${why})`, { key: p.phone, whatsapp: false });
+    }
+  }
+}
+
+async function deliverOnce(only?: OutboxKind): Promise<void> {
+  for (const row of await outboxPending(MAX_ATTEMPTS, only)) {
+    if (row.kind === 'reply') {
+      // Belum tersambung: menunggu, tidak dihitung gagal.
+      if (row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverReply(row.id, row.attempts, row.payload as ReplyPayload);
+      continue;
+    }
     const p = row.payload as LeadPayload;
     try {
       if (row.kind === 'sales') {
@@ -92,14 +148,32 @@ async function deliverOnce(): Promise<void> {
   }
 }
 
+let current: { run: Promise<void>; full: boolean } | null = null;
+/** Putaran penuh yang menunggu putaran "hanya balasan" selesai. */
+let queuedFull: Promise<void> | null = null;
+
 /**
  * Satu putaran saja pada satu waktu — putaran kedua yang tumpang tindih akan
- * mengirim lead yang sama dua kali. Pemanggil kedua mendapat putaran yang
- * sedang berjalan.
+ * mengirim baris yang sama dua kali. Pemanggil kedua mendapat putaran yang
+ * sedang berjalan. `only` = hanya satu jenis baris (pemeriksaan cepat balasan
+ * dari dashboard); putaran penuh yang diminta selagi putaran itu berjalan
+ * menunggu di belakangnya, supaya lead tidak tertunda sampai putaran berikutnya.
  */
-export function deliverOutbox(): Promise<void> {
-  current ??= deliverOnce().finally(() => {
-    current = null;
+export function deliverOutbox(only?: OutboxKind): Promise<void> {
+  const full = !only;
+  if (current && (current.full || !full)) return current.run;
+  if (current) {
+    queuedFull ??= current.run
+      .catch(() => {})
+      .then(() => {
+        queuedFull = null;
+        return deliverOutbox();
+      });
+    return queuedFull;
+  }
+  const run = deliverOnce(only).finally(() => {
+    if (current?.run === run) current = null;
   });
-  return current;
+  current = { run, full };
+  return run;
 }

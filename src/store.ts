@@ -12,11 +12,11 @@
  * dikumpulkan ditentukan profil bisnis, bukan skema.
  */
 
-import { and, desc, eq, gte, isNull, lt, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, notInArray, sql } from 'drizzle-orm';
 
 import { db } from './db';
 import {
-  alerts, botOff, contacts, errors, humanSeen, llmUsage, messages, outbox, pauses, profiles, projects, projectStatus,
+  alerts, botOff, contacts, errors, handoffs, humanSeen, llmUsage, messages, outbox, pauses, profiles, projects, projectStatus,
   type PairingRequest, type Project, type ProjectStatus,
 } from './db/schema';
 import { currentProject } from './project';
@@ -25,6 +25,9 @@ export type { PairingRequest, Project, ProjectStatus };
 
 export type Dir = 'in' | 'out' | 'human';
 export type FollowupState = 'idle' | 'pending';
+/** Tahap pipeline lead; hanya "baru" -> "dihubungi" yang berubah otomatis (manusia membalas). */
+export const STAGES = ['baru', 'dihubungi', 'closing', 'batal'] as const;
+export type Stage = (typeof STAGES)[number];
 
 export interface Contact {
   /** Nomor "+62…", atau "lid:…" kalau WhatsApp tidak memberi nomornya. */
@@ -52,11 +55,16 @@ export interface Contact {
   imported: number;
   /** 1 = diimpor dengan "bot diam"; diterapkan begitu alamat chatnya diketahui. */
   pending_off: number;
+  stage: Stage;
+  /** Catatan staf, atau null. */
+  note: string | null;
 }
+
+export type OutboxKind = 'sales' | 'sheet' | 'reply';
 
 export interface OutboxRow {
   id: number;
-  kind: 'sales' | 'sheet';
+  kind: OutboxKind;
   payload: unknown;
   attempts: number;
 }
@@ -69,7 +77,7 @@ function toContact(r: typeof contacts.$inferSelect | undefined): Contact | undef
   const { project: _project, ...rest } = r;
   // Baris rusak diperlakukan sebagai belum ada data, bukan bikin bot mati.
   const lead = rest.lead && typeof rest.lead === 'object' ? rest.lead : {};
-  return { ...rest, lead, last_dir: rest.last_dir as Dir, followup_state: rest.followup_state as FollowupState };
+  return { ...rest, lead, last_dir: rest.last_dir as Dir, followup_state: rest.followup_state as FollowupState, stage: rest.stage as Stage };
 }
 
 export async function getContact(phone: string): Promise<Contact | undefined> {
@@ -89,7 +97,7 @@ export async function createContact(phone: string, address: string, at: number):
 
 const UPDATABLE = new Set<keyof Contact>([
   'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
-  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name', 'handled_at', 'pending_off',
+  'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name', 'handled_at', 'pending_off', 'stage', 'note',
 ]);
 
 export async function updateContact(phone: string, patch: Partial<Contact>): Promise<Contact> {
@@ -100,14 +108,38 @@ export async function updateContact(phone: string, patch: Partial<Contact>): Pro
   return (await getContact(phone)) as Contact;
 }
 
-/** False kalau id pesan itu sudah pernah dicatat (kiriman ganda). */
-export async function addMessage(phone: string, dir: Dir, text: string, at: number, waId?: string | null): Promise<boolean> {
+/** Jenis kiriman khusus di tabel messages (lihat schema.ts). */
+export type MessageKind = 'followup' | 'dashboard';
+
+/** Id pesan yang dicatat, atau null kalau id WhatsApp-nya sudah pernah dicatat (kiriman ganda). */
+export async function addMessage(
+  phone: string, dir: Dir, text: string, at: number, waId?: string | null, kind?: MessageKind
+): Promise<number | null> {
   const rows = await db()
     .insert(messages)
-    .values({ project: pid(), phone, dir, text, at, wa_id: waId ?? null })
+    .values({ project: pid(), phone, dir, text, at, wa_id: waId ?? null, kind: kind ?? null })
     .onConflictDoNothing()
     .returning({ id: messages.id });
-  return rows.length > 0;
+  return rows[0]?.id ?? null;
+}
+
+export interface MessageRow {
+  id: number;
+  dir: Dir;
+  text: string;
+  at: number;
+  kind: string | null;
+}
+
+/** Riwayat satu percakapan, terlama dulu; `before` = hanya pesan dengan id lebih kecil (halaman sebelumnya). */
+export async function messagePage(phone: string, limit: number, before?: number): Promise<MessageRow[]> {
+  const rows = await db()
+    .select({ id: messages.id, dir: messages.dir, text: messages.text, at: messages.at, kind: messages.kind })
+    .from(messages)
+    .where(and(eq(messages.project, pid()), eq(messages.phone, phone), ...(before ? [lt(messages.id, before)] : [])))
+    .orderBy(desc(messages.id))
+    .limit(limit);
+  return rows.reverse().map((r) => ({ ...r, dir: r.dir as Dir }));
 }
 
 export async function recentMessages(phone: string, n: number): Promise<{ dir: Dir; text: string; at: number }[]> {
@@ -296,17 +328,28 @@ export async function recentContacts(n: number): Promise<Contact[]> {
   return rows.map((r) => toContact(r) as Contact);
 }
 
-export async function outboxAdd(kind: OutboxRow['kind'], payload: unknown, at: number): Promise<void> {
-  await db().insert(outbox).values({ project: pid(), kind, payload, created_at: at });
+export async function outboxAdd(kind: OutboxKind, payload: unknown, at: number): Promise<number> {
+  const [r] = await db().insert(outbox).values({ project: pid(), kind, payload, created_at: at }).returning({ id: outbox.id });
+  return (r as { id: number }).id;
 }
 
-export async function outboxPending(maxAttempts: number): Promise<OutboxRow[]> {
+/** Baris antrean yang belum terkirim; `only` = hanya satu jenis (mis. balasan dari dashboard). */
+export async function outboxPending(maxAttempts: number, only?: OutboxKind): Promise<OutboxRow[]> {
   const rows = await db()
     .select({ id: outbox.id, kind: outbox.kind, payload: outbox.payload, attempts: outbox.attempts })
     .from(outbox)
-    .where(and(eq(outbox.project, pid()), isNull(outbox.done_at), lt(outbox.attempts, maxAttempts)))
+    .where(and(eq(outbox.project, pid()), isNull(outbox.done_at), lt(outbox.attempts, maxAttempts), ...(only ? [eq(outbox.kind, only)] : [])))
     .orderBy(outbox.id);
-  return rows.map((r) => ({ ...r, kind: r.kind as OutboxRow['kind'] }));
+  return rows.map((r) => ({ ...r, kind: r.kind as OutboxKind }));
+}
+
+/** Balasan dari dashboard untuk nomor ini yang belum terkirim (masih menunggu, atau gagal). */
+export async function pendingReplies(phone: string): Promise<{ id: number; payload: unknown; attempts: number; created_at: number }[]> {
+  return db()
+    .select({ id: outbox.id, payload: outbox.payload, attempts: outbox.attempts, created_at: outbox.created_at })
+    .from(outbox)
+    .where(and(eq(outbox.project, pid()), eq(outbox.kind, 'reply'), isNull(outbox.done_at), sql`${outbox.payload}->>'phone' = ${phone}`))
+    .orderBy(outbox.id);
 }
 
 export async function outboxDone(id: number, at: number): Promise<void> {
@@ -315,6 +358,163 @@ export async function outboxDone(id: number, at: number): Promise<void> {
 
 export async function outboxFailed(id: number): Promise<void> {
   await db().update(outbox).set({ attempts: sql`${outbox.attempts} + 1` }).where(eq(outbox.id, id));
+}
+
+// ---------------------------------------------------------------------------
+// Pertanyaan yang dioper ke staf (lihat flow.ts dan halaman Pengetahuan)
+// ---------------------------------------------------------------------------
+
+/** Bentuk pembanding pertanyaan: huruf kecil, tanpa tanda baca, spasi dirapatkan. */
+export function normQuestion(q: string): string {
+  return q
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface HandoffRow {
+  id: number;
+  phone: string;
+  question: string;
+  at: number;
+  resolved_at: number | null;
+  answer: string | null;
+  resolution: string | null;
+}
+
+const handoffCols = {
+  id: handoffs.id, phone: handoffs.phone, question: handoffs.question, at: handoffs.at,
+  resolved_at: handoffs.resolved_at, answer: handoffs.answer, resolution: handoffs.resolution,
+};
+
+/**
+ * Catat pertanyaan yang dioper ke staf. Tidak dicatat ulang selama pertanyaan
+ * yang sama (setelah dinormalkan) dari nomor yang sama belum diselesaikan.
+ * True kalau barisnya baru.
+ */
+export async function addHandoff(phone: string, question: string, at: number): Promise<boolean> {
+  const q = question.replace(/\s+/g, ' ').trim().slice(0, 1000);
+  const norm = normQuestion(q);
+  if (!norm) return false;
+  const open = await db()
+    .select({ question: handoffs.question })
+    .from(handoffs)
+    .where(and(eq(handoffs.project, pid()), eq(handoffs.phone, phone), isNull(handoffs.resolved_at)));
+  if (open.some((r) => normQuestion(r.question) === norm)) return false;
+  await db().insert(handoffs).values({ project: pid(), phone, question: q, at });
+  return true;
+}
+
+/** Pertanyaan terbaru dulu; `resolved` memilih yang sudah atau belum diselesaikan. */
+export async function listHandoffs(resolved: boolean, limit = 1000): Promise<HandoffRow[]> {
+  return db()
+    .select(handoffCols)
+    .from(handoffs)
+    .where(and(eq(handoffs.project, pid()), resolved ? isNotNull(handoffs.resolved_at) : isNull(handoffs.resolved_at)))
+    .orderBy(desc(handoffs.id))
+    .limit(limit);
+}
+
+export async function getHandoff(id: number): Promise<HandoffRow | undefined> {
+  const [r] = await db().select(handoffCols).from(handoffs).where(and(eq(handoffs.project, pid()), eq(handoffs.id, id))).limit(1);
+  return r;
+}
+
+/** Tandai baris-baris ini selesai. */
+export async function resolveHandoffs(ids: number[], resolution: 'ditambahkan' | 'diabaikan', answer: string | null, at: number): Promise<void> {
+  if (!ids.length) return;
+  await db()
+    .update(handoffs)
+    .set({ resolved_at: at, resolution, answer })
+    .where(and(eq(handoffs.project, pid()), inArray(handoffs.id, ids)));
+}
+
+/** Ubah tahap pipeline dan/atau catatan satu kontak. False kalau kontaknya tidak ada. */
+export async function setStageNote(phone: string, patch: { stage?: Stage; note?: string | null }): Promise<Contact | undefined> {
+  if (!(await getContact(phone))) return undefined;
+  return updateContact(phone, patch);
+}
+
+// ---------------------------------------------------------------------------
+// Angka di Beranda dashboard
+// ---------------------------------------------------------------------------
+
+export interface Metrics {
+  /** Jumlah percakapan (nomor berbeda yang mengirim pesan) per hari, terlama dulu. */
+  days: { day: string; conversations: number }[];
+  /** Percakapan di jendela ini, dan berapa yang dioper ke staf. */
+  handed: { total: number; count: number };
+  /** Median detik dari pesan pelanggan ke balasan bot berikutnya (dibatasi 1 jam); null = belum ada. */
+  replyMedianSec: number | null;
+  /** Pelanggan yang dikirimi follow-up, dan berapa yang membalas dalam 48 jam. */
+  followup: { sent: number; answered: number };
+}
+
+/**
+ * Empat angka Beranda untuk `days` (hari menurut zona waktu bot, terlama
+ * dulu). `since` = batas bawah kasar untuk indeks; yang menentukan adalah
+ * tanggal lokalnya.
+ */
+export async function metrics(days: string[], since: number, tz: string): Promise<Metrics> {
+  const p = pid();
+  const first = days[0] as string;
+  const dayOf = (col: unknown) => sql`to_char(to_timestamp(${col} / 1000.0) AT TIME ZONE ${tz}, 'YYYY-MM-DD')`;
+  const inWindow = (col: unknown) => sql`${col} >= ${since} AND ${dayOf(col)} >= ${first}`;
+
+  const perDay = await db().execute(sql`
+    SELECT ${dayOf(sql.raw('m.at'))} AS day, count(DISTINCT m.phone)::int AS n
+    FROM messages m
+    WHERE m.project = ${p} AND m.dir = 'in' AND ${inWindow(sql.raw('m.at'))}
+    GROUP BY 1`);
+  const byDay = new Map(rowsOf<{ day: string; n: number }>(perDay).map((r) => [String(r.day), Number(r.n)]));
+
+  const handed = rowsOf<{ total: number; count: number }>(await db().execute(sql`
+    WITH conv AS (
+      SELECT DISTINCT m.phone FROM messages m
+      WHERE m.project = ${p} AND m.dir = 'in' AND ${inWindow(sql.raw('m.at'))}
+    )
+    SELECT count(*)::int AS total,
+      count(*) FILTER (WHERE
+        EXISTS (SELECT 1 FROM contacts c WHERE c.project = ${p} AND c.phone = conv.phone AND c.needs_sales = 1)
+        OR EXISTS (SELECT 1 FROM handoffs h WHERE h.project = ${p} AND h.phone = conv.phone AND ${inWindow(sql.raw('h.at'))})
+      )::int AS count
+    FROM conv`))[0];
+
+  const median = rowsOf<{ median: number | null }>(await db().execute(sql`
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY least(r.secs, 3600)) AS median
+    FROM (
+      SELECT (o.at - i.at) / 1000.0 AS secs
+      FROM messages i
+      JOIN LATERAL (
+        SELECT o.at FROM messages o
+        WHERE o.project = i.project AND o.phone = i.phone AND o.dir = 'out' AND o.id > i.id
+          AND (o.kind IS NULL OR o.kind <> 'followup')
+        ORDER BY o.id LIMIT 1
+      ) o ON true
+      WHERE i.project = ${p} AND i.dir = 'in' AND ${inWindow(sql.raw('i.at'))}
+    ) r`))[0];
+
+  const fu = rowsOf<{ sent: number; answered: number }>(await db().execute(sql`
+    SELECT count(DISTINCT f.phone)::int AS sent,
+      count(DISTINCT f.phone) FILTER (WHERE EXISTS (
+        SELECT 1 FROM messages i
+        WHERE i.project = f.project AND i.phone = f.phone AND i.dir = 'in' AND i.at > f.at AND i.at <= f.at + ${48 * 3_600_000}
+      ))::int AS answered
+    FROM messages f
+    WHERE f.project = ${p} AND f.kind = 'followup' AND ${inWindow(sql.raw('f.at'))}`))[0];
+
+  return {
+    days: days.map((day) => ({ day, conversations: byDay.get(day) ?? 0 })),
+    handed: { total: Number(handed?.total ?? 0), count: Number(handed?.count ?? 0) },
+    replyMedianSec: median?.median === null || median?.median === undefined ? null : Math.round(Number(median.median)),
+    followup: { sent: Number(fu?.sent ?? 0), answered: Number(fu?.answered ?? 0) },
+  };
+}
+
+/** Baris hasil db().execute: node-postgres memberi { rows }, PGlite juga. */
+function rowsOf<T>(r: unknown): T[] {
+  return ((r as { rows?: T[] }).rows ?? (r as T[])) as T[];
 }
 
 export interface UsageDay {

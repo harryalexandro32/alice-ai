@@ -35,6 +35,12 @@ export interface SendOptions {
   image?: string;
   /** Nama berkas yang dilihat penerima (untuk PDF). */
   fileName?: string;
+  /**
+   * Berapa lama pemanggil sudah menunggu dengan irama manusia (ms). Jeda
+   * pengaman di transport hanya menunggu sisanya: yang dipakai yang terbesar,
+   * tidak dijumlahkan.
+   */
+  pacedMs?: number;
 }
 
 /** Keadaan sambungan WhatsApp, dilaporkan ke dashboard lewat detak jantung bot. */

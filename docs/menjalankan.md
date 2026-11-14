@@ -48,10 +48,19 @@ journalctl -u alice-bot@gfan -f
 
 ## Melihat apa yang terjadi
 
-- Dashboard → **Peringatan & log**: peringatan dan catatan galat, tanpa perlu akses ke mesin bot.
+- Dashboard → **Beranda** (`/<proyek>`): pelanggan yang menunggu staf dan masalah bot 24 jam
+  terakhir (*Perlu perhatian*), plus pertanyaan yang belum bisa dijawab bot.
+- Dashboard → Pengaturan → **Lanjutan** (`/<proyek>/pengaturan/lanjutan`): **Riwayat peringatan**
+  dan **Catatan galat**, tanpa perlu akses ke mesin bot.
 - `logs/bot-TANGGAL.log` (lewat `npm start`) atau `journalctl -u alice-bot@<proyek>` (server):
   semuanya, baris demi baris, dengan jam.
-- Dashboard → Pengaturan → **WhatsApp** dan **Keadaan bot**: laporan terakhir bot (dikirim tiap 30
-  detik), termasuk keadaan WhatsApp dan pemakaian jatah LLM hari itu.
+- Dashboard → Pengaturan → **WhatsApp** (`/<proyek>/pengaturan/whatsapp`) dan **Keadaan bot**:
+  laporan terakhir bot (dikirim tiap 30 detik), termasuk keadaan WhatsApp, pemakaian jatah LLM hari
+  itu, pengaman nomor, dan antiban (risiko, hari pemanasan, kiriman yang ditahan).
+- Bilah keadaan di atas tiap halaman dashboard: WhatsApp tersambung atau belum, bot dijeda, mode
+  uji, dan perkiraan biaya LLM bulan ini.
+- Balasan yang diketik di dashboard dikirim proses bot (antrean `outbox`, diperiksa tiap 3 detik).
+  Kalau bot mati atau WhatsApp putus, balasan itu menunggu; yang terus gagal tampil "gagal
+  terkirim" di percakapannya dan menjadi peringatan.
 
 Memulihkan dari cadangan: lihat [deploy.md](deploy.md#cadangan-dan-memulihkan).
