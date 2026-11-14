@@ -33,16 +33,17 @@ export const routeOf = (kind: NotifyKind): Route => biz.notifyRoutes[kind] ?? DE
 /**
  * Penerima untuk satu jenis kabar.
  *
- * Yang diisi di .env (SALES_NUMBER, TELEGRAM_CHAT_ID, ALERT_EMAIL_TO) tetap
- * berlaku sebagai "pemilik bawaan": selama daftar penerima di dashboard masih
- * kosong ia menerima semuanya, seperti sebelum daftar itu ada.
+ * Nomor sales proyek (dashboard > Pengaturan > Proyek) serta TELEGRAM_CHAT_ID
+ * dan ALERT_EMAIL_TO di .env tetap berlaku sebagai "pemilik bawaan": selama
+ * daftar penerima di dashboard masih kosong ia menerima semuanya, seperti
+ * sebelum daftar itu ada.
  */
 export function recipientsFor(kind: NotifyKind): Recipient[] {
   const route = routeOf(kind);
   if (route === 'none') return [];
   const listed = biz.recipients.filter((r) => route === 'both' || r.role === route);
   const legacy: Recipient = {
-    name: 'bawaan (.env)',
+    name: 'bawaan',
     role: 'owner',
     phone: biz.recipients.length ? '' : (cfg.salesNumber ?? ''),
     email: cfg.alertEmailTo,

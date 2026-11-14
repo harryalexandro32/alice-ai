@@ -1,6 +1,10 @@
 /**
  * Mode latihan: seluruh alur tanpa WhatsApp. Database di memori, jam bisa
- * dimajukan, lead "dikirim" ke layar.
+ * dimajukan, lead "dikirim" ke layar. `PROJECT=gfan npm run chat`.
+ *
+ * Profil proyeknya dibaca dari DATABASE_URL (perubahan dari dashboard ikut
+ * dipakai), tapi percakapan latihan hanya disimpan di memori: data pelanggan
+ * sungguhan tidak tersentuh.
  *
  *   /maju 23j        majukan jam (j = jam, m = menit) lalu jalankan follow-up
  *   /manusia <teks>  pemilik membalas sendiri dari HP
@@ -11,18 +15,39 @@
 
 import { createInterface } from 'node:readline';
 
-import { biz, initBiz } from './business';
+import { biz, initBiz, REGISTRY } from './business';
 import { advance, localStamp, now } from './clock';
 import { cfg, HOUR, MINUTE, normPhone } from './config';
 import { handleHumanReply, handleInbound, setSender, type Sender } from './flow';
 import { runFollowups } from './followup';
 import { llmEnabled, llmUsageToday } from './llm/provider';
 import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
-import { getContact, openDb } from './store';
+import { closeDb, openDb } from './db';
+import { ensureProject } from './db/seed';
+import { getContact, getProfile, getProject, saveProfile, type Project } from './store';
+
+/** Buka database latihan di memori, berisi salinan proyek ini dari DATABASE_URL (kalau ada). */
+async function practiceDb(id: string): Promise<void> {
+  const url = process.env.DATABASE_URL?.trim() ?? '';
+  let row: Project | undefined;
+  let profile: Record<string, unknown> = {};
+  if (url && url !== 'memory://' && url !== ':memory:') {
+    await openDb(url);
+    row = await getProject(id);
+    profile = await getProfile(id);
+    await closeDb();
+    if (!row) throw new Error(`proyek "${id}" tidak ada di ${url.replace(/\/\/[^@]*@/, '//***@')}`);
+  }
+  await openDb('memory://');
+  const template = row?.template ?? (REGISTRY[id] ? id : 'generic');
+  await ensureProject(id, template, row?.name ?? id, { wa_number: row?.wa_number, sales_number: row?.sales_number, transport: row?.transport });
+  await saveProfile(id, profile);
+}
 
 async function main() {
-  openDb(':memory:');
-  initBiz();
+  const id = process.env.PROJECT?.trim() || 'gfan';
+  await practiceDb(id);
+  await initBiz(id, { requireEnabled: false });
 
   const send: Sender = async (_to, text, image) =>
     console.log(image ? `\n🤖 BOT [foto ${image}]:\n${text}\n` : `\n🤖 BOT:\n${text}\n`);
@@ -65,9 +90,9 @@ async function main() {
         if (!n) console.log('(tidak ada follow-up yang jatuh tempo)');
       } else console.log('Contoh: /maju 23j   atau   /maju 30m');
     } else if (line.startsWith('/manusia')) {
-      handleHumanReply({ address: phone, text: line.slice(8).trim() });
+      await handleHumanReply({ address: phone, text: line.slice(8).trim() });
     } else if (line === '/lead') {
-      console.log(getContact(phone) ?? '(belum ada kontak)');
+      console.log((await getContact(phone)) ?? '(belum ada kontak)');
       console.log(llmUsageToday());
     } else if (line.startsWith('/nomor')) {
       phone = normPhone(line.slice(6)) ?? phone;
@@ -79,6 +104,7 @@ async function main() {
     prompt();
   }
   rl.close();
+  await closeDb();
 }
 
 main().catch((e) => {

@@ -61,12 +61,12 @@ export function setAlertWhatsApp(fn: ((phone: string, text: string) => Promise<u
  * sendiri, atau saat WhatsApp-nya yang bermasalah. True kalau benar-benar
  * dicatat (bukan ulangan dalam masa tenang).
  */
-export function raiseAlert(kind: AlertKind, text: string, opts: { key?: string; whatsapp?: boolean } = {}): boolean {
+export async function raiseAlert(kind: AlertKind, text: string, opts: { key?: string; whatsapp?: boolean } = {}): Promise<boolean> {
   const key = opts.key ?? '';
   const at = now();
   try {
-    if (at - lastAlertAt(kind, key) < QUIET[kind]) return false;
-    addAlert({ at, kind, key, text });
+    if (at - (await lastAlertAt(kind, key)) < QUIET[kind]) return false;
+    await addAlert({ at, kind, key, text });
   } catch (e) {
     // Database belum terbuka (mis. gagal sangat awal): tetap tampil di log.
     console.error(`[peringatan] tidak tercatat: ${e instanceof Error ? e.message : e}`);

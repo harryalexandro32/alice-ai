@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Cadangan data bot ke backups/<tanggal>/:
-#   - database SQLite, disalin lewat `.backup` (aman meski bot sedang menulis);
-#   - data/<bisnis>/ (profile.json, foto, PDF) dan auth/ (sesi WhatsApp).
-# Disimpan BACKUP_KEEP_DAYS hari (bawaan 14). Dijalankan alice-ai-backup.timer.
+# Cadangan ke backups/<tanggal>/:
+#   - database PostgreSQL (semua proyek), lewat pg_dump: db.sql.gz;
+#   - data/ (foto, PDF, teks PDF per proyek) dan auth/ (sesi WhatsApp per proyek);
+#   - .env.
+# Disimpan BACKUP_KEEP_DAYS hari (bawaan 14). Dijalankan alice-backup.timer.
+#
+# Memulihkan (lihat docs/deploy.md): hentikan bot dan dashboard, lalu
+#   gunzip -c backups/<tanggal>/db.sql.gz | psql "$DATABASE_URL"
+#   tar -xzf backups/<tanggal>/data.tgz && tar -xzf backups/<tanggal>/auth.tgz
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Baca BUSINESS / DB_PATH / DATA_DIR / WA_AUTH_DIR dari .env tanpa menjalankannya.
-val() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' | xargs || true; }
-BUSINESS="$(val BUSINESS)"; BUSINESS="${BUSINESS:-gfan}"
-DB_PATH="$(val DB_PATH)"; DB_PATH="${DB_PATH:-./data/$BUSINESS.db}"
+val() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' || true; }
+DATABASE_URL="$(val DATABASE_URL)"
 DATA_DIR="$(val DATA_DIR)"; DATA_DIR="${DATA_DIR:-./data}"
-AUTH_DIR="$(val WA_AUTH_DIR)"; AUTH_DIR="${AUTH_DIR:-./auth}"
 KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
 
 stamp="$(date +%Y-%m-%d_%H%M)"
@@ -19,11 +21,12 @@ dest="backups/$stamp"
 mkdir -p "$dest"
 chmod 700 backups
 
-if [ -f "$DB_PATH" ]; then
-  sqlite3 "$DB_PATH" ".backup '$dest/$BUSINESS.db'"
-fi
-[ -d "$DATA_DIR/$BUSINESS" ] && tar -czf "$dest/data-$BUSINESS.tgz" -C "$DATA_DIR" "$BUSINESS"
-[ -d "$AUTH_DIR" ] && tar -czf "$dest/auth.tgz" -C "$(dirname "$AUTH_DIR")" "$(basename "$AUTH_DIR")"
+case "$DATABASE_URL" in
+  postgres://*|postgresql://*) pg_dump --clean --if-exists --no-owner "$DATABASE_URL" | gzip > "$dest/db.sql.gz" ;;
+  *) echo "[cadangan] DATABASE_URL bukan PostgreSQL; database dilewati" >&2 ;;
+esac
+[ -d "$DATA_DIR" ] && tar -czf "$dest/data.tgz" -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")"
+[ -d auth ] && tar -czf "$dest/auth.tgz" auth
 [ -f .env ] && cp .env "$dest/env.txt"
 chmod -R go-rwx "$dest"
 

@@ -20,8 +20,8 @@ Bot mengabari orang saat ada yang butuh manusia. Ada dua hal yang diatur, di dua
 
 Tiap jenis bisa diarahkan ke **pemilik**, **staf**, **keduanya**, atau **tidak dikirim**.
 
-Selama daftar penerima di dashboard masih kosong, bot memakai yang ada di `.env`
-(`SALES_NUMBER`, `TELEGRAM_CHAT_ID`, `ALERT_EMAIL_TO`) untuk semua jenis kabar.
+Selama daftar penerima di dashboard masih kosong, bot memakai nomor sales proyek (dashboard >
+Pengaturan > Proyek) serta `TELEGRAM_CHAT_ID` dan `ALERT_EMAIL_TO` di `.env` untuk semua jenis kabar.
 
 ## WhatsApp
 

@@ -6,8 +6,9 @@
  *
  * Profil punya dua lapis:
  *   - bibit di kode (src/business/<id>/profile.ts) — nilai awal;
- *   - perubahan pemilik lewat dashboard, disimpan di data/<id>/profile.json,
- *     yang menimpa bibit untuk kunci-kunci di EDITABLE.
+ *   - perubahan pemilik lewat dashboard, disimpan di database (tabel
+ *     profiles, satu baris per proyek), yang menimpa bibit untuk kunci-kunci
+ *     di EDITABLE.
  */
 
 export interface LeadField {
@@ -46,13 +47,6 @@ export interface Recipient {
   email: string;
   /** Id chat Telegram, atau ''. */
   telegram: string;
-}
-
-/** Perintah tombol "bot aktif / diam" untuk satu pelanggan, dari dashboard. */
-export interface BotSwitch {
-  mode: 'on' | 'off';
-  /** Kapan tombolnya ditekan (ms). Bot menjalankan tiap perintah sekali. */
-  at: number;
 }
 
 /** Satu baris daftar produk. Yang rinci cukup ada di PDF-nya. */
@@ -160,13 +154,9 @@ export interface Business {
   notifyRoutes: Partial<Record<NotifyKind, Route>>;
   /** Pengaturan operasional yang menimpa bawaan .env (lihat config.TUNABLE). */
   settings: import('../config').Settings;
-  /** "Sudah ditangani" dari halaman Lead: nomor -> kapan ditandai (ms). */
-  handled: Record<string, number>;
-  /** Kapan daftar pelanggan lama terakhir diimpor (ms; 0 = belum pernah) dan isinya berapa. */
+  /** Kapan daftar pelanggan lama terakhir diimpor (ms; 0 = belum pernah) dan jumlah pelanggan lamanya. */
   knownAt: number;
   knownCount: number;
-  /** Tombol per pelanggan dari halaman Lead: nomor -> perintah terakhir. */
-  botSwitch: Record<string, BotSwitch>;
   /** Jeda sebelum membalas, detik. Diacak di antara keduanya tiap balasan. */
   replyDelayMin: number;
   replyDelayMax: number;
@@ -184,7 +174,7 @@ export interface Business {
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions', 'styleRules',
   'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'files', 'logo', 'stopAfterHuman', 'botSwitch', 'handled', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'stopAfterHuman', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

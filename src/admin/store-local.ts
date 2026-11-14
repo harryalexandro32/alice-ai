@@ -1,33 +1,36 @@
-/** Penyimpanan dashboard saat ia jalan di mesin yang sama dengan bot. */
+/**
+ * Penyimpanan dashboard: database bersama dan folder data/<proyek>/media/ di
+ * mesin yang sama dengan bot. Semua fungsi bekerja untuk proyek permintaan
+ * yang sedang dilayani (withProject di server.ts).
+ */
 
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { mediaDir, refreshBiz, saveBiz } from '../business';
+import { mediaDir, saveBiz } from '../business';
 import { cfg, effectiveSettings } from '../config';
 import { sttEnabled } from '../llm/stt';
 import { emailReady, telegramReady, waTargets } from '../notify';
-import { llmEnabled, llmUsageToday } from '../llm/provider';
+import { llmEnabled } from '../llm/provider';
 import { sheetConfigured } from '../sinks/sheet';
 import { now } from '../clock';
-import { applyBotSwitches, holdReason } from '../flow';
-import { recentAlerts, recentContacts, recentErrors, usageDays } from '../store';
-import { guardSummary } from '../transport/sendguard';
+import { holdFrom } from '../flow';
+import { currentProject } from '../project';
+import { chatHolds, readStatus, recentAlerts, recentContacts, recentErrors, usageDays } from '../store';
 import type { AdminStore, AlertItem, BotStatus, ErrorItem, LeadRow, UsageReport } from './stores';
 
-export function alertItems(): AlertItem[] {
-  return recentAlerts(50).map((a) => ({ at: a.at, kind: a.kind, text: a.text }));
+export async function alertItems(): Promise<AlertItem[]> {
+  return (await recentAlerts(50)).map((a) => ({ at: a.at, kind: a.kind, text: a.text }));
 }
 
-export function errorItems(): ErrorItem[] {
+export function errorItems(): Promise<ErrorItem[]> {
   return recentErrors(150);
 }
 
-export function leadRows(): LeadRow[] {
-  // Tombol di halaman Lead berlaku tanpa menunggu pelanggan itu chat lagi.
-  applyBotSwitches();
+export async function leadRows(): Promise<LeadRow[]> {
   const t = now();
-  return recentContacts(200).map((c) => ({
+  const [contacts, holds] = await Promise.all([recentContacts(200), chatHolds()]);
+  return contacts.map((c) => ({
     phone: c.phone,
     lead: c.lead,
     needsSales: Boolean(c.needs_sales),
@@ -36,44 +39,49 @@ export function leadRows(): LeadRow[] {
     lastDir: c.last_dir,
     summary: c.summary ?? '',
     // Diimpor dengan "bot diam" tapi belum pernah chat: alamatnya belum ada, tandanya ada di kontak.
-    hold: c.pending_off ? 'tombol' : holdReason(c.address, t),
+    hold: c.pending_off ? 'tombol' : holdFrom(holds, c.address, t),
   }));
 }
 
-export function botStatus(): Omit<BotStatus, 'reportedAt'> {
-  const u = llmUsageToday();
+/**
+ * Keadaan bot. Pengaturan dihitung di sini dari profil yang sama dengan yang
+ * dipakai bot; yang hanya diketahui proses bot (WhatsApp, jatah LLM hari ini,
+ * pengaman nomor) diambil dari laporan berkalanya.
+ */
+export async function botStatus(): Promise<BotStatus> {
+  const st = await readStatus(currentProject().id);
   return {
     transport: cfg.transport,
     llm: llmEnabled() ? cfg.llmModel : null,
-    usage: { calls: u.calls, limit: u.limit },
+    usage: { calls: st?.usage_calls ?? 0, limit: st?.usage_limit ?? cfg.llmDailyLimit },
     sales: waTargets('lead').map((p) => (p === 'self' ? 'nomor bot sendiri' : p)).join(', ') || null,
     sheet: sheetConfigured(),
     onlyNumbers: cfg.onlyNumbers.length,
     effective: effectiveSettings() as unknown as Record<string, number | boolean | string[]>,
     channels: { email: emailReady(), telegram: telegramReady(), stt: sttEnabled() },
-    ...(cfg.transport === 'baileys' ? { guard: guardSummary() } : {}),
+    ...(st?.guard ? { guard: st.guard } : {}),
+    ...(st ? { wa: st.state } : {}),
+    reportedAt: st?.last_seen_at ?? null,
   };
 }
 
-export function usageReport(): UsageReport {
+export async function usageReport(): Promise<UsageReport> {
   return {
     model: cfg.llmModel,
     price: { in: cfg.llmPriceIn, cached: cfg.llmPriceCached, out: cfg.llmPriceOut },
     usdIdr: cfg.usdIdr,
-    days: usageDays(90),
+    days: await usageDays(90),
   };
 }
 
 export function localStore(): AdminStore {
   const path = (file: string) => join(mediaDir(), file);
   return {
-    async refresh() {
-      refreshBiz();
-    },
     async save(changes) {
-      saveBiz(changes);
+      await saveBiz(changes);
     },
     async putPhoto(file, data) {
+      mkdirSync(mediaDir(), { recursive: true });
       writeFileSync(path(file), data);
     },
     async getPhoto(file) {
@@ -82,20 +90,10 @@ export function localStore(): AdminStore {
     async delPhoto(file) {
       if (existsSync(path(file))) unlinkSync(path(file));
     },
-    async leads() {
-      return leadRows();
-    },
-    async status() {
-      return { ...botStatus(), reportedAt: null };
-    },
-    async usage() {
-      return usageReport();
-    },
-    async alerts() {
-      return alertItems();
-    },
-    async errors() {
-      return errorItems();
-    },
+    leads: leadRows,
+    status: botStatus,
+    usage: usageReport,
+    alerts: alertItems,
+    errors: errorItems,
   };
 }

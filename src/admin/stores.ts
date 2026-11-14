@@ -1,6 +1,7 @@
 /**
- * Bentuk tempat dashboard membaca dan menyimpan. Wujudnya ada di
- * store-local.ts: folder data/ dan database milik bot, di mesin yang sama.
+ * Bentuk tempat dashboard membaca dan menyimpan, untuk proyek permintaan yang
+ * sedang dilayani. Wujudnya ada di store-local.ts: database bersama dan folder
+ * data/<proyek>/media/, di mesin yang sama dengan bot.
  *
  * Dashboard online (Vercel) tidak punya penyimpanan sendiri: ia hanya
  * meneruskan permintaan ke server bot (lihat vercel.json dan docs/deploy.md).
@@ -46,7 +47,9 @@ export interface BotStatus {
   effective?: Record<string, number | boolean | string[]>;
   /** Jalur notifikasi yang kredensialnya sudah diisi di .env bot. */
   channels?: { email: boolean; telegram: boolean; stt?: boolean };
-  /** Kapan bot terakhir melapor (ms). Null = dashboard satu proses dengan bot. */
+  /** Keadaan WhatsApp menurut laporan terakhir bot (connected, qr, …). */
+  wa?: string;
+  /** Kapan bot terakhir melapor (ms). Null = bot belum pernah melapor. */
   reportedAt: number | null;
 }
 
@@ -61,15 +64,12 @@ export interface UsageReport {
 }
 
 export interface AdminStore {
-  /** Muat profil terbaru ke `biz` sebelum melayani permintaan. */
-  refresh(): Promise<void>;
   save(changes: Partial<Editable>): Promise<void>;
   putPhoto(file: string, data: Buffer, contentType: string): Promise<void>;
   getPhoto(file: string): Promise<Buffer | null>;
   delPhoto(file: string): Promise<void>;
   leads(): Promise<LeadRow[]>;
   status(): Promise<BotStatus | null>;
-  /** Null = bot belum pernah melapor. */
   usage(): Promise<UsageReport | null>;
   alerts(): Promise<AlertItem[]>;
   /** Catatan galat bot, terbaru dulu. */

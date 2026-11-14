@@ -73,8 +73,8 @@ export function sheetRow(p: LeadPayload): string[] {
 }
 
 async function deliverOnce(): Promise<void> {
-  for (const row of outboxPending(MAX_ATTEMPTS)) {
-    const p = JSON.parse(row.payload) as LeadPayload;
+  for (const row of await outboxPending(MAX_ATTEMPTS)) {
+    const p = row.payload as LeadPayload;
     try {
       if (row.kind === 'sales') {
         if (!notify) throw new Error('pengirim notifikasi belum terpasang');
@@ -84,9 +84,9 @@ async function deliverOnce(): Promise<void> {
       } else {
         await appendRow(sheetRow(p));
       }
-      outboxDone(row.id, now());
+      await outboxDone(row.id, now());
     } catch (e) {
-      outboxFailed(row.id);
+      await outboxFailed(row.id).catch(() => {});
       console.error(`[outbox] ${row.kind} #${row.id} gagal: ${e instanceof Error ? e.message : e}`);
     }
   }

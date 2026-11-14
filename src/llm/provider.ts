@@ -40,10 +40,10 @@ export interface UsageDelta {
   completionTokens: number;
 }
 
-// Pencatat pemakaian yang awet (database bot). Penyedia ini sendiri tidak
-// mengimpor database: ia juga jalan di fungsi Vercel, yang tidak punya SQLite.
-let recorder: ((d: UsageDelta) => void) | null = null;
-export function setUsageRecorder(fn: ((d: UsageDelta) => void) | null): void {
+// Pencatat pemakaian yang awet (database). Penyedia ini sendiri tidak
+// mengimpor database, jadi bisa dipakai tanpa database (tes, eval).
+let recorder: ((d: UsageDelta) => unknown) | null = null;
+export function setUsageRecorder(fn: ((d: UsageDelta) => unknown) | null): void {
   recorder = fn;
 }
 
@@ -130,10 +130,11 @@ export async function askJson(opts: AskOptions): Promise<string | null> {
     usage.promptTokens += delta.promptTokens;
     usage.cachedTokens += delta.cachedTokens;
     usage.completionTokens += delta.completionTokens;
+    const notRecorded = (e: unknown) => console.error(`[llm] pemakaian tidak tercatat: ${e instanceof Error ? e.message : e}`);
     try {
-      recorder?.(delta);
+      void Promise.resolve(recorder?.(delta)).catch(notRecorded);
     } catch (e) {
-      console.error(`[llm] pemakaian tidak tercatat: ${e instanceof Error ? e.message : e}`);
+      notRecorded(e);
     }
 
     failures = 0;

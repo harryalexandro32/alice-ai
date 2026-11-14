@@ -49,6 +49,11 @@ $('theme').addEventListener('click', () => {
 
 let profile = null;
 let state = null;
+// Proyek yang sedang dibuka (satu bisnis, satu nomor WhatsApp). Disimpan di
+// alamat (#id) supaya muat ulang halaman tetap di proyek yang sama.
+let project = decodeURIComponent(location.hash.slice(1)) || '';
+let projects = [];
+let templates = [];
 let tab = 'identitas';
 const NO_SAVE = ['lead', 'biaya', 'uji', 'pdf', 'peringatan'];
 let dirty = false;
@@ -79,8 +84,13 @@ function toast(text, err = false) {
   toast.timer = setTimeout(() => (t.className = 'toast'), err ? 5000 : 2600);
 }
 
+// Alamat yang bukan milik satu proyek; sisanya ada di /admin/<proyek>/api/….
+const GLOBAL_API = ['login', 'logout', 'projects'];
+const mediaBase = () => '/admin/' + encodeURIComponent(project) + '/media/';
+
 async function api(path, opts = {}) {
-  const res = await fetch('/admin/api/' + path, {
+  const base = GLOBAL_API.includes(path) ? '/admin/api/' : '/admin/' + encodeURIComponent(project) + '/api/';
+  const res = await fetch(base + path, {
     credentials: 'same-origin',
     ...opts,
     headers: opts.body && typeof opts.body === 'string' ? { 'content-type': 'application/json' } : opts.headers,
@@ -165,7 +175,7 @@ function renderRecipients() {
       cell('telegram', T('id chat, mis. 123456789', 'chat id, e.g. 123456789')),
       el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 6, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima. Selama kosong, bot memakai SALES_NUMBER dari .env.', 'No recipients yet. While empty, the bot uses SALES_NUMBER from .env.') })));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 6, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima. Selama kosong, bot memakai nomor sales proyek (kartu Proyek di atas).', 'No recipients yet. While empty, the bot uses the project\'s sales number (Project card above).') })));
   $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp', 'Email', 'Telegram']), body);
 
   const opts = [['owner', T('Pemilik', 'Owner')], ['staff', T('Staf', 'Staff')], ['both', T('Pemilik dan staf', 'Owner and staff')], ['none', T('Tidak dikirim', 'Not sent')]];
@@ -202,7 +212,7 @@ document.addEventListener('input', (e) => {
 
 // ---------- berkas (foto, PDF, logo) ----------
 const fileOf = (id) => (profile.files || []).find((f) => f.id === id);
-const mediaUrl = (id) => { const f = fileOf(id); return f ? '/admin/media/' + f.file : ''; };
+const mediaUrl = (id) => { const f = fileOf(id); return f ? mediaBase() + f.file : ''; };
 
 async function uploadFile(file) {
   if (file.size > 4000000) throw new Error(T('Berkas terlalu besar (maksimal 4 MB).', 'File too large (4 MB max).'));
@@ -291,7 +301,7 @@ function renderPdfs() {
       } catch (e) { toast(e.message, true); }
       renderPdfs();
     });
-    return el('tr', {}, el('td', {}, el('a', { href: '/admin/media/' + f.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + f.name })),
+    return el('tr', {}, el('td', {}, el('a', { href: mediaBase() + f.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + f.name })),
       el('td', {}, chips), el('td', {}, el('label', { className: 'switch' }, read)), el('td', { className: 'acts' }, re, del));
   });
   $('pdfs').replaceChildren(head, el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 4, style: 'color:var(--muted)', textContent: T('Belum ada PDF. Unggah brosur atau katalog Anda.', 'No PDFs yet. Upload your brochures or catalogues.') }))])));
@@ -724,8 +734,8 @@ const chatHint = () => el('div', { className: 'msg note', textContent: T('Ketik 
 
 function addMsg(cls, text, photos, docs) {
   const m = el('div', { className: 'msg ' + cls, textContent: text });
-  for (const p of photos || []) m.append(el('img', { src: '/admin/media/' + p.file, alt: p.name, title: p.name }));
-  for (const d of docs || []) m.append(el('a', { className: 'doc', href: '/admin/media/' + d.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + d.name }));
+  for (const p of photos || []) m.append(el('img', { src: mediaBase() + p.file, alt: p.name, title: p.name }));
+  for (const d of docs || []) m.append(el('a', { className: 'doc', href: mediaBase() + d.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + d.name }));
   $('chat').append(m);
   $('chat').scrollTop = $('chat').scrollHeight;
   return m;
@@ -767,16 +777,9 @@ $('resetChat').addEventListener('click', () => {
 // ---------- lead ----------
 let leadData = null;
 
-/** Keadaan satu baris lead, dengan memperhitungkan tombol yang belum dijalankan bot. */
+/** Keadaan satu baris lead. Tombolnya ditulis langsung ke database, jadi selalu sesuai. */
 function leadState(c) {
-  const since = (leadData && leadData.reportedAt) || 0;
-  const sw = (profile.botSwitch || {})[c.phone];
-  const actual = !c.hold;
-  const pendingBot = Boolean(sw) && (sw.mode === 'on') !== actual && sw.at > since;
-  const done = (profile.handled || {})[c.phone] || 0;
-  // "Sudah ditangani" yang ditekan setelah laporan terakhir bot: anggap sudah beres.
-  const needs = c.needsSales && !(done > since);
-  return { botOn: pendingBot ? sw.mode === 'on' : actual, pendingBot, needs };
+  return { botOn: !c.hold, needs: c.needsSales };
 }
 
 async function loadLeads() {
@@ -813,25 +816,22 @@ function renderLeads() {
     box.addEventListener('change', async () => {
       box.disabled = true;
       try {
-        const next = { ...(profile.botSwitch || {}), [c.phone]: { mode: box.checked ? 'on' : 'off', at: Date.now() } };
-        profile.botSwitch = (await api('profile', { method: 'PUT', body: JSON.stringify({ botSwitch: next }) })).profile.botSwitch;
+        await api('leads/' + encodeURIComponent(c.phone) + '/bot', { method: 'POST', body: JSON.stringify({ mode: box.checked ? 'on' : 'off' }) });
         toast(box.checked ? T('Chat ini dikembalikan ke bot.', 'This chat is handed back to the bot.') : T('Bot dimatikan untuk chat ini.', 'The bot is turned off for this chat.'));
       } catch (e) { toast(e.message, true); }
-      renderLeads();
+      await loadLeads();
     });
-    const why = s.pendingBot ? T('menunggu bot', 'waiting for the bot')
-      : c.hold === 'admin' ? T('admin membalas', 'an admin replied') : c.hold === 'tombol' ? T('dimatikan', 'turned off') : '';
+    const why = c.hold === 'admin' ? T('admin membalas', 'an admin replied') : c.hold === 'tombol' ? T('dimatikan', 'turned off') : '';
     let staff = null;
     if (s.needs) {
       const done = el('button', { className: 'btn ghost small', type: 'button', textContent: T('✓ Sudah ditangani', '✓ Handled'), style: 'margin-left:6px' });
       done.addEventListener('click', async () => {
         done.disabled = true;
         try {
-          const next = { ...(profile.handled || {}), [c.phone]: Date.now() };
-          profile.handled = (await api('profile', { method: 'PUT', body: JSON.stringify({ handled: next }) })).profile.handled;
+          await api('leads/' + encodeURIComponent(c.phone) + '/handled', { method: 'POST' });
           toast(T('Ditandai sudah ditangani.', 'Marked as handled.'));
         } catch (e) { toast(e.message, true); }
-        renderLeads();
+        await loadLeads();
       });
       staff = el('span', { style: 'white-space:nowrap' }, el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }), done);
     }
@@ -882,7 +882,7 @@ $('knownImport').addEventListener('click', async () => {
     profile = r.profile;
     $('knownText').value = '';
     toast(r.added + T(' nomor ditambahkan', ' numbers added') + (r.invalid ? ', ' + r.invalid + T(' baris dilewati (bukan nomor)', ' lines skipped (not a number)') : '') + '. ' + T('Total: ', 'Total: ') + r.total + '.');
-    renderLeads();
+    await loadLeads();
   } catch (e) { toast(e.message, true); }
   $('knownImport').disabled = false;
 });
@@ -941,7 +941,7 @@ async function loadUsage() {
     const u = (await api('usage')).usage;
     if (!u) {
       tiles.replaceChildren();
-      $('usageRate').textContent = T('Bot belum pernah melapor ke dashboard ini. Nyalakan bot; pemakaiannya muncul di sini dalam ±15 menit.', 'The bot has never reported to this dashboard. Start the bot; its usage appears here within about 15 minutes.');
+      $('usageRate').textContent = T('Belum ada pemakaian yang tercatat.', 'No usage recorded yet.');
       table.replaceChildren();
       return;
     }
@@ -963,7 +963,7 @@ async function loadUsage() {
     tiles.replaceChildren(tile(T('Hari ini', 'Today'), since(1)), tile(T('7 hari terakhir', 'Last 7 days'), since(7)), tile(T('30 hari terakhir', 'Last 30 days'), since(30)));
 
     $('usageRate').textContent = 'Model ' + u.model + T(' · tarif per 1 juta token: masuk ', ' · rates per 1M tokens: input ') + usd(u.price.in) + T(', masuk dari cache ', ', cached input ') + usd(u.price.cached) +
-      T(', keluar ', ', output ') + usd(u.price.out) + T(' · kurs Rp ', ' · exchange rate Rp ') + int(u.usdIdr) + T(' per USD. Tarif dan kurs diatur di .env bot.', ' per USD. Rates and exchange rate are set in the bot\'s .env.');
+      T(', keluar ', ', output ') + usd(u.price.out) + T(' · kurs Rp ', ' · exchange rate Rp ') + int(u.usdIdr) + T(' per USD. Tarif dan kurs diatur di Pengaturan.', ' per USD. Rates and exchange rate are set in Settings.');
 
     const th = (t, num) => el('th', { textContent: t, className: num ? 'num' : '' });
     const td = (t, num) => el('td', { textContent: t, className: num ? 'num' : '' });
@@ -989,11 +989,12 @@ function renderStatus() {
   const mins = st && st.reportedAt ? Math.round((Date.now() - st.reportedAt) / 60000) : null;
   $('chipLlm').textContent = state.testReady ? T('uji coba siap', 'test chat ready') : T('LLM belum diatur', 'LLM not configured');
   $('chipLlm').className = 'chip ' + (state.testReady ? 'ok' : 'warn');
-  $('chipWa').textContent = !st ? T('bot belum pernah melapor', 'bot has never reported') : mins === null ? T('jalur: ', 'channel: ') + st.transport
-    : T('bot melapor ', 'bot reported ') + (mins < 1 ? T('baru saja', 'just now') : mins + T(' menit lalu', ' min ago'));
-  $('chipWa').className = 'chip ' + (!st || (mins !== null && mins > 40) ? 'warn' : 'ok');
+  const paused = state.project && state.project.paused;
+  $('chipWa').textContent = paused ? T('bot dijeda', 'bot paused') : !st || mins === null ? T('bot belum pernah melapor', 'bot has never reported')
+    : mins > 2 ? T('bot terakhir melapor ', 'bot last reported ') + mins + T(' menit lalu', ' min ago') : 'WhatsApp: ' + waLabel(st.wa);
+  $('chipWa').className = 'chip ' + (paused ? 'danger' : !st || mins === null || mins > 2 || st.wa !== 'connected' ? 'warn' : 'ok');
   const info = !st
-    ? [['Bot', T('Belum pernah melapor ke dashboard ini. Nyalakan bot dengan penyimpanan bersama yang sama.', 'Has never reported to this dashboard. Start the bot with the same shared storage.')]]
+    ? [['Bot', T('Belum pernah melapor ke dashboard ini.', 'Has never reported to this dashboard.')]]
     : [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Kabar lead lewat WA ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
         ['Google Sheet', st.sheet ? T('siap', 'ready') : T('belum diatur', 'not set')],
         [T('Transkripsi pesan suara', 'Voice note transcription'), st.channels && st.channels.stt ? T('siap', 'ready') : T('belum diatur di .env bot (STT_API_KEY)', 'not set in the bot\'s .env (STT_API_KEY)')],
@@ -1002,6 +1003,177 @@ function renderStatus() {
         ...(st.guard ? [[T('Pengaman nomor', 'Number safeguard'), st.guard]] : [])];
   $('envInfo').replaceChildren(el('tbody', {}, ...info.map(([k, v]) => el('tr', {}, el('td', { textContent: k, style: 'width:220px;color:var(--muted)' }), el('td', { textContent: v })))));
 }
+
+// ---------- WhatsApp & proyek ----------
+const WA_STATES = {
+  starting: () => [T('menyambung…', 'connecting…'), ''],
+  qr: () => [T('menunggu dipindai', 'waiting for scan'), 'warn'],
+  pairing: () => [T('menunggu kode pairing', 'waiting for pairing code'), 'warn'],
+  connected: () => [T('tersambung', 'connected'), 'ok'],
+  disconnected: () => [T('terputus, menyambung lagi', 'disconnected, reconnecting'), 'warn'],
+  logged_out: () => [T('sesi dicabut dari HP', 'session removed on the phone'), 'danger'],
+  conflict: () => [T('sesi direbut sesi lain', 'session taken over'), 'danger'],
+  stopped: () => [T('bot berhenti', 'bot stopped'), 'danger'],
+};
+const waLabel = (s) => (WA_STATES[s] ? WA_STATES[s]()[0] : s || '—');
+let waTimer = null;
+let wa = null;
+
+function renderWa() {
+  const w = wa && wa.wa;
+  const p = state && state.project;
+  // Laporan bot datang tiap 30 detik; lebih dari 2 menit diam = bot tidak jalan.
+  const stale = !w || !w.last_seen_at || Date.now() - w.last_seen_at > 120000;
+  const [text, cls] = !w ? [T('bot belum pernah melapor', 'bot has never reported'), 'warn']
+    : stale ? [T('bot tidak melapor', 'bot not reporting'), 'danger'] : WA_STATES[w.state] ? WA_STATES[w.state]() : [w.state, ''];
+  $('waState').textContent = text;
+  $('waState').className = 'chip ' + cls;
+  $('waSeen').textContent = w && w.last_seen_at ? T('laporan terakhir ', 'last report ') + when(w.last_seen_at) : '';
+  const showQr = w && !stale && w.state === 'qr' && w.qr && typeof qrcode === 'function';
+  $('waQr').hidden = !showQr;
+  if (showQr && $('waQrImg').dataset.qr !== w.qr) {
+    const q = qrcode(0, 'L');
+    q.addData(w.qr);
+    q.make();
+    $('waQrImg').src = q.createDataURL(6, 2);
+    $('waQrImg').dataset.qr = w.qr;
+  }
+  const code = w && !stale && w.state === 'pairing' && w.pairing_code;
+  $('waCodeBox').hidden = !code;
+  $('waCode').textContent = code ? w.pairing_code.replace(/^(.{4})(.{4})$/, '$1-$2') : '';
+  $('waDetail').textContent = wa && wa.pending === 'pair' ? T('Permintaan kode pairing dikirim ke bot…', 'Pairing code requested from the bot…')
+    : wa && wa.pending === 'reset' ? T('Bot sedang memutus sesi lama…', 'The bot is disconnecting the old session…')
+    : w && w.state === 'connected' ? T('Tersambung sebagai ', 'Connected as ') + (w.self_phone || '?')
+    : w && w.detail ? w.detail : '';
+  const cloud = p && p.transport === 'cloud';
+  $('waPair').disabled = cloud;
+  $('waNumber').disabled = cloud;
+  if (!$('waNumber').value && p && p.wa_number) $('waNumber').value = p.wa_number;
+  $('waFoot').textContent = w ? [T('Jalur: ', 'Channel: ') + (w.transport || (p && p.transport) || '—'), w.version ? T('versi bot ', 'bot version ') + w.version : '',
+    w.started_at ? T('dinyalakan ', 'started ') + when(w.started_at) : ''].filter(Boolean).join(' · ') : T('Bot proyek ini belum pernah melapor. Di server, bot dinyalakan dalam ±1 menit setelah proyek dibuat.', 'This project\'s bot has never reported. On the server it starts within a minute after the project is created.');
+}
+
+async function loadWa() {
+  clearTimeout(waTimer);
+  if (!project || tab !== 'pengaturan') return;
+  try {
+    wa = await api('wa');
+    renderWa();
+  } catch { /* dicoba lagi di putaran berikutnya */ }
+  // Selama belum tersambung, QR dan kode pairing berganti cepat: periksa tiap 3 detik.
+  const connected = wa && wa.wa && wa.wa.state === 'connected' && !wa.pending;
+  waTimer = setTimeout(loadWa, connected ? 15000 : 3000);
+}
+
+$('waPair').addEventListener('click', async () => {
+  $('waPair').disabled = true;
+  try {
+    await api('wa/pair', { method: 'POST', body: JSON.stringify({ number: $('waNumber').value }) });
+    toast(T('Kode pairing diminta. Kodenya muncul di sini dalam beberapa detik.', 'Pairing code requested. It appears here in a few seconds.'));
+  } catch (e) { toast(e.message, true); }
+  $('waPair').disabled = false;
+  void loadWa();
+});
+
+$('waReset').addEventListener('click', async () => {
+  if (!confirm(T('Putuskan WhatsApp proyek ini dan tautkan dari awal? Bot berhenti membalas sampai ditautkan lagi.', 'Disconnect this project\'s WhatsApp and link it again? The bot stops replying until it is linked again.'))) return;
+  try {
+    await api('wa/reset', { method: 'POST' });
+    toast(T('Sesi lama diputus. QR baru muncul di sini sebentar lagi.', 'Old session disconnected. A new QR code appears here shortly.'));
+  } catch (e) { toast(e.message, true); }
+  void loadWa();
+});
+
+function renderProject() {
+  const p = state && state.project;
+  if (!p) return;
+  $('projName').value = p.name || '';
+  $('projTransport').value = p.transport || 'baileys';
+  $('projWa').value = p.wa_number || '';
+  $('projSales').value = p.sales_number || '';
+  $('projEnabled').checked = Boolean(p.enabled);
+  $('projPaused').checked = Boolean(p.paused);
+  $('pauseBar').classList.toggle('on', Boolean(p.paused));
+}
+
+async function putProject(patch, message) {
+  const r = await api('project', { method: 'PUT', body: JSON.stringify(patch) });
+  state.project = r.project;
+  const i = projects.findIndex((x) => x.id === r.project.id);
+  if (i >= 0) projects[i] = { ...projects[i], ...r.project };
+  renderProjects();
+  renderProject();
+  renderStatus();
+  toast(message);
+}
+
+$('projSave').addEventListener('click', async () => {
+  try {
+    await putProject({ name: $('projName').value, transport: $('projTransport').value, wa_number: $('projWa').value, sales_number: $('projSales').value, enabled: $('projEnabled').checked },
+      T('Proyek disimpan.', 'Project saved.'));
+  } catch (e) { toast(e.message, true); renderProject(); }
+});
+
+$('projPaused').addEventListener('change', async () => {
+  const paused = $('projPaused').checked;
+  try {
+    await putProject({ paused }, paused ? T('Bot dijeda untuk semua chat.', 'The bot is paused for all chats.') : T('Bot aktif lagi untuk semua chat.', 'The bot is active again for all chats.'));
+  } catch (e) { toast(e.message, true); renderProject(); }
+});
+
+function renderProjects() {
+  const sel = $('projectSel');
+  sel.replaceChildren(...projects.map((p) => el('option', { value: p.id, textContent: p.name + (p.paused ? T(' (dijeda)', ' (paused)') : '') + (p.enabled ? '' : T(' (nonaktif)', ' (inactive)')) })),
+    el('option', { value: '+', textContent: T('＋ Proyek baru…', '＋ New project…') }));
+  sel.value = project;
+  $('npTemplate').replaceChildren(...templates.map((t) => el('option', { value: t, textContent: t })));
+  $('npTemplate').value = templates.includes('generic') ? 'generic' : templates[0] || '';
+}
+
+async function switchProject(id) {
+  if (id === project) return;
+  if (dirty && !confirm(T('Ada perubahan yang belum disimpan. Pindah proyek tanpa menyimpan?', 'There are unsaved changes. Switch project without saving?'))) {
+    $('projectSel').value = project;
+    return;
+  }
+  project = id;
+  history.replaceState(null, '', '#' + encodeURIComponent(id));
+  chat = [];
+  known = {};
+  leadData = null;
+  wa = null;
+  $('waNumber').value = '';
+  $('waQrImg').removeAttribute('src');
+  delete $('waQrImg').dataset.qr;
+  await load();
+}
+
+$('projectSel').addEventListener('change', () => {
+  if ($('projectSel').value === '+') {
+    $('projectSel').value = project;
+    $('npErr').textContent = '';
+    $('newProject').classList.add('on');
+    $('npId').focus();
+    return;
+  }
+  void switchProject($('projectSel').value);
+});
+$('npCancel').addEventListener('click', () => $('newProject').classList.remove('on'));
+$('newProjectForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('npErr').textContent = '';
+  try {
+    const r = await api('projects', { method: 'POST', body: JSON.stringify({
+      id: $('npId').value.trim().toLowerCase(), name: $('npName').value, template: $('npTemplate').value, wa_number: $('npWa').value, sales_number: $('npSales').value,
+    }) });
+    $('newProject').classList.remove('on');
+    $('newProjectForm').reset();
+    toast(T('Proyek dibuat. Tautkan WhatsApp-nya di halaman Pengaturan.', 'Project created. Link its WhatsApp on the Settings page.'));
+    tab = 'pengaturan';
+    project = '';
+    await switchProject(r.project.id);
+  } catch (err) { $('npErr').textContent = err.message; }
+});
 
 // ---------- navigasi, simpan, masuk ----------
 function show(next) {
@@ -1015,6 +1187,8 @@ function show(next) {
   if (tab === 'lead') loadLeads();
   if (tab === 'biaya') loadUsage();
   if (tab === 'peringatan') loadAlerts();
+  if (tab === 'pengaturan') void loadWa();
+  else clearTimeout(waTimer);
 }
 
 function renderAll() {
@@ -1030,6 +1204,8 @@ function renderAll() {
   renderProducts();
   renderPdfs();
   renderCatalog();
+  renderProjects();
+  renderProject();
   renderStatus();
   setBadge(state.alerts, state.status);
   if (!chat.length) $('chat').replaceChildren(chatHint());
@@ -1071,6 +1247,18 @@ $('save').addEventListener('click', () => void save());
 window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
 
 async function load() {
+  const list = await api('projects');
+  projects = list.projects;
+  templates = list.templates;
+  if (!projects.some((p) => p.id === project)) project = projects.length ? projects[0].id : '';
+  history.replaceState(null, '', project ? '#' + encodeURIComponent(project) : location.pathname);
+  if (!project) {
+    // Belum ada proyek sama sekali: mulai dengan membuat satu.
+    $('login').classList.remove('on');
+    renderProjects();
+    $('newProject').classList.add('on');
+    return;
+  }
   state = await api('state');
   profile = state.profile;
   $('login').classList.remove('on');

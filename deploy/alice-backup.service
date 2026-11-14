@@ -1,6 +1,7 @@
-# Cadangan harian database + profil + sesi WhatsApp (lihat backup.sh).
+# Cadangan harian database + berkas unggahan + sesi WhatsApp (lihat backup.sh).
 [Unit]
 Description=Alice AI - cadangan data
+After=postgresql.service
 
 [Service]
 Type=oneshot

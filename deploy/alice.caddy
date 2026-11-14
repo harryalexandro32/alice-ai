@@ -1,0 +1,21 @@
+# /etc/caddy/conf.d/alice.caddy — HTTPS otomatis (Let's Encrypt) di depan dashboard.
+# Diimpor oleh /etc/caddy/Caddyfile.main bersama situs lain di server ini;
+# berkas ini hanya memuat situs Alice. Dashboard di Vercel
+# (alice.lukicenturi.com) meneruskan permintaannya ke sini.
+
+alice-api.lukicenturi.com {
+	encode gzip
+
+	# Jalur WhatsApp Cloud API (jalur "cloud" di proyek): webhook Meta masuk lewat sini.
+	handle /webhook* {
+		reverse_proxy 127.0.0.1:3000
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# Dashboard pemilik untuk semua proyek (alice-admin, ADMIN_PORT).
+	handle {
+		reverse_proxy 127.0.0.1:3100
+	}
+}

@@ -53,16 +53,18 @@ function record(chunk: Buffer | string): void {
 
 /**
  * Kabari penerima "bot mati" lewat Telegram dan email (WhatsApp tidak mungkin:
- * botnya sedang mati). Profil dibaca dari disk tiap kali, jadi penerima yang
- * baru diatur di dashboard langsung berlaku. Tidak pernah melempar.
+ * botnya sedang mati). Profil dibaca dari database tiap kali, jadi penerima
+ * yang baru diatur di dashboard langsung berlaku. Tidak pernah melempar.
  */
 async function tell(text: string): Promise<void> {
   try {
-    const { biz, initBiz, refreshBiz } = await import('./business');
-    initBiz();
-    refreshBiz(true);
+    const { openDb, closeDb } = await import('./db');
+    const { biz, initBiz } = await import('./business');
+    await openDb();
+    await initBiz(undefined, { requireEnabled: false });
     const { deliverExternal } = await import('./notify');
     await deliverExternal('bot-mati', `⚠️ Bot berhenti | ${biz.brand}`, text);
+    await closeDb();
   } catch (e) {
     say(`kabar "bot mati" tidak terkirim: ${e instanceof Error ? e.message : e}`);
   }

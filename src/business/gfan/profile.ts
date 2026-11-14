@@ -103,8 +103,6 @@ export const gfan: Business = {
   handoffLabel: 'harga/stok',
   forbidPrices: true,
   stopAfterHuman: true,
-  botSwitch: {},
-  handled: {},
   knownAt: 0,
   knownCount: 0,
   recipients: [],

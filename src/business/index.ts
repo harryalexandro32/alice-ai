@@ -1,122 +1,147 @@
 /**
- * Profil bisnis yang sedang dipakai.
+ * Profil bisnis proyek yang sedang dilayani (lihat src/project.ts).
  *
- * Satu proses melayani satu bisnis (env BUSINESS). `biz` adalah SATU objek
- * yang isinya diperbarui di tempat: modul lain cukup membaca `biz.x` dan
- * selalu mendapat nilai terbaru, tanpa perlu tahu kapan dashboard menyimpan.
+ * `biz` bukan objek biasa: ia selalu membaca profil proyek yang sedang
+ * dilayani — proyek proses bot, atau proyek permintaan dashboard. Modul lain
+ * cukup membaca `biz.x` dan selalu mendapat nilai terbaru.
  *
- * Perubahan pemilik disimpan di data/<id>/profile.json. File itu dibaca ulang
- * begitu berubah, jadi dashboard boleh berjalan di proses lain (`npm run
- * admin`) dan bot yang sedang jalan tetap ikut tanpa restart.
+ * Profil = bibit di kode (src/business/<template>/profile.ts) + perubahan
+ * pemilik dari dashboard (tabel profiles di database). Bot yang sedang jalan
+ * memeriksa apakah profil atau baris proyeknya berubah (refreshBiz) dan
+ * memuat ulang tanpa restart.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { applySettings, cfg, normPhone, TUNABLE, type Settings, type TunableKey } from '../config';
+import { cfg, normPhone, projectCfg, settingsCfg, TUNABLE, type Settings, type TunableKey } from '../config';
+import { currentProject, defaultProject, maybeProject, setDefaultProject, type ProjectCtx } from '../project';
+import { getProfile, getProject, projectStamp, saveProfile, type Project } from '../store';
 import { isPdf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
+import { generic } from './generic/profile';
 import { gfan } from './gfan/profile';
 import {
-  EDITABLE, type BotSwitch, type Business, type Editable, type LeadField, type MediaFile, type NotifyKind, type Recipient, type Route,
+  EDITABLE, type Business, type Editable, type LeadField, type MediaFile, type NotifyKind, type Recipient, type Route,
 } from './types';
 
-const REGISTRY: Record<string, Business> = { gfan };
+/** Bibit profil yang bisa dipilih saat membuat proyek. */
+export const REGISTRY: Record<string, Business> = { gfan, generic };
+export const TEMPLATES = Object.keys(REGISTRY);
 
-const seed = REGISTRY[cfg.business];
-if (!seed) {
-  throw new Error(
-    `BUSINESS="${cfg.business}" tidak dikenal. Yang ada: ${Object.keys(REGISTRY).join(', ')}`
-  );
+const own = (): Record<string | symbol, unknown> => currentProject().biz as unknown as Record<string | symbol, unknown>;
+
+/** Profil proyek yang sedang dilayani. Melempar kalau belum ada proyek. */
+export const biz: Business = new Proxy({} as Business, {
+  get: (_t, key) => own()[key],
+  set: (_t, key, value) => {
+    own()[key] = value;
+    return true;
+  },
+  has: (_t, key) => key in own(),
+  ownKeys: () => Reflect.ownKeys(own()),
+  getOwnPropertyDescriptor: (_t, key) =>
+    key in own() ? { value: own()[key], writable: true, enumerable: true, configurable: true } : undefined,
+});
+
+export const dataDir = (): string => join(cfg.dataRoot, currentProject().id);
+export const mediaDir = (): string => join(dataDir(), 'media');
+
+/** Rakit konteks proyek: bibit + perubahan pemilik + baris proyek. Tanpa database. */
+export function buildCtx(row: Project, overrides: Partial<Editable> = {}, stamp = 0): ProjectCtx {
+  let seed = REGISTRY[row.template];
+  if (!seed) {
+    console.warn(`[profil] bibit "${row.template}" untuk proyek ${row.id} tidak dikenal; memakai bibit umum`);
+    seed = generic;
+  }
+  const ctx: ProjectCtx = {
+    id: row.id, row, seed, biz: { ...seed, id: row.id }, cfg: projectCfg(row, {}), stamp,
+    pdfTexts: new Map(), pdfVersion: 0, rendered: null,
+  };
+  apply(ctx, overrides);
+  return ctx;
 }
 
-export const biz: Business = { ...seed };
+/** Tes dan alat bantu: konteks dari bibit saja, tanpa database. */
+export function seedCtx(template = 'gfan', id = template): ProjectCtx {
+  const at = Date.now();
+  return buildCtx({
+    id, name: id, template, enabled: true, paused: false, transport: 'baileys', wa_number: null, sales_number: null,
+    pairing_request: null, created_at: at, updated_at: at,
+  });
+}
 
-export const dataDir = (): string => join(cfg.dataRoot, biz.id);
-export const mediaDir = (): string => join(dataDir(), 'media');
-const profileFile = (): string => join(dataDir(), 'profile.json');
-
-let enabled = false;
-let loadedMtime = 0;
+/** Muat proyek dari database. Undefined kalau id-nya tidak ada. */
+export async function loadProject(id: string): Promise<ProjectCtx | undefined> {
+  const row = await getProject(id);
+  if (!row) return undefined;
+  const [data, stamp] = await Promise.all([getProfile(id), projectStamp(id)]);
+  return buildCtx(row, data as Partial<Editable>, stamp);
+}
 
 /** Pakai bibit + perubahan ini sebagai profil yang berlaku (tanpa menyimpan). */
 export function applyOverrides(overrides: Partial<Editable>): void {
-  apply(overrides);
+  apply(currentProject(), overrides);
 }
 
-/**
- * Ganti seluruh perubahan lokal dengan `overrides` — dipakai saat menarik
- * profil dari penyimpanan bersama, yang merupakan sumber kebenarannya.
- */
-export function replaceOverrides(overrides: Partial<Editable>): void {
-  mkdirSync(dataDir(), { recursive: true });
-  const tmp = `${profileFile()}.tmp`;
-  writeFileSync(tmp, JSON.stringify(overrides, null, 2));
-  renameSync(tmp, profileFile());
-  loadedMtime = statSync(profileFile()).mtimeMs;
-  apply(overrides);
-}
-
-function apply(overrides: Partial<Editable>): void {
-  Object.assign(biz, seed);
+function apply(ctx: ProjectCtx, overrides: Partial<Editable>): void {
+  const b = { ...ctx.seed, id: ctx.id } as Business;
   for (const k of EDITABLE) {
-    if (overrides[k] !== undefined) (biz as unknown as Record<string, unknown>)[k] = overrides[k];
+    if (overrides[k] !== undefined) (b as unknown as Record<string, unknown>)[k] = overrides[k];
   }
   // Profil yang disimpan sebelum data produk berbentuk tabel: seluruh
   // pengetahuannya satu teks. Teks itu tetap dipakai apa adanya.
   const legacy = (overrides as { knowledge?: unknown }).knowledge;
   if (typeof legacy === 'string' && overrides.catalog === undefined && overrides.notes === undefined) {
-    biz.catalog = [];
-    biz.notes = legacy;
+    b.catalog = [];
+    b.notes = legacy;
   }
-  syncPdfTexts();
-  applySettings(biz.settings);
+  ctx.biz = b;
+  syncPdfTexts(ctx);
+  // Pengaturan dari dashboard menimpa bawaan .env untuk proyek ini.
+  Object.assign(ctx.cfg, settingsCfg(b.settings));
 }
 
-// Isi PDF yang boleh dibaca bot (MediaFile.read), per id berkas. Di mesin bot
-// teksnya ada di folder media sebagai <id>.txt (ditulis dashboard, ditarik
-// bersama PDF-nya); di dashboard online diisi lewat setPdfText().
-const pdfTexts = new Map<string, string>();
+// Isi PDF yang boleh dibaca bot (MediaFile.read), per id berkas. Teksnya ada
+// di folder media sebagai <id>.txt (ditulis dashboard saat PDF diunggah).
 /** Batas teks per PDF yang masuk ke prompt: lebih dari ini, tiap balasan jadi mahal. */
 const PDF_TEXT_MAX = 8000;
-let pdfVersion = 0;
 
 export function setPdfText(id: string, text: string): void {
-  if (pdfTexts.get(id) === text) return;
-  pdfTexts.set(id, text);
-  pdfVersion += 1;
+  const ctx = currentProject();
+  if (ctx.pdfTexts.get(id) === text) return;
+  ctx.pdfTexts.set(id, text);
+  ctx.pdfVersion += 1;
 }
 
-function syncPdfTexts(): void {
-  const wanted = new Set(biz.files.filter((f) => isPdf(f) && f.read).map((f) => f.id));
-  for (const id of [...pdfTexts.keys()]) {
+function syncPdfTexts(ctx: ProjectCtx): void {
+  const wanted = new Set(ctx.biz.files.filter((f) => isPdf(f) && f.read).map((f) => f.id));
+  for (const id of [...ctx.pdfTexts.keys()]) {
     if (!wanted.has(id)) {
-      pdfTexts.delete(id);
-      pdfVersion += 1;
+      ctx.pdfTexts.delete(id);
+      ctx.pdfVersion += 1;
     }
   }
-  if (!enabled) return;
   for (const id of wanted) {
-    if (pdfTexts.has(id)) continue;
+    if (ctx.pdfTexts.has(id)) continue;
     try {
-      setPdfText(id, readFileSync(join(mediaDir(), `${id}.txt`), 'utf8'));
+      ctx.pdfTexts.set(id, readFileSync(join(cfg.dataRoot, ctx.id, 'media', `${id}.txt`), 'utf8'));
+      ctx.pdfVersion += 1;
     } catch {
-      // teksnya belum sampai di mesin ini; dicoba lagi saat profil dimuat ulang
+      // teksnya belum ada di mesin ini; dicoba lagi saat profil dimuat ulang
     }
   }
 }
 
-function renderPdfTexts(): string {
-  return biz.files
-    .filter((f) => isPdf(f) && f.read && pdfTexts.get(f.id))
+function renderPdfTexts(ctx: ProjectCtx): string {
+  return ctx.biz.files
+    .filter((f) => isPdf(f) && f.read && ctx.pdfTexts.get(f.id))
     .map(
       (f) =>
         `ISI PDF "${f.name}" — dibaca otomatis dari berkasnya. Susunan tabelnya bisa bergeser: kalau sebuah angka ` +
-        `tidak jelas milik produk atau kolom yang mana, jangan ditebak — lampirkan PDF-nya dan serahkan ke tim.\n${(pdfTexts.get(f.id) as string).slice(0, PDF_TEXT_MAX)}`
+        `tidak jelas milik produk atau kolom yang mana, jangan ditebak — lampirkan PDF-nya dan serahkan ke tim.\n${(ctx.pdfTexts.get(f.id) as string).slice(0, PDF_TEXT_MAX)}`
     )
     .join('\n\n');
 }
-
-let rendered: { products: unknown; catalog: unknown; notes: string; files: unknown; pdf: number; text: string } | null = null;
 
 /**
  * Satu-satunya sumber jawaban bot: tabel produk + catatan bebas, sebagai teks.
@@ -124,14 +149,14 @@ let rendered: { products: unknown; catalog: unknown; notes: string; files: unkno
  * panggilan ke panggilan (awalan prompt yang di-cache penyedia LLM).
  */
 export function knowledgeText(): string {
-  if (
-    rendered?.products !== biz.products || rendered.catalog !== biz.catalog || rendered.notes !== biz.notes ||
-    rendered.files !== biz.files || rendered.pdf !== pdfVersion
-  ) {
-    const text = [renderProducts(biz.products), renderCatalog(biz.catalog), biz.notes.trim(), renderPdfTexts()].filter(Boolean).join('\n\n');
-    rendered = { products: biz.products, catalog: biz.catalog, notes: biz.notes, files: biz.files, pdf: pdfVersion, text };
+  const ctx = currentProject();
+  const b = ctx.biz;
+  const r = ctx.rendered;
+  if (r?.products !== b.products || r.catalog !== b.catalog || r.notes !== b.notes || r.files !== b.files || r.pdf !== ctx.pdfVersion) {
+    const text = [renderProducts(b.products), renderCatalog(b.catalog), b.notes.trim(), renderPdfTexts(ctx)].filter(Boolean).join('\n\n');
+    ctx.rendered = { products: b.products, catalog: b.catalog, notes: b.notes, files: b.files, pdf: ctx.pdfVersion, text };
   }
-  return rendered.text;
+  return (ctx.rendered as { text: string }).text;
 }
 
 export const fileById = (id: string): MediaFile | undefined => biz.files.find((f) => f.id === id);
@@ -146,31 +171,42 @@ export function productOfFile(id: string): string | null {
   return biz.products.find((x) => x.pdf === id || x.photos.includes(id))?.name ?? null;
 }
 
-function read(): Partial<Editable> {
-  try {
-    return JSON.parse(readFileSync(profileFile(), 'utf8')) as Partial<Editable>;
-  } catch {
-    return {};
-  }
+/**
+ * Mulai melayani satu proyek di proses ini (bot, mode latihan, eval): muat
+ * dari database dan jadikan proyek bawaan proses.
+ */
+export async function initBiz(id = process.env.PROJECT?.trim() ?? '', opts: { requireEnabled?: boolean } = {}): Promise<ProjectCtx> {
+  if (!id) throw new Error('PROJECT belum diisi (mis. PROJECT=gfan)');
+  const ctx = await loadProject(id);
+  if (!ctx) throw new Error(`proyek "${id}" tidak ada di database. Buat lewat dashboard, atau jalankan npm run db:seed untuk gfan.`);
+  if (opts.requireEnabled !== false && !ctx.row.enabled) throw new Error(`proyek "${id}" sedang dinonaktifkan di dashboard`);
+  setDefaultProject(ctx);
+  mkdirSync(mediaDir(), { recursive: true });
+  return ctx;
 }
+
+/** Jarak minimum antar pemeriksaan "profil berubah?" di proses bot. */
+const REFRESH_EVERY_MS = 5000;
+let checkedAt = 0;
 
 /**
- * Mulai memakai perubahan pemilik. Dipanggil sekali oleh bot, dashboard, dan
- * mode latihan. Tes tidak memanggilnya, jadi tes selalu berjalan di atas bibit.
+ * Proses bot: muat ulang proyeknya kalau profil atau baris proyeknya berubah
+ * sejak dimuat (satu kueri murah, paling sering tiap 5 detik; `force`
+ * melewati jeda itu). True kalau dimuat ulang.
  */
-export function initBiz(): void {
-  enabled = true;
-  mkdirSync(mediaDir(), { recursive: true });
-  refreshBiz(true);
-}
-
-/** Baca ulang kalau file profil berubah sejak terakhir dibaca. Murah: satu stat. */
-export function refreshBiz(force = false): void {
-  if (!enabled) return;
-  const mtime = existsSync(profileFile()) ? statSync(profileFile()).mtimeMs : 0;
-  if (!force && mtime === loadedMtime) return;
-  loadedMtime = mtime;
-  apply(mtime ? read() : {});
+export async function refreshBiz(force = false): Promise<boolean> {
+  const ctx = defaultProject();
+  // Di dalam withProject (dashboard) tiap permintaan sudah memuat proyeknya sendiri.
+  if (!ctx || maybeProject() !== ctx) return false;
+  const t = Date.now();
+  if (!force && t - checkedAt < REFRESH_EVERY_MS) return false;
+  checkedAt = t;
+  if ((await projectStamp(ctx.id)) === ctx.stamp) return false;
+  const next = await loadProject(ctx.id);
+  if (!next) return false;
+  setDefaultProject(next);
+  console.log(`[profil] ${ctx.id}: perubahan dari dashboard dimuat`);
+  return true;
 }
 
 const text = (v: unknown, max: number, name: string, required = false): string => {
@@ -279,29 +315,10 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
       const bad = list.find((x) => !normPhone(x));
       if (bad) throw new Error(`Mode uji: "${bad}" bukan nomor yang sah`);
       if (list.length > 50) throw new Error('Mode uji: maksimal 50 nomor');
-      // Daftar kosong berarti "layani semua nomor", walaupun .env mengisi ONLY_NUMBERS.
+      // Daftar kosong berarti "layani semua nomor".
       out.onlyNumbers = list.map((x) => normPhone(x) as string);
     }
     set('settings', out);
-  }
-  if ('handled' in input) {
-    const raw = (input.handled && typeof input.handled === 'object' ? input.handled : {}) as Record<string, unknown>;
-    const entries = Object.entries(raw)
-      .filter(([phone, at]) => /^(\+\d{8,15}|lid:\d{5,20})$/.test(phone) && Number.isFinite(at))
-      .map(([phone, at]) => [phone, Math.round(Number(at))] as [string, number])
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 300);
-    set('handled', Object.fromEntries(entries));
-  }
-  if ('botSwitch' in input) {
-    const raw = (input.botSwitch && typeof input.botSwitch === 'object' ? input.botSwitch : {}) as Record<string, Partial<BotSwitch>>;
-    const entries = Object.entries(raw)
-      .filter(([phone, v]) => /^(\+\d{8,15}|lid:\d{5,20})$/.test(phone) && (v?.mode === 'on' || v?.mode === 'off') && Number.isFinite(v.at))
-      .map(([phone, v]) => [phone, { mode: v.mode, at: Math.round(Number(v.at)) }] as [string, BotSwitch])
-      // Yang terbaru saja yang disimpan; perintah lama sudah dijalankan bot.
-      .sort((a, b) => b[1].at - a[1].at)
-      .slice(0, 300);
-    set('botSwitch', Object.fromEntries(entries));
   }
   if ('guardCodes' in input) set('guardCodes', Boolean(input.guardCodes));
 
@@ -335,17 +352,14 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   return out;
 }
 
-/** Simpan perubahan (sudah divalidasi) dan langsung pakai. */
-export function saveBiz(changes: Partial<Editable>): void {
-  mkdirSync(dataDir(), { recursive: true });
-  const next = { ...read(), ...changes };
-  // Tulis ke file sementara lalu ganti nama: proses lain yang sedang membaca
-  // tidak pernah melihat file setengah jadi.
-  const tmp = `${profileFile()}.tmp`;
-  writeFileSync(tmp, JSON.stringify(next, null, 2));
-  renameSync(tmp, profileFile());
-  loadedMtime = statSync(profileFile()).mtimeMs;
-  apply(next);
+/** Simpan perubahan (sudah divalidasi) ke database dan langsung pakai. */
+export async function saveBiz(changes: Partial<Editable>): Promise<void> {
+  const ctx = currentProject();
+  const next = { ...(await getProfile(ctx.id)), ...changes } as Partial<Editable>;
+  const at = Date.now();
+  await saveProfile(ctx.id, next as Record<string, unknown>, at);
+  ctx.stamp = Math.max(ctx.stamp, at);
+  apply(ctx, next);
 }
 
 /** Bagian profil yang ditampilkan dashboard. */

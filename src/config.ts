@@ -1,9 +1,18 @@
 /**
- * Semua pengaturan dari env, di satu tempat. Zona waktu TIDAK ditulis di
- * tempat lain: "jam 8 pagi" berarti apa pun yang BOT_TZ katakan.
+ * Semua pengaturan di satu tempat. Zona waktu TIDAK ditulis di tempat lain:
+ * "jam 8 pagi" berarti apa pun yang BOT_TZ katakan.
+ *
+ * .env hanya memuat yang dipakai bersama semua proyek (database, LLM,
+ * dashboard, Telegram/SMTP). Yang khas satu bot (jalur WhatsApp, nomor
+ * sales, nomor bot, mode uji, follow-up) ada di database, per proyek.
  */
 
 import 'dotenv/config';
+
+import { join } from 'node:path';
+
+import type { Project } from './db/schema';
+import { currentProject, maybeProject } from './project';
 
 const str = (k: string, d = ''): string => process.env[k]?.trim() || d;
 const has = (k: string): boolean => Boolean(process.env[k]?.trim());
@@ -24,26 +33,24 @@ export function normPhone(s: string): string | null {
   return d.length >= 8 && d.length <= 15 ? `+${d}` : null;
 }
 
-const business = str('BUSINESS', 'gfan');
-const transport = str('TRANSPORT', 'baileys').toLowerCase() === 'cloud' ? 'cloud' : 'baileys';
-
 /**
  * Satu nomor sales. "self" = nomor bot itu sendiri (sales membalas dari
  * aplikasi WhatsApp di nomor yang sama). Kosong = tanpa notifikasi WA.
  */
-function salesNumber(): string | null {
-  const raw = str('SALES_NUMBER');
-  if (!raw) return null;
-  return raw.toLowerCase() === 'self' ? 'self' : normPhone(raw);
+export function parseSalesNumber(raw: string | null | undefined): string | null {
+  const v = (raw ?? '').trim();
+  if (!v) return null;
+  return v.toLowerCase() === 'self' ? 'self' : normPhone(v);
 }
 
-export const cfg = {
-  business,
-  transport: transport as 'baileys' | 'cloud',
+const base = {
   tz: str('BOT_TZ', 'Asia/Jakarta'),
-  dbPath: str('DB_PATH', `./data/${business}.db`),
-  /** Tempat profil hasil dashboard dan foto: <dataRoot>/<bisnis>/. */
+  /** postgres://…, pglite://<folder>, atau memory:// (lihat src/db/index.ts). */
+  databaseUrl: str('DATABASE_URL'),
+  /** Tempat foto dan PDF unggahan: <dataRoot>/<proyek>/media/. */
   dataRoot: str('DATA_DIR', './data'),
+  /** Tempat sesi WhatsApp (Baileys): <authRoot>/<proyek>/. */
+  authRoot: './auth',
 
   // Dashboard pemilik. Tanpa kata sandi, dashboard tidak dinyalakan.
   adminPassword: str('ADMIN_PASSWORD'),
@@ -82,8 +89,8 @@ export const cfg = {
   followupStartHour: num('FOLLOWUP_START_HOUR', 8),
   followupEndHour: num('FOLLOWUP_END_HOUR', 20),
   // Cloud API menolak teks bebas di luar 24 jam sejak pesan terakhir pelanggan,
-  // jadi di sana batasnya otomatis 24. Baileys tidak punya jendela itu.
-  followupMaxHours: has('FOLLOWUP_MAX_HOURS') ? num('FOLLOWUP_MAX_HOURS', 0) : transport === 'cloud' ? 24 : 0,
+  // jadi di sana batasnya otomatis 24 (lihat projectCfg). Baileys tidak punya jendela itu.
+  followupMaxHours: num('FOLLOWUP_MAX_HOURS', 0),
   followupMaxTotal: num('FOLLOWUP_MAX_TOTAL', 2),
 
   humanPauseHours: num('HUMAN_PAUSE_HOURS', 12),
@@ -99,17 +106,14 @@ export const cfg = {
   smtpFrom: str('SMTP_FROM'),
   alertEmailTo: str('ALERT_EMAIL_TO'),
 
-  salesNumber: salesNumber(),
   sheetId: str('SHEET_ID'),
   sheetTab: str('SHEET_TAB', 'Leads'),
   googleCredentials: str('GOOGLE_CREDENTIALS', './google-service-account.json'),
 
   // Mode uji: kalau diisi, bot HANYA melayani nomor-nomor ini. Dipakai waktu
-  // mencoba di nomor yang sudah punya pelanggan sungguhan.
-  onlyNumbers: str('ONLY_NUMBERS')
-    .split(',')
-    .map((s) => normPhone(s))
-    .filter((s): s is string => Boolean(s)),
+  // mencoba di nomor yang sudah punya pelanggan sungguhan. Diatur per proyek
+  // di dashboard (Pengaturan).
+  onlyNumbers: [] as string[],
   maxInboundPerNumber: num('MAX_INBOUND_PER_NUMBER', 40),
   debounceMs: num('DEBOUNCE_MS', 4000),
 
@@ -119,9 +123,14 @@ export const cfg = {
   waMaxPerHour: num('WA_MAX_PER_HOUR', 100),
   waMaxPerDay: num('WA_MAX_PER_DAY', 800),
 
-  // Baileys
-  waAuthDir: str('WA_AUTH_DIR', './auth'),
-  waPairingNumber: str('WA_PAIRING_NUMBER'),
+  // --- Per proyek (baris projects di database); nilai di sini hanya cadangan ---
+  transport: 'baileys' as 'baileys' | 'cloud',
+  /** Nomor sales: "+62…", "self", atau null. */
+  salesNumber: null as string | null,
+  /** Folder sesi WhatsApp proyek ini (Baileys): <authRoot>/<proyek>. */
+  waAuthDir: './auth',
+  /** Nomor bot; kalau diisi dan belum tertaut, bot meminta kode pairing. */
+  waPairingNumber: '',
 
   // Cloud API resmi (atau BSP yang meneruskan format yang sama)
   waApiBase: str('WA_API_BASE', 'https://graph.facebook.com/v23.0').replace(/\/+$/, ''),
@@ -144,7 +153,7 @@ export const TUNABLE = {
   humanPauseHours: [1, 168], llmDailyLimit: [10, 100_000], maxInboundPerNumber: [5, 500],
   waMaxPerMinute: [1, 30], waMaxPerHour: [10, 1000], waMaxPerDay: [50, 10_000],
   llmPriceIn: [0, 100], llmPriceCached: [0, 100], llmPriceOut: [0, 100], usdIdr: [1000, 100_000],
-} as const satisfies Partial<Record<keyof typeof cfg, readonly [number, number]>>;
+} as const satisfies Partial<Record<keyof typeof base, readonly [number, number]>>;
 
 export type TunableKey = keyof typeof TUNABLE;
 export interface Settings extends Partial<Record<TunableKey, number>> {
@@ -156,15 +165,58 @@ export interface Settings extends Partial<Record<TunableKey, number>> {
   onlyNumbers?: string[];
 }
 
-const envDefaults = { ...cfg, onlyNumbers: [...cfg.onlyNumbers] };
+/** Kunci `cfg` yang nilainya milik proyek yang sedang dilayani, bukan .env. */
+export const PROJECT_KEYS: ReadonlySet<string> = new Set([
+  'transport', 'salesNumber', 'waAuthDir', 'waPairingNumber', 'followupMaxHours',
+  'llmVision', 'followupSmart', 'onlyNumbers', ...Object.keys(TUNABLE),
+]);
 
-/** Pakai pengaturan dari dashboard di atas bawaan .env. Kunci yang tidak diisi kembali ke bawaan. */
+/**
+ * Semua pengaturan. Kunci di PROJECT_KEYS dibaca dari proyek yang sedang
+ * dilayani (baris proyek + Pengaturan di dashboard); sisanya dari .env.
+ * Dengan begitu `cfg.x` tetap dipakai apa adanya di mana pun.
+ */
+export const cfg: typeof base = new Proxy(base, {
+  get(target, key) {
+    const ctx = typeof key === 'string' && PROJECT_KEYS.has(key) ? maybeProject() : undefined;
+    return ctx && key in ctx.cfg ? ctx.cfg[key as string] : (target as Record<string | symbol, unknown>)[key];
+  },
+  set(target, key, value) {
+    const ctx = typeof key === 'string' && PROJECT_KEYS.has(key) ? maybeProject() : undefined;
+    if (ctx) ctx.cfg[key as string] = value;
+    else (target as Record<string | symbol, unknown>)[key] = value;
+    return true;
+  },
+});
+
+const envDefaults = { ...base, onlyNumbers: [...base.onlyNumbers] };
+
+/** Nilai dari Pengaturan di dashboard di atas bawaan .env. Kunci yang tidak diisi kembali ke bawaan. */
+export function settingsCfg(s: Settings): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = typeof s[k] === 'number' ? s[k] : envDefaults[k];
+  out.llmVision = typeof s.llmVision === 'boolean' ? s.llmVision : envDefaults.llmVision;
+  out.followupSmart = typeof s.followupSmart === 'boolean' ? s.followupSmart : envDefaults.followupSmart;
+  out.onlyNumbers = Array.isArray(s.onlyNumbers) ? s.onlyNumbers : envDefaults.onlyNumbers;
+  return out;
+}
+
+/** Nilai `cfg` khas satu proyek: dari baris proyeknya dan Pengaturan di profilnya. */
+export function projectCfg(row: Pick<Project, 'id' | 'transport' | 'sales_number' | 'wa_number'>, s: Settings): Record<string, unknown> {
+  const transport = row.transport === 'cloud' ? 'cloud' : 'baileys';
+  return {
+    transport,
+    salesNumber: parseSalesNumber(row.sales_number),
+    waAuthDir: join(base.authRoot, row.id),
+    waPairingNumber: row.wa_number ?? '',
+    followupMaxHours: has('FOLLOWUP_MAX_HOURS') ? envDefaults.followupMaxHours : transport === 'cloud' ? 24 : 0,
+    ...settingsCfg(s),
+  };
+}
+
+/** Pakai pengaturan dari dashboard untuk proyek yang sedang dilayani. */
 export function applySettings(s: Settings): void {
-  const c = cfg as unknown as Record<string, unknown>;
-  for (const k of Object.keys(TUNABLE) as TunableKey[]) c[k] = typeof s[k] === 'number' ? s[k] : envDefaults[k];
-  cfg.llmVision = typeof s.llmVision === 'boolean' ? s.llmVision : envDefaults.llmVision;
-  cfg.followupSmart = typeof s.followupSmart === 'boolean' ? s.followupSmart : envDefaults.followupSmart;
-  cfg.onlyNumbers = Array.isArray(s.onlyNumbers) ? s.onlyNumbers : envDefaults.onlyNumbers;
+  Object.assign(currentProject().cfg, settingsCfg(s));
 }
 
 /** Nilai yang sedang berlaku, untuk ditampilkan dashboard. */

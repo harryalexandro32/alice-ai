@@ -1,6 +1,6 @@
 # Langkah demi langkah ke WhatsApp Cloud API resmi
 
-Kodenya sudah siap (`TRANSPORT=cloud`, `src/transport/cloud.ts`). Yang di bawah ini pekerjaan di
+Kodenya sudah siap (jalur `cloud` di dashboard > Pengaturan > Proyek, `src/transport/cloud.ts`). Yang di bawah ini pekerjaan di
 sisi Meta dan server. Sumber: dokumentasi Meta (halaman *Get started* Cloud API dan *Onboarding
 WhatsApp Business app users*), dibaca 10 Nov 2026. Dasbor Meta sering berganti nama menu — kalau
 letaknya beda, cari nama yang ditebalkan.
@@ -37,8 +37,9 @@ Meta memanggil webhook lewat internet, jadi bot harus punya alamat `https://…`
   Alamatnya berganti tiap dijalankan — cukup untuk mencoba, bukan untuk produksi.
 
 ### 3. Isi `.env` dan jalankan
+Pilih jalur **Cloud API** untuk proyeknya di dashboard (Pengaturan > Proyek), lalu isi `.env`:
+
 ```
-TRANSPORT=cloud
 WA_PHONE_NUMBER_ID=<Phone number ID dari langkah 1.3>
 WA_TOKEN=<token sementara dari tombol "Generate access token" — diganti di langkah 6>
 WA_APP_SECRET=<App settings → Basic → App secret>
@@ -46,7 +47,7 @@ WA_VERIFY_TOKEN=<karang sendiri, mis. string acak 32 karakter>
 PORT=3000
 ```
 ```bash
-npm start
+PROJECT=<proyek> npm run bot     # di server: systemctl restart alice-bot@<proyek>
 ```
 Log yang benar: `[cloud] nomor: … ` lalu `[cloud] webhook mendengarkan di port 3000 (/webhook) — SIAP`.
 Kalau baris nomor diganti PERINGATAN, token atau Phone number ID-nya salah.
@@ -146,7 +147,7 @@ Dua pilihan:
 - **Jendela 24 jam.** Teks bebas hanya boleh dalam 24 jam sejak pesan terakhir pelanggan. Karena
   itu follow-up bawaannya jam ke-23, dan di jalur `cloud` yang jatuh malam hari **dimajukan** ke
   sore, bukan ditunda. Follow-up setelah 24 jam butuh **template marketing** berbayar.
-- **Nomor sales = nomor bot** (`SALES_NUMBER=self`). Cloud API tidak bisa mengirimi dirinya sendiri,
+- **Nomor sales = nomor bot** (nomor sales `self` di dashboard). Cloud API tidak bisa mengirimi dirinya sendiri,
   jadi tidak ada notifikasi WA. Dengan Coexistence itu wajar: percakapannya sudah tampil di aplikasi
   sales, dan tiap lead tercatat di Google Sheet.
 - **Nomor sales berbeda.** Notifikasi teks biasa hanya sampai kalau sales mengirim pesan ke nomor

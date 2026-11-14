@@ -24,7 +24,7 @@ import type { AddressInfo } from 'node:net';
 import { basename, extname } from 'node:path';
 
 import { cfg, HOUR, normPhone } from '../config';
-import type { MediaKind, Transport, TransportHandlers } from './types';
+import type { MediaKind, Transport, TransportHandlers, TransportState } from './types';
 
 let handlers: TransportHandlers | null = null;
 let server: Server | null = null;
@@ -260,6 +260,13 @@ async function uploadImage(path: string): Promise<string> {
   return data.id as string;
 }
 
+let current: TransportState = { state: 'starting' };
+let stateListener: ((s: TransportState) => void) | null = null;
+function setState(s: TransportState): void {
+  current = s;
+  stateListener?.(s);
+}
+
 export function cloudPort(): number | null {
   const a = server?.address();
   return a && typeof a === 'object' ? (a as AddressInfo).port : null;
@@ -300,6 +307,12 @@ export const cloudTransport: Transport = {
     server = createServer(onRequest);
     await new Promise<void>((resolve) => server!.listen(cfg.port, resolve));
     console.log(`[cloud] webhook mendengarkan di port ${cloudPort()} (/webhook) — SIAP`);
+    setState({ state: 'connected', ...(self ? { selfPhone: self } : {}), detail: 'Cloud API: webhook siap menerima pesan' });
+  },
+
+  onState(cb) {
+    stateListener = cb;
+    cb(current);
   },
 
   async send(to, text, opts) {

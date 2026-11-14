@@ -1,19 +1,27 @@
 /**
- * Dashboard: masuk, simpan profil (dan bot langsung ikut), foto, uji coba,
- * dan pagar keamanannya. Folder data sementara; tidak menyentuh data asli.
+ * Dashboard: masuk, proyek, simpan profil (dan bot ikut memuat ulang), foto,
+ * uji coba, tombol per chat, WhatsApp, dan pagar keamanannya. Database di
+ * memori dan folder data sementara; tidak menyentuh data asli.
+ *
+ * Tes ini sekaligus memerankan proses bot proyek gfan (proyek bawaan proses):
+ * setelah dashboard menyimpan, "bot" memuat ulang seperti sebelum gilirannya.
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { checkReply, systemPrompt } from '../brain';
 import { biz, initBiz, knowledgeText, mediaDir, refreshBiz } from '../business';
-import { addUsage } from '../store';
 import { cfg } from '../config';
+import { closeDb, openDb } from '../db';
+import { ensureProject } from '../db/seed';
+import { humanHolds } from '../flow';
+import { handlePairingRequest, reportState, startHeartbeat } from '../heartbeat';
 import { pickDelayMs, typingMs } from '../pace';
-import { openDb } from '../store';
+import { addUsage, createContact, getContact, getProfile, getProject, readStatus, saveProfile } from '../store';
+import type { Transport, TransportState } from '../transport/types';
 import { setAdminBrain, startAdmin, stopAdmin } from './server';
 import { localStore } from './store-local';
 
@@ -29,8 +37,9 @@ const PNG = Buffer.from(
   cfg.adminPassword = PASSWORD;
   cfg.adminPort = 0;
   cfg.adminHost = '127.0.0.1';
-  openDb(':memory:');
-  initBiz();
+  await openDb('memory://');
+  await ensureProject('gfan', 'gfan', 'GFAN Indonesia');
+  await initBiz('gfan');
 
   let base = '';
   let cookie = '';
@@ -40,17 +49,22 @@ const PNG = Buffer.from(
       headers: { ...(init.headers as Record<string, string>), ...(withCookie && cookie ? { cookie } : {}) },
     });
     const type = res.headers.get('content-type') ?? '';
-    return { status: res.status, body: type.includes('json') ? ((await res.json()) as any) : await res.arrayBuffer(), res };
+    const out = { status: res.status, body: type.includes('json') ? ((await res.json()) as any) : await res.arrayBuffer(), res };
+    // Proses bot memeriksa perubahan sebelum gilirannya; di sini langsung.
+    if (init.method && init.method !== 'GET') await refreshBiz(true);
+    return out;
   };
   const put = (body: unknown) =>
-    call('/admin/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    call('/admin/gfan/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const post = (path: string, body?: unknown) =>
+    call(path, { method: 'POST', headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
   try {
     base = `http://127.0.0.1:${await startAdmin(localStore())}`;
 
     // --- masuk ---
     assert.equal((await call('/admin')).status, 200);
-    assert.equal((await call('/admin/api/state')).status, 401, 'tanpa sesi tidak ada data');
+    assert.equal((await call('/admin/gfan/api/state')).status, 401, 'tanpa sesi tidak ada data');
     const login = (password: string) =>
       call('/admin/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) }, false);
     assert.equal((await login('salah')).status, 401);
@@ -59,13 +73,16 @@ const PNG = Buffer.from(
     const setCookie = ok.res.headers.get('set-cookie') ?? '';
     assert.match(setCookie, /HttpOnly; SameSite=Strict/);
     cookie = setCookie.split(';')[0] as string;
-    assert.equal((await call('/admin/api/state', { headers: { cookie: 'admin_session=9999999999999.palsu' } }, false)).status, 401);
+    assert.equal((await call('/admin/gfan/api/state', { headers: { cookie: 'admin_session=9999999999999.palsu' } }, false)).status, 401);
 
-    const state = await call('/admin/api/state');
+    const state = await call('/admin/gfan/api/state');
     assert.equal(state.body.profile.brand, 'GFAN Indonesia');
     assert.equal(state.body.profile.id, undefined, 'hanya kunci yang boleh diubah yang ditampilkan');
     assert.equal(state.body.business, 'gfan');
-    assert.equal(state.body.status.reportedAt, null);
+    assert.equal(state.body.project.name, 'GFAN Indonesia');
+    assert.equal(state.body.status.reportedAt, null, 'bot belum pernah melapor');
+    assert.equal((await call('/admin/api/state')).status, 404, 'tanpa proyek di alamat: tidak ada');
+    assert.equal((await call('/admin/tidak-ada/api/state')).status, 404, 'proyek yang tidak ada');
 
     // --- simpan profil: bot langsung ikut ---
     assert.ok(checkReply('GFAF-70A tersedia'), 'sebelum ditambah, GFAF-70A dianggap karangan');
@@ -111,12 +128,12 @@ const PNG = Buffer.from(
     addUsage({ day: '2026-11-10', calls: 2, promptTokens: 9000, cachedTokens: 8000, completionTokens: 300 });
     addUsage({ day: '2026-11-10', calls: 1, promptTokens: 1000, cachedTokens: 0, completionTokens: 100 });
     addUsage({ day: '2026-11-11', calls: 1, promptTokens: 500, cachedTokens: 0, completionTokens: 50 });
-    const usage = (await call('/admin/api/usage')).body.usage;
+    const usage = (await call('/admin/gfan/api/usage')).body.usage;
     assert.deepEqual(usage.days[1], { day: '2026-11-10', calls: 3, promptTokens: 10000, cachedTokens: 8000, completionTokens: 400 });
     assert.equal(usage.days[0].day, '2026-11-11');
     assert.equal(usage.price.out, cfg.llmPriceOut);
-    assert.equal((await call('/admin/api/usage', {}, false)).status, 401);
-    assert.equal(JSON.parse(readFileSync(join(dir, 'gfan', 'profile.json'), 'utf8')).alias, 'Rina');
+    assert.equal((await call('/admin/gfan/api/usage', {}, false)).status, 401);
+    assert.equal((await getProfile('gfan')).alias, 'Rina', 'tersimpan di database');
 
     // --- masukan yang salah ditolak dengan pesan yang bisa dibaca ---
     assert.equal((await put({ leadFields: [] })).status, 400);
@@ -128,15 +145,15 @@ const PNG = Buffer.from(
     assert.match(systemPrompt(), /"tanggal": null/);
 
     // --- proses lain menyimpan: bot ini ikut tanpa restart ---
-    const file = join(dir, 'gfan', 'profile.json');
-    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), honorific: 'Kak' }));
-    utimesSync(file, new Date(), new Date(Date.now() + 5000));
-    refreshBiz();
+    await saveProfile('gfan', { ...(await getProfile('gfan')), honorific: 'Kak' });
+    assert.notEqual(biz.honorific, 'Kak', 'belum dimuat ulang');
+    assert.equal(await refreshBiz(true), true, 'perubahan terdeteksi');
     assert.equal(biz.honorific, 'Kak');
+    assert.equal(await refreshBiz(true), false, 'tanpa perubahan: tidak dimuat ulang');
 
     // --- berkas: foto dan PDF, dipasang ke baris produk ---
     const up = (data: Buffer, name = 'depan.png') =>
-      call(`/admin/api/files?${new URLSearchParams({ name })}`, { method: 'POST', headers: { 'content-type': 'image/png' }, body: data });
+      call(`/admin/gfan/api/files?${new URLSearchParams({ name })}`, { method: 'POST', headers: { 'content-type': 'image/png' }, body: data });
     assert.equal((await up(Buffer.from('<script>alert(1)</script>'))).status, 400, 'bukan gambar/PDF ditolak, apa pun content-type-nya');
     const photo = (await up(PNG)).body.file;
     assert.match(photo.file, /^f[0-9a-f]{8}\.png$/);
@@ -144,11 +161,11 @@ const PNG = Buffer.from(
     assert.match(pdf.file, /^d[0-9a-f]{8}\.pdf$/, 'nama berkas dibuat sendiri, bukan dari pengunggah');
     const stray = (await up(PNG, 'tidak-jadi.png')).body.file;
     assert.ok(existsSync(join(mediaDir(), photo.file)) && existsSync(join(mediaDir(), pdf.file)));
-    assert.equal((await call(`/admin/media/${photo.file}`)).status, 200);
-    assert.equal((await call(`/admin/media/${pdf.file}`)).res.headers.get('content-type'), 'application/pdf');
-    assert.equal((await call(`/admin/media/${photo.file}`, {}, false)).status, 401);
-    assert.equal((await call('/admin/media/..%2F..%2Fprofile.json')).status, 404);
-    assert.equal((await call('/admin/media/f00000000.png')).status, 404);
+    assert.equal((await call(`/admin/gfan/media/${photo.file}`)).status, 200);
+    assert.equal((await call(`/admin/gfan/media/${pdf.file}`)).res.headers.get('content-type'), 'application/pdf');
+    assert.equal((await call(`/admin/gfan/media/${photo.file}`, {}, false)).status, 401);
+    assert.equal((await call('/admin/gfan/media/..%2F..%2Fprofile.json')).status, 404);
+    assert.equal((await call('/admin/gfan/media/f00000000.png')).status, 404);
 
     // Menyimpan daftar produk: lampiran harus berkas yang ada dan jenisnya benar;
     // berkas yang tidak dirujuk baris mana pun dibuang.
@@ -193,7 +210,7 @@ const PNG = Buffer.from(
       reply: i.text.includes('harga') ? 'Harganya Rp 500.000' : i.text.includes('40A') ? 'GFAF-40A Rp 450.000 ya' : 'Ini fotonya ya',
       fields: { name: 'Budi' }, intent: 'info', photos: [photo.id], docs: [pdf.id], summary: '',
     }));
-    const test = (text: string) => call('/admin/api/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+    const test = (text: string) => call('/admin/gfan/api/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
     const t1 = await test('minta foto');
     assert.equal(t1.body.rejected, null);
     assert.equal(t1.body.photos[0].file, photo.file);
@@ -206,8 +223,8 @@ const PNG = Buffer.from(
     assert.equal((await put({ products: [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: pdf.id }, { name: 'GFAF-40AB', pdf: pdf.id }] })).status, 200);
     assert.ok(!existsSync(join(mediaDir(), photo.file)) && existsSync(join(mediaDir(), pdf.file)));
     assert.deepEqual(biz.files.map((f) => f.id), [pdf.id, logo.id]);
-    assert.equal((await call(`/admin/api/files/${logo.id}`, { method: 'DELETE' })).status, 404, 'hanya PDF yang dihapus lewat sini');
-    const gone = await call(`/admin/api/files/${pdf.id}`, { method: 'DELETE' });
+    assert.equal((await call(`/admin/gfan/api/files/${logo.id}`, { method: 'DELETE' })).status, 404, 'hanya PDF yang dihapus lewat sini');
+    const gone = await call(`/admin/gfan/api/files/${pdf.id}`, { method: 'DELETE' });
     assert.equal(gone.status, 200);
     assert.deepEqual(gone.body.profile.products.map((p: { pdf: string }) => p.pdf), ['', '']);
     assert.ok(!existsSync(join(mediaDir(), pdf.file)));
@@ -225,11 +242,11 @@ const PNG = Buffer.from(
 
       const real = join(process.cwd(), 'catalog-pdf', 'Industrial Fan - GFan.pdf');
       await put({ products: [{ name: 'GFAF-40A' }, { name: 'GFAF-40AB' }, { name: 'GZ-200' }] });
-      const upPdf = await call(`/admin/api/files?${new URLSearchParams({ name: 'Industrial Fan - GFan.pdf' })}`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: readFileSync(real) });
+      const upPdf = await call(`/admin/gfan/api/files?${new URLSearchParams({ name: 'Industrial Fan - GFan.pdf' })}`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: readFileSync(real) });
       assert.equal(upPdf.body.readable, true);
       assert.deepEqual(upPdf.body.matches, ['GFAF-40A']);
       await put({ products: [{ name: 'GFAF-40A' }, { name: 'GFAF-60A' }] });
-      const again = await call(`/admin/api/files/${upPdf.body.file.id}/match`, { method: 'POST' });
+      const again = await call(`/admin/gfan/api/files/${upPdf.body.file.id}/match`, { method: 'POST' });
       assert.deepEqual(again.body.matches, ['GFAF-40A', 'GFAF-60A'], 'cocokkan ulang memakai daftar produk terbaru');
       assert.ok(biz.files.some((f) => f.id === upPdf.body.file.id), 'PDF yang belum dipasang tetap ada di pustaka');
       const pid = upPdf.body.file.id as string;
@@ -242,56 +259,68 @@ const PNG = Buffer.from(
 
       // Bot membaca isi PDF hanya kalau dinyalakan untuk PDF itu.
       assert.ok(!knowledgeText().includes('ISI PDF'));
-      const on = await call(`/admin/api/files/${pid}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: true }) });
+      const on = await call(`/admin/gfan/api/files/${pid}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: true }) });
       assert.equal(on.status, 200);
       assert.equal(on.body.files.find((x: { id: string }) => x.id === pid).read, true);
-      refreshBiz(true);
+      await refreshBiz(true);
       assert.match(knowledgeText(), /ISI PDF "Industrial Fan - GFan\.pdf" — dibaca otomatis/);
       assert.match(knowledgeText(), /GFAF-60A/);
       assert.match(systemPrompt(), /ISI PDF "Industrial Fan - GFan\.pdf"/);
-      await call(`/admin/api/files/${pid}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: false }) });
+      await call(`/admin/gfan/api/files/${pid}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: false }) });
       assert.ok(!knowledgeText().includes('ISI PDF'), 'dimatikan = tidak lagi dibaca');
       // PDF yang tidak terbaca tidak bisa dinyalakan.
       const scan = (await up(Buffer.from('%PDF-1.4 rusak'), 'pindai.pdf')).body.file;
-      assert.equal((await call(`/admin/api/files/${scan.id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: true }) })).status, 400);
+      assert.equal((await call(`/admin/gfan/api/files/${scan.id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ read: true }) })).status, 400);
 
-      // Tombol bot per pelanggan: hanya nomor dan perintah yang sah yang disimpan.
-      const sw = await put({ botSwitch: { '+6281211110001': { mode: 'off', at: 1700000000000 }, 'DROP TABLE': { mode: 'off', at: 1 }, '+6281211110002': { mode: 'entah', at: 2 } } });
-      assert.deepEqual(sw.body.profile.botSwitch, { '+6281211110001': { mode: 'off', at: 1700000000000 } });
+      // Tombol bot per pelanggan: langsung ke database, bot membacanya di giliran berikutnya.
+      const C = '+6281211110001';
+      const sw = (phone: string, mode: unknown) => post(`/admin/gfan/api/leads/${encodeURIComponent(phone)}/bot`, { mode });
+      assert.equal((await sw(C, 'off')).status, 404, 'kontak yang belum ada');
+      await createContact(C, C, Date.now());
+      assert.equal((await sw('DROP TABLE', 'off')).status, 400);
+      assert.equal((await sw(C, 'entah')).status, 400);
+      assert.equal(await humanHolds(C, Date.now()), false);
+      assert.equal((await sw(C, 'off')).status, 200);
+      assert.equal(await humanHolds(C, Date.now()), true, 'dimatikan dari dashboard: bot diam');
+      assert.equal((await call('/admin/gfan/api/leads')).body.rows.find((r: { phone: string }) => r.phone === C).hold, 'tombol');
+      assert.equal((await sw(C, 'on')).status, 200);
+      assert.equal(await humanHolds(C, Date.now()), false, 'dinyalakan lagi');
 
       // Peringatan dan catatan galat tampil di dashboard.
       const { addAlert, addError } = await import('../store');
-      addAlert({ at: Date.now(), kind: 'butuh-staf', key: '+6281211110001', text: 'Bot tidak bisa menjawab: Budi — "bisa custom?"' });
-      addError({ at: Date.now(), level: 'galat', text: '[alur] contoh galat' });
-      const al = await call('/admin/api/alerts');
+      await addAlert({ at: Date.now(), kind: 'butuh-staf', key: '+6281211110001', text: 'Bot tidak bisa menjawab: Budi — "bisa custom?"' });
+      await addError({ at: Date.now(), level: 'galat', text: '[alur] contoh galat' });
+      const al = await call('/admin/gfan/api/alerts');
       assert.equal(al.body.alerts[0].kind, 'butuh-staf');
       assert.equal(al.body.errors[0].text, '[alur] contoh galat');
-      assert.equal((await call('/admin/api/state')).body.alerts.length, 1);
-      assert.equal((await call('/admin/api/alerts', {}, false)).status, 401);
-      const leads = await call('/admin/api/leads');
+      assert.equal((await call('/admin/gfan/api/state')).body.alerts.length, 1);
+      assert.equal((await call('/admin/gfan/api/alerts', {}, false)).status, 401);
+      const leads = await call('/admin/gfan/api/leads');
       assert.ok('reportedAt' in leads.body);
 
       // --- Pelanggan lama: impor digabung, nomor dirapikan, baris ngawur dilewati ---
-      const imp = (text: string, off = false) => call('/admin/api/known', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, off }) });
+      const imp = (text: string, off = false) => call('/admin/gfan/api/known', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, off }) });
       const i1 = await imp('0812 3456 7890, Pak Budi\n+62 813-5550-1234\nbukan nomor\n\n');
       assert.deepEqual([i1.body.added, i1.body.invalid, i1.body.total], [2, 1, 2]);
       const at1 = biz.knownAt;
-      assert.ok(at1 > 0 && existsSync(join(mediaDir(), `known-${at1}.json`)));
-      await new Promise((r) => setTimeout(r, 5));
+      assert.ok(at1 > 0);
+      assert.equal((await getContact('+6281234567890'))?.lead.name, 'Pak Budi', 'langsung dicatat sebagai kontak');
       const i2 = await imp('081234567890; Budi Santoso\n081700000009, Bu Sari', true);
       assert.deepEqual([i2.body.added, i2.body.total, i2.body.profile.knownCount], [1, 3, 3]);
-      assert.ok(!existsSync(join(mediaDir(), `known-${at1}.json`)), 'berkas impor lama dibuang');
-      const rows = JSON.parse(readFileSync(join(mediaDir(), `known-${biz.knownAt}.json`), 'utf8')).rows;
-      assert.deepEqual(rows, [
-        { phone: '+6281234567890', name: 'Budi Santoso', off: true },
-        { phone: '+6281355501234' },
-        { phone: '+6281700000009', name: 'Bu Sari', off: true },
-      ]);
+      assert.equal((await getContact('+6281234567890'))?.lead.name, 'Pak Budi', 'kontak yang sudah ada tidak ditimpa');
+      assert.equal((await getContact('+6281234567890'))?.pending_off, 1, '"bot diam" dicatat sampai alamat chatnya diketahui');
+      assert.equal((await getContact('+6281355501234'))?.pending_off, 0);
+      assert.deepEqual((await getContact('+6281700000009'))?.lead, { name: 'Bu Sari' });
       assert.equal((await imp('   ')).status, 400);
-      assert.equal((await call('/admin/api/known', { method: 'POST', body: '{}' }, false)).status, 401);
-      // "Sudah ditangani" hanya menerima nomor dan waktu yang sah.
-      const hd = await put({ handled: { '+6281211110001': 1700000000000, 'x': 5, '+6281211110002': 'kapan' } });
-      assert.deepEqual(hd.body.profile.handled, { '+6281211110001': 1700000000000 });
+      assert.equal((await call('/admin/gfan/api/known', { method: 'POST', body: '{}' }, false)).status, 401);
+      // "Sudah ditangani": tanda "perlu staf" dihapus, langsung di database.
+      const { updateContact } = await import('../store');
+      await updateContact(C, { needs_sales: 1 });
+      assert.equal((await post(`/admin/gfan/api/leads/${encodeURIComponent('x')}/handled`)).status, 400);
+      assert.equal((await post(`/admin/gfan/api/leads/${encodeURIComponent('+6281299999999')}/handled`)).status, 404);
+      assert.equal((await post(`/admin/gfan/api/leads/${encodeURIComponent(C)}/handled`)).status, 200);
+      assert.equal((await getContact(C))?.needs_sales, 0);
+      assert.ok(((await getContact(C))?.handled_at ?? 0) > 0);
       assert.equal((await put({ settings: { followupSmart: false } })).status, 200);
       assert.equal(cfg.followupSmart, false);
       await put({ settings: {} });
@@ -337,7 +366,7 @@ const PNG = Buffer.from(
       assert.deepEqual(cfg.onlyNumbers, ['+6281211110001']);
       assert.equal(cfg.waMaxPerDay, before.perDay, 'yang tidak diisi tetap ikut .env');
       assert.equal(cfg.adminPassword, PASSWORD, 'kata sandi tidak bisa diubah dari sini');
-      assert.equal((await call('/admin/api/state')).body.status.effective.followupAfterHours, 20);
+      assert.equal((await call('/admin/gfan/api/state')).body.status.effective.followupAfterHours, 20);
       assert.match((await put({ settings: { followupAfterHours: 500 } })).body.error, /1–72/);
       assert.match((await put({ settings: { followupStartHour: 20, followupEndHour: 8 } })).body.error, /jam selesai/);
       assert.match((await put({ settings: { followupAfterHours: 30, followupAfterHoursMax: 24 } })).body.error, /paling lama/);
@@ -350,8 +379,98 @@ const PNG = Buffer.from(
       await put({ recipients: [], notifyRoutes: {} });
     }
 
+    // --- proyek: daftar, buat baru, data terpisah per proyek ---
+    {
+      const list = await call('/admin/api/projects');
+      assert.deepEqual(list.body.projects.map((p: { id: string }) => p.id), ['gfan']);
+      assert.ok(list.body.templates.includes('generic') && list.body.templates.includes('gfan'));
+      const make = (body: unknown) => post('/admin/api/projects', body);
+      assert.match((await make({ id: 'API', name: 'X', template: 'generic' })).body.error, /Id proyek/);
+      assert.equal((await make({ id: 'api', name: 'X', template: 'generic' })).status, 400, 'id yang dipakai alamat dashboard');
+      assert.match((await make({ id: 'toko-b', name: 'X', template: 'entah' })).body.error, /Bibit/);
+      assert.match((await make({ id: 'toko-b', name: '', template: 'generic' })).body.error, /Nama/);
+      assert.match((await make({ id: 'toko-b', name: 'Toko B', template: 'generic', wa_number: '12' })).body.error, /WA bot/);
+      const made = await make({ id: 'toko-b', name: 'Toko B', template: 'generic', wa_number: '0812 7777 0001', sales_number: 'self' });
+      assert.equal(made.status, 200);
+      assert.deepEqual([made.body.project.wa_number, made.body.project.sales_number, made.body.project.enabled], ['+6281277770001', 'self', true]);
+      assert.equal((await make({ id: 'toko-b', name: 'Lagi', template: 'gfan' })).status, 409, 'id yang sudah dipakai');
+      assert.deepEqual((await call('/admin/api/projects')).body.projects.map((p: { id: string }) => p.id), ['gfan', 'toko-b']);
+      assert.equal((await call('/admin/api/projects', {}, false)).status, 401);
+
+      const b = await call('/admin/toko-b/api/state');
+      assert.equal(b.body.business, 'toko-b');
+      assert.equal(b.body.profile.brand, 'Bisnis Baru', 'bibit umum');
+      assert.deepEqual(b.body.profile.products, []);
+      assert.equal((await call('/admin/toko-b/api/leads')).body.rows.length, 0, 'lead proyek lain tidak ikut');
+      assert.ok((await call('/admin/gfan/api/leads')).body.rows.length > 0);
+      assert.equal((await call('/admin/toko-b/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ brand: 'Toko B' }) })).status, 200);
+      assert.equal((await getProfile('toko-b')).brand, 'Toko B');
+      assert.equal(biz.brand, 'GFAN Indonesia', 'profil gfan tidak tersentuh');
+
+      // Baris proyek: jeda semua chat, nomor, jalur.
+      const pp = (id: string, body: unknown) => call(`/admin/${id}/api/project`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      assert.match((await pp('gfan', { sales_number: 'abc' })).body.error, /sales/);
+      assert.match((await pp('gfan', { transport: 'telepati' })).body.error, /Jalur/);
+      assert.equal((await pp('gfan', { paused: true, sales_number: '0812 9999 0001' })).body.project.paused, true);
+      assert.equal((await getProject('gfan'))?.paused, true);
+      assert.equal(cfg.salesNumber, '+6281299990001', 'bot memakai nomor sales yang baru');
+      assert.equal((await call('/admin/api/projects')).body.projects[0].paused, true);
+      assert.equal((await pp('gfan', { paused: false, sales_number: '' })).body.project.paused, false);
+      assert.equal(cfg.salesNumber, null);
+    }
+
+    // --- WhatsApp: laporan bot, kode pairing, tautkan ulang ---
+    {
+      assert.equal((await call('/admin/gfan/api/wa')).body.wa, null, 'bot belum pernah melapor');
+      let listener: ((s: TransportState) => void) | null = null;
+      const asked: string[] = [];
+      let relinked = 0;
+      const fake: Transport = {
+        name: 'baileys', canMessageSelf: true, selfPhone: () => null, start: async () => {}, send: async () => {},
+        onState: (cb) => void ((listener = cb), cb({ state: 'starting' })),
+        requestPairingCode: async (n) => {
+          asked.push(n);
+          listener?.({ state: 'pairing', pairingCode: 'ABCD1234' });
+          return 'ABCD1234';
+        },
+        relink: async () => {
+          relinked += 1;
+          listener?.({ state: 'qr', qr: 'qr-baru' });
+        },
+      };
+      const stop = startHeartbeat(fake);
+      try {
+        await reportState({ state: 'qr', qr: '2@isi-qr' });
+        const st = await readStatus('gfan');
+        assert.deepEqual([st?.state, st?.qr, st?.pid], ['qr', '2@isi-qr', process.pid]);
+        assert.ok((st?.last_seen_at ?? 0) > 0);
+        const w = (await call('/admin/gfan/api/wa')).body;
+        assert.deepEqual([w.wa.state, w.wa.qr, w.pending], ['qr', '2@isi-qr', null]);
+        assert.ok((await call('/admin/gfan/api/state')).body.status.reportedAt > 0, 'laporan bot tampil di keadaan bot');
+
+        assert.match((await post('/admin/gfan/api/wa/pair', { number: 'abc' })).body.error, /tidak sah/);
+        assert.equal((await post('/admin/gfan/api/wa/pair', { number: '0812 3456 0001' })).status, 200);
+        assert.deepEqual((await getProject('gfan'))?.pairing_request?.number, '6281234560001');
+        assert.equal((await call('/admin/gfan/api/wa')).body.pending, 'pair');
+        await handlePairingRequest(fake);
+        assert.deepEqual(asked, ['6281234560001']);
+        assert.equal((await getProject('gfan'))?.pairing_request, null, 'permintaan selesai ditangani');
+        const w2 = (await call('/admin/gfan/api/wa')).body.wa;
+        assert.deepEqual([w2.state, w2.pairing_code], ['pairing', 'ABCD1234']);
+
+        assert.equal((await post('/admin/gfan/api/wa/reset')).status, 200);
+        await handlePairingRequest(fake);
+        assert.equal(relinked, 1);
+        assert.equal((await readStatus('gfan'))?.qr, 'qr-baru');
+        await handlePairingRequest(fake);
+        assert.equal(relinked, 1, 'tiap permintaan dijalankan sekali');
+      } finally {
+        stop();
+      }
+    }
+
     // --- permintaan dari situs lain ditolak ---
-    const cross = await call('/admin/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json', origin: 'https://situs-lain.example' }, body: '{"alias":"X"}' });
+    const cross = await call('/admin/gfan/api/profile', { method: 'PUT', headers: { 'content-type': 'application/json', origin: 'https://situs-lain.example' }, body: '{"alias":"X"}' });
     assert.equal(cross.status, 403);
     assert.equal(biz.alias, 'Rina');
 
@@ -383,6 +502,7 @@ const PNG = Buffer.from(
     process.exitCode = 1;
   } finally {
     await stopAdmin();
+    await closeDb();
     rmSync(dir, { recursive: true, force: true });
   }
 })();
