@@ -18,11 +18,11 @@ import { recipientsFor, waTargets } from './notify';
 import { missingFields, greetingFor, handleHumanReply, handleInbound, holdReason, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
-import { deliverOutbox, setSalesNotifier, setSheetWriter } from './sinks/outbox';
+import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, setSheetWriter, type ReplyPayload } from './sinks/outbox';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
-import { getContact, recentAlerts, recentMessages, updateContact, updateProject, importContact } from './store';
+import { getContact, listHandoffs, outboxAdd, pendingReplies, recentAlerts, recentMessages, updateContact, updateProject, importContact } from './store';
 import { handoffText, NON_TEXT, noDash, followupText } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
@@ -855,6 +855,67 @@ const tests: [string, () => Promise<void>][] = [
     await deliverOutbox();
     assert.equal(rows.length, 1);
     assert.equal(sales.length, 1);
+  }],
+
+  ['pertanyaan yang dioper ke staf dicatat sekali untuk halaman Pengetahuan', async () => {
+    await say('halo');
+    next = () => R('Untuk itu tim kami yang akan menginfokan.', {}, 'handoff');
+    await say('Bisa kirim ke Papua?');
+    await say('bisa kirim ke papua??');
+    const rows = await listHandoffs(false);
+    assert.equal(rows.length, 1, 'pertanyaan yang sama (setelah dinormalkan) tidak dicatat dua kali');
+    assert.deepEqual([rows[0]?.phone, rows[0]?.question], [A, 'Bisa kirim ke Papua?']);
+    next = () => R('Baik, kami cek dulu.', {}, 'handoff');
+    await say('Garansinya berapa lama?');
+    assert.equal((await listHandoffs(false)).length, 2);
+    next = () => R('GFAF-40A cocok untuk gudang.');
+    await say('yang cocok untuk gudang apa?');
+    assert.equal((await listHandoffs(false)).length, 2, 'jawaban biasa tidak dicatat');
+  }],
+
+  ['admin membalas dari HP: tahap "baru" pindah ke "dihubungi", tahap lain tidak disentuh', async () => {
+    await say('halo');
+    assert.equal((await getContact(A))?.stage, 'baru');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    const c = await getContact(A);
+    assert.deepEqual([c?.stage, c?.last_dir, c?.followup_state], ['dihubungi', 'human', 'idle']);
+    assert.equal((await recentMessages(A, 1))[0]?.dir, 'human');
+    await updateContact(A, { stage: 'closing' });
+    await handleHumanReply({ address: A, text: 'sudah saya kirim penawarannya' });
+    assert.equal((await getContact(A))?.stage, 'closing', 'hanya "baru" yang berpindah otomatis');
+  }],
+
+  ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = peringatan', async () => {
+    await say('halo');
+    const out: { phone: string; address: string; text: string }[] = [];
+    let ready = false;
+    let fail = false;
+    setReplySender(async (to, text) => {
+      if (fail) throw new Error('socket tertutup');
+      out.push({ ...to, text });
+    }, () => ready);
+    try {
+      const payload: ReplyPayload = { phone: A, address: A, text: 'Halo, ini dari dashboard', by: 'dashboard', message_id: null };
+      await outboxAdd('reply', payload, T0);
+      await deliverOutbox('reply');
+      assert.equal(out.length, 0, 'WhatsApp belum tersambung: balasan menunggu');
+      assert.equal((await pendingReplies(A))[0]?.attempts, 0, 'menunggu tidak dihitung gagal');
+      ready = true;
+      await deliverOutbox('reply');
+      assert.deepEqual(out, [{ phone: A, address: A, text: 'Halo, ini dari dashboard' }]);
+      assert.equal((await pendingReplies(A)).length, 0, 'terkirim = selesai');
+      await deliverOutbox();
+      assert.equal(out.length, 1, 'tidak dikirim dua kali');
+
+      fail = true;
+      await outboxAdd('reply', { ...payload, text: 'yang ini gagal' }, T0);
+      for (let i = 0; i < MAX_REPLY_ATTEMPTS + 2; i++) await deliverOutbox('reply');
+      assert.equal((await pendingReplies(A))[0]?.attempts, MAX_REPLY_ATTEMPTS, 'berhenti mencoba setelah batas');
+      const alert = (await recentAlerts(10)).find((x) => x.kind === 'kiriman-gagal');
+      assert.match(alert?.text ?? '', /yang ini gagal[\s\S]*socket tertutup/);
+    } finally {
+      setReplySender(null);
+    }
   }],
 
   ['nomor sales = nomor bot: Baileys kirim ke diri sendiri, Cloud API melewatkan', async () => {

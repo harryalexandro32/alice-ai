@@ -111,6 +111,10 @@ export const contacts = pgTable(
     handled_at: ms('handled_at'),
     imported: integer('imported').notNull().default(0),
     pending_off: integer('pending_off').notNull().default(0),
+    /** Tahap pipeline: baru | dihubungi | closing | batal (diubah staf di dashboard). */
+    stage: text('stage').notNull().default('baru'),
+    /** Catatan staf tentang pelanggan ini. */
+    note: text('note'),
   },
   (t) => [
     primaryKey({ columns: [t.project, t.phone] }),
@@ -129,6 +133,8 @@ export const messages = pgTable(
     text: text('text').notNull(),
     at: ms('at').notNull(),
     wa_id: text('wa_id'),
+    /** Jenis kiriman khusus: 'followup' (pengingat bot) atau 'dashboard' (dibalas staf dari web); null = biasa. */
+    kind: text('kind'),
   },
   (t) => [index('messages_phone').on(t.project, t.phone, t.id), unique('messages_wa_id').on(t.project, t.wa_id)]
 );
@@ -204,6 +210,27 @@ export const outbox = pgTable(
     done_at: ms('done_at'),
   },
   (t) => [index('outbox_project').on(t.project, t.id)]
+);
+
+/**
+ * Pertanyaan pelanggan yang dioper bot ke staf karena tidak bisa dijawabnya.
+ * Pemilik menjawabnya sekali di dashboard; jawabannya masuk ke "Pengetahuan
+ * lain", jadi lain kali bot bisa menjawab sendiri.
+ */
+export const handoffs = pgTable(
+  'handoffs',
+  {
+    id: serial('id').primaryKey(),
+    project: text('project').notNull(),
+    phone: text('phone').notNull(),
+    question: text('question').notNull(),
+    at: ms('at').notNull(),
+    resolved_at: ms('resolved_at'),
+    answer: text('answer'),
+    /** ditambahkan (jawabannya masuk pengetahuan) | diabaikan */
+    resolution: text('resolution'),
+  },
+  (t) => [index('handoffs_project').on(t.project, t.id)]
 );
 
 export const llmUsage = pgTable(

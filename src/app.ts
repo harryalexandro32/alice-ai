@@ -15,9 +15,9 @@ import { cfg, MINUTE } from './config';
 import { humanPause } from './pace';
 import { waTargets } from './notify';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
-import { startHeartbeat } from './heartbeat';
+import { startHeartbeat, transportConnected } from './heartbeat';
 import { runFollowups } from './followup';
-import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
+import { deliverOutbox, setReplySender, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
 import { raiseAlert, setAlertWhatsApp } from './alerts';
 import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
@@ -84,6 +84,9 @@ export function makeSalesNotifier(transport: Transport): SalesNotifier {
     return sent;
   };
 }
+
+/** Seberapa sering bot memeriksa balasan dari dashboard. */
+const REPLY_POLL_MS = 3000;
 
 interface Pending {
   first: TransportInbound;
@@ -158,12 +161,17 @@ export async function startApp(raw: Transport): Promise<void> {
 
   // Balasan ke pelanggan menunggu dulu dengan irama manusia (lihat pace.ts).
   // Notifikasi ke sales dan follow-up tidak: keduanya bukan balasan.
+  // Jeda yang sudah ditunggu ikut diberitahukan ke transport, supaya jeda
+  // pengaman (antiban) tidak ditambahkan lagi di atasnya.
   setSender(async (to, text, image, fileName) => {
-    await humanPause(to.address || to.phone, text.length, async () => transport.typing?.(to));
-    await transport.send(to, text, image ? { image, fileName } : undefined);
+    const pacedMs = await humanPause(to.address || to.phone, text.length, async () => transport.typing?.(to));
+    await transport.send(to, text, { ...(image ? { image, fileName } : {}), pacedMs });
   });
   const toSales = makeSalesNotifier(transport);
   setSalesNotifier(toSales);
+  // Balasan staf dari dashboard: dikirim apa adanya, tanpa jeda "manusiawi"
+  // (staf sendiri yang mengetiknya), hanya lewat pengaman nomor di transport.
+  setReplySender((to, text) => transport.send(to, text), transportConnected);
 
   // Peringatan untuk pemilik. Yang soal WhatsApp-nya sendiri tidak dikirim
   // lewat WhatsApp: saat itu jalurnya justru sedang bermasalah.
@@ -204,6 +212,17 @@ export async function startApp(raw: Transport): Promise<void> {
 
   // Perubahan dari dashboard juga dimuat walau tidak ada pesan masuk.
   setInterval(() => void reload(true), 30_000);
+
+  // Balasan yang diketik staf di dashboard: diperiksa tiap 3 detik (satu kueri
+  // ringan), supaya terasa seperti membalas langsung. Sisanya ikut putaran 5 menit.
+  let replying = false;
+  setInterval(() => {
+    if (replying) return;
+    replying = true;
+    void deliverOutbox('reply')
+      .catch((e) => console.error('[outbox] balasan dashboard:', e instanceof Error ? e.message : e))
+      .finally(() => (replying = false));
+  }, REPLY_POLL_MS);
 
   const tick = async () => {
     try {

@@ -4,9 +4,10 @@
  *
  *   - bot tidak bisa menjawab pelanggan dan butuh staf (kurang pengetahuan,
  *     pelanggan minta orang, pelanggan mengirim sesuatu yang tidak terbaca);
- *   - WhatsApp terputus permanen, kiriman dijeda pengaman, LLM bermasalah.
+ *   - WhatsApp terputus permanen, kiriman dijeda pengaman, balasan dari
+ *     dashboard yang gagal terkirim, LLM bermasalah.
  *
- * Tiap peringatan dicatat (tampil di dashboard, halaman "Peringatan & log")
+ * Tiap peringatan dicatat (tampil di dashboard: Beranda dan Pengaturan > Lanjutan)
  * dan dikirim ke penerima yang diatur di dashboard (lihat notify.ts): lewat
  * WhatsApp selama WhatsApp-nya masih jalan, plus Telegram dan email — dua
  * jalur yang tetap sampai saat WhatsApp-nya sendiri yang bermasalah.
@@ -26,6 +27,7 @@ export const ALERT_TITLES: Record<NotifyKind, string> = {
   'butuh-staf': 'Pelanggan butuh dibantu staf',
   'wa-putus': 'WhatsApp terputus',
   'kiriman-dijeda': 'Kiriman bot dijeda',
+  'kiriman-gagal': 'Balasan dari dashboard gagal terkirim',
   llm: 'LLM bermasalah',
   'bot-mati': 'Bot berhenti',
 };
@@ -35,6 +37,7 @@ const QUIET: Record<AlertKind, number> = {
   'butuh-staf': 30 * MINUTE,
   'wa-putus': 6 * HOUR,
   'kiriman-dijeda': HOUR,
+  'kiriman-gagal': 10 * MINUTE,
   llm: 6 * HOUR,
   'bot-mati': 10 * MINUTE,
 };

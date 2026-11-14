@@ -20,6 +20,12 @@ export interface LeadRow {
   summary?: string;
   /** Kenapa bot diam di chat ini; null/kosong = bot aktif. */
   hold?: 'tombol' | 'admin' | null;
+  /** Tahap pipeline: baru | dihubungi | closing | batal. */
+  stage: string;
+  /** Catatan staf ('' = belum ada). */
+  note: string;
+  /** Nama profil WhatsApp-nya, apa adanya. */
+  waName?: string;
 }
 
 export interface ErrorItem {

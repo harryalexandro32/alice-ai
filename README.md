@@ -46,20 +46,50 @@ npm run db:generate  # buat berkas migrasi baru setelah mengubah src/db/schema.t
 ## Dashboard pemilik
 
 Isi `ADMIN_PASSWORD` di `.env` (minimal 8 karakter), lalu `npm run admin` dan buka
-`http://localhost:3100/admin`. Dashboard berjalan sebagai proses sendiri; saat start ia membuat
+`http://localhost:3100/`. Dashboard berjalan sebagai proses sendiri; saat start ia membuat
 proyek `gfan` kalau belum ada.
 
-- **Pemilih proyek** di bilah atas: pindah proyek, atau **＋ Proyek baru…** (id, nama, bibit profil
-  `gfan`/`generic`, nomor WA bot, nomor sales).
+Tiap menu punya alamatnya sendiri, dengan id proyek di depan, jadi alamatnya bisa disimpan,
+dibagikan, atau dibuka di tab baru:
+
+| Alamat | Isi |
+|---|---|
+| `/` | ke proyek yang terakhir dibuka (cookie `last_project`), atau ke halaman masuk |
+| `/login` | halaman masuk (`?next=/gfan/percakapan` = tujuan setelah masuk) |
+| `/gfan` | **Beranda**: 4 angka 7 hari terakhir, *Perlu perhatian*, pertanyaan yang belum terjawab |
+| `/gfan/percakapan` | daftar pelanggan dengan saringan tahap, cari, unduh CSV, impor pelanggan lama |
+| `/gfan/percakapan/+62812…` | satu percakapan: riwayat lengkap, balas dari web, tahap, catatan |
+| `/gfan/pengetahuan/identitas` | juga `produk`, `rekomendasi`, `brosur`, `lainnya` (panel **Coba bicara** di tiap halaman) |
+| `/gfan/pengaturan` | proyek, saat admin ikut membalas, follow-up |
+| `/gfan/pengaturan/whatsapp` | juga `notifikasi`, `lanjutan` (mode uji, batas, biaya LLM, riwayat peringatan, galat) |
+
+Alamat lama `/admin` dialihkan ke `/`. Data lewat `/api/<proyek>/…`; id proyek tidak boleh
+memakai kata yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`,
+`webhook`, …).
+
+- **Pemilih proyek** di bilah atas: pindah proyek (tetap di menu yang sama), atau
+  **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`, nomor WA bot, nomor sales).
+- **Bilah keadaan** di atas tiap halaman: WhatsApp tersambung atau belum, **Bot dijeda**,
+  **MODE UJI**, dan perkiraan biaya LLM bulan ini. Tiap tanda adalah tautan ke pengaturannya.
+- **Percakapan**: tiap pelanggan punya **tahap** (baru, dihubungi, closing, batal) dan **catatan**.
+  Tahap "baru" pindah sendiri ke "dihubungi" begitu admin membalas (dari HP atau dari web); tahap
+  lain hanya berubah dari dashboard.
+- **Balas dari web**: balasan masuk antrean (`outbox`, jenis `reply`) dan dikirim proses bot dalam
+  ±3 detik selama WhatsApp tersambung. Bot langsung mundur di chat itu, sama seperti admin yang
+  membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi peringatan
+  `kiriman-gagal`.
+- **Pertanyaan yang belum terjawab**: tiap pertanyaan yang dioper bot ke staf dicatat (tabel
+  `handoffs`) dan dikelompokkan. Tulis jawabannya sekali di Pengetahuan > Lainnya, lalu
+  **Tambahkan ke pengetahuan**: tanya-jawabnya masuk ke "Pengetahuan lain" dan bot memakainya
+  mulai pesan berikutnya.
 - **Pengaturan > WhatsApp**: tautkan nomor proyek itu dari dashboard — pindai QR yang tampil, atau
-  minta **kode pairing** 8 huruf. **Putuskan & tautkan ulang** untuk ganti nomor.
-- **Pengaturan > Proyek**: nama, nomor bot, nomor sales, jalur (`baileys`/`cloud`), aktif, dan
-  **Bot dijeda untuk semua chat** (pesan tetap dicatat, tapi tidak dibalas dan tanpa follow-up).
-- **Lead**: tombol **Bot** per chat (mati = staf yang menangani; nyala = kembali ke bot, semua
-  penahan dilepas) dan **Sudah ditangani**. Berlaku seketika.
-- Identitas, salam, data yang dikumpulkan, produk, PDF, panduan rekomendasi, notifikasi, dan
-  **Uji coba**. **Simpan & terapkan** berlaku pada pesan berikutnya tanpa menyalakan ulang bot: bot
-  memeriksa perubahan profilnya sebelum tiap giliran (dan tiap 30 detik).
+  minta **kode pairing** 8 huruf. Setelah tersambung yang tampil hanya "Tersambung sebagai
+  <nomor>". **Putuskan & tautkan ulang** untuk ganti nomor. Di bawahnya **Keadaan bot**, termasuk
+  pengaman nomor dan antiban (risiko, hari pemanasan, kiriman yang ditahan).
+- Tombol **Bot** per chat (mati = staf yang menangani; nyala = kembali ke bot, semua penahan
+  dilepas) dan **Sudah ditangani** berlaku seketika.
+- **Simpan & terapkan** berlaku pada pesan berikutnya tanpa menyalakan ulang bot: bot memeriksa
+  perubahan profilnya sebelum tiap giliran (dan tiap 30 detik).
 
 Hanya yang diubah yang disimpan (tabel `profiles`); sisanya mengikuti bibit di
 `src/business/<template>/profile.ts`. Dashboard bawaannya hanya bisa dibuka dari komputer itu sendiri
@@ -67,12 +97,19 @@ Hanya yang diubah yang disimpan (tabel `profiles`); sisanya mengikuti bibit di
 
 ## Jalur WhatsApp
 
-Dipilih per proyek di dashboard (Pengaturan > Proyek):
+Dipilih per proyek di dashboard (Pengaturan > Umum > Proyek):
 
 | Jalur | Apa | Kapan |
 |---|---|---|
 | `baileys` | Perangkat tertaut (tidak resmi). QR / kode pairing dari dashboard. | Demo, nomor tes |
 | `cloud` | WhatsApp Cloud API resmi + webhook, mendukung Coexistence | Produksi — [docs/cloud-api-setup.md](docs/cloud-api-setup.md) |
+
+Di jalur `baileys`, tiap kiriman lewat dua pengaman: `src/transport/sendguard.ts` (batas per
+menit/jam/hari dari Pengaturan > Lanjutan, jeda setelah tanda bahaya) dan kelas `AntiBan` dari
+pustaka `baileys-antiban` (pemanasan nomor baru 7 hari mulai 20 kiriman/hari, deteksi pesan kembar,
+jeda otomatis saat risikonya tinggi). Batasnya sama dengan angka di dashboard, dan jedanya tidak
+dijumlahkan: bot menunggu sekali, selama jeda yang terbesar. Keadaannya disimpan di
+`auth/<proyek>/antiban-state.json`.
 
 ## Menambah bisnis baru
 
@@ -124,7 +161,8 @@ bot per proyek (`alice-bot@<proyek>`, dinyalakan otomatis begitu proyeknya ada d
 
 - `alice-api.lukicenturi.com` — Caddy (HTTPS otomatis) di depan dashboard.
 - `alice.lukicenturi.com` — proyek Vercel yang hanya **meneruskan** permintaan ke alamat di atas
-  (`vercel.json`). Alamat ini didaftarkan di `ADMIN_ORIGINS` pada `.env` server.
+  (`vercel.json`). Alamat ini didaftarkan di `ADMIN_ORIGINS` pada `.env` server. Contoh:
+  `https://alice.lukicenturi.com/gfan` (Beranda proyek gfan).
 - Push ke `master` → GitHub Actions menguji, lalu memasang ke server lewat SSH (`deploy/`):
   migrasi database, lalu dashboard dan semua bot dinyalakan ulang.
 - Cadangan harian database (`pg_dump`), berkas unggahan, dan sesi WhatsApp ke `backups/`.

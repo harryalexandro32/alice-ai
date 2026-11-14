@@ -117,7 +117,7 @@ export async function runFollowups(send: Sender): Promise<number> {
       console.error(`[follow-up] ${c.phone}: gagal kirim: ${e instanceof Error ? e.message : e}`);
       continue;
     }
-    await addMessage(c.phone, 'out', text, t);
+    await addMessage(c.phone, 'out', text, t, null, 'followup');
     await updateContact(c.phone, {
       last_dir: 'out',
       last_out_text: text,

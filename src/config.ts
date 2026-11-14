@@ -74,6 +74,8 @@ const base = {
   followupSmart: bool('FOLLOWUP_SMART', true),
   // Foto dari pelanggan ikut dikirim ke LLM untuk diamati (model harus bisa membaca gambar).
   llmVision: bool('LLM_VISION', true),
+  // Pesan suara ditranskripsi (kalau STT_* diisi); bisa dimatikan per proyek di dashboard.
+  transcribeVoice: true,
   // Tarif untuk menghitung perkiraan biaya di dashboard: USD per 1 juta token.
   // Bawaan = tarif jam sibuk deepseek-flash (dicek 2026-11-11); di luar jam
   // sibuk tarifnya separuh, jadi angka di dashboard adalah batas atas.
@@ -151,7 +153,7 @@ const base = {
 export const TUNABLE = {
   followupAfterHours: [1, 72], followupAfterHoursMax: [1, 96], followupStartHour: [0, 23], followupEndHour: [1, 24], followupMaxTotal: [0, 5],
   humanPauseHours: [1, 168], llmDailyLimit: [10, 100_000], maxInboundPerNumber: [5, 500],
-  waMaxPerMinute: [1, 30], waMaxPerHour: [10, 1000], waMaxPerDay: [50, 10_000],
+  waMaxPerMinute: [1, 30], waMaxPerHour: [10, 1000], waMaxPerDay: [50, 10_000], debounceMs: [500, 20_000],
   llmPriceIn: [0, 100], llmPriceCached: [0, 100], llmPriceOut: [0, 100], usdIdr: [1000, 100_000],
 } as const satisfies Partial<Record<keyof typeof base, readonly [number, number]>>;
 
@@ -161,6 +163,8 @@ export interface Settings extends Partial<Record<TunableKey, number>> {
   llmVision?: boolean;
   /** Follow-up ditulis LLM menurut isi percakapan. */
   followupSmart?: boolean;
+  /** Pesan suara ditranskripsi lalu dijawab (butuh STT_* di .env bot). */
+  transcribeVoice?: boolean;
   /** Mode uji: hanya nomor-nomor ini yang dilayani. Kosong = semua nomor. */
   onlyNumbers?: string[];
 }
@@ -168,7 +172,7 @@ export interface Settings extends Partial<Record<TunableKey, number>> {
 /** Kunci `cfg` yang nilainya milik proyek yang sedang dilayani, bukan .env. */
 export const PROJECT_KEYS: ReadonlySet<string> = new Set([
   'transport', 'salesNumber', 'waAuthDir', 'waPairingNumber', 'followupMaxHours',
-  'llmVision', 'followupSmart', 'onlyNumbers', ...Object.keys(TUNABLE),
+  'llmVision', 'followupSmart', 'transcribeVoice', 'onlyNumbers', ...Object.keys(TUNABLE),
 ]);
 
 /**
@@ -197,6 +201,7 @@ export function settingsCfg(s: Settings): Record<string, unknown> {
   for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = typeof s[k] === 'number' ? s[k] : envDefaults[k];
   out.llmVision = typeof s.llmVision === 'boolean' ? s.llmVision : envDefaults.llmVision;
   out.followupSmart = typeof s.followupSmart === 'boolean' ? s.followupSmart : envDefaults.followupSmart;
+  out.transcribeVoice = typeof s.transcribeVoice === 'boolean' ? s.transcribeVoice : envDefaults.transcribeVoice;
   out.onlyNumbers = Array.isArray(s.onlyNumbers) ? s.onlyNumbers : envDefaults.onlyNumbers;
   return out;
 }
@@ -221,7 +226,7 @@ export function applySettings(s: Settings): void {
 
 /** Nilai yang sedang berlaku, untuk ditampilkan dashboard. */
 export function effectiveSettings(): Required<Settings> {
-  const out = { llmVision: cfg.llmVision, followupSmart: cfg.followupSmart, onlyNumbers: cfg.onlyNumbers } as Record<string, unknown>;
+  const out = { llmVision: cfg.llmVision, followupSmart: cfg.followupSmart, transcribeVoice: cfg.transcribeVoice, onlyNumbers: cfg.onlyNumbers } as Record<string, unknown>;
   for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = cfg[k];
   return out as unknown as Required<Settings>;
 }

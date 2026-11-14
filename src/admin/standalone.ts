@@ -17,7 +17,7 @@ import { localStore } from './store-local';
   await openDb();
   // Proyek gfan selalu ada (aman diulang; yang sudah ada tidak ditimpa).
   await seed();
-  // Uji coba di dashboard juga memakai LLM: dicatat ke proyek yang sedang dibuka.
+  // "Coba bicara" di dashboard juga memakai LLM: dicatat ke proyek yang sedang dibuka.
   setUsageRecorder(addUsage);
   await startAdmin(localStore());
 })().catch((e) => {

@@ -3,9 +3,13 @@
 import assert from 'node:assert/strict';
 
 import { cfg, HOUR, MINUTE } from '../config';
-import { afterSend, beforeSend, GuardBlocked, guardSummary, onDisconnect, onOpen, onSendError, resetGuard, setGuardClock } from './sendguard';
+import {
+  afterSend, beforeSend, GuardBlocked, guardedSend, guardSummary, onDisconnect, onOpen, onSendError, resetGuard, setAntiBan, setGuardClock,
+  setGuardListener, setGuardSleep, type AntiBanLike,
+} from './sendguard';
 
 let t = 1_800_000_000_000;
+const DAY_MS = 24 * HOUR;
 setGuardClock(() => t);
 cfg.waMaxPerMinute = 5;
 cfg.waMaxPerHour = 20;
@@ -84,5 +88,67 @@ t += 2 * MINUTE;
 sendOk();
 assert.equal(beforeSend(), 0);
 
-console.error = quiet;
-console.log('pengaman nomor: OK');
+// AntiBan (baileys-antiban) lewat guardedSend, dengan tiruan: tanpa jaringan dan tanpa menunggu sungguhan.
+(async () => {
+  const waits: number[] = [];
+  setGuardSleep(async (ms) => void waits.push(ms));
+  const paused: string[] = [];
+  setGuardListener((text) => void paused.push(text));
+  const calls: string[] = [];
+  let decision = { allowed: true, delayMs: 0, reason: undefined as string | undefined };
+  const fake: AntiBanLike = {
+    beforeSend: async (jid, text) => (calls.push(`before ${jid} ${text}`), decision),
+    afterSend: (jid, text) => void calls.push(`after ${jid} ${text}`),
+    afterSendFailed: (e) => void calls.push(`failed ${e}`),
+    getStats: () => ({ messagesBlocked: 2, health: { risk: 'low' }, warmUp: { phase: 'warming', day: 3, totalDays: 7, todaySent: 4, todayLimit: 40 } }),
+  };
+  setAntiBan(fake);
+  let sends = 0;
+  const send = async () => { sends += 1; return 'ok'; };
+
+  // Ditolak: tidak dikirim, pemilik dikabari lewat pendengar pengaman.
+  resetGuard();
+  t += DAY_MS;
+  decision = { allowed: false, delayMs: 0, reason: 'risiko tinggi' };
+  await assert.rejects(guardedSend('62811@s.whatsapp.net', 'halo', {}, send), (e: unknown) => e instanceof GuardBlocked && /antiban: risiko tinggi/.test((e as Error).message));
+  assert.equal(sends, 0, 'yang ditolak antiban tidak dikirim');
+  assert.equal(paused.length, 1);
+  assert.match(paused[0] ?? '', /antiban menahan kiriman bot: risiko tinggi/);
+  assert.deepEqual(waits, []);
+
+  // Boleh dengan jeda: menunggu SEKALI, selama jeda terbesar (bukan dijumlahkan).
+  calls.length = 0;
+  decision = { allowed: true, delayMs: 7000, reason: undefined };
+  assert.equal(await guardedSend('62811@s.whatsapp.net', 'halo', { minWaitMs: 2000 }, send), 'ok');
+  assert.deepEqual(waits, [7000], 'jeda antiban dan jeda minimum tidak dijumlahkan');
+  assert.equal(sends, 1);
+  assert.deepEqual(calls, ['before 62811@s.whatsapp.net halo', 'after 62811@s.whatsapp.net halo'], 'afterSend dipanggil setelah terkirim');
+
+  // Jeda yang sudah ditunggu dengan irama manusia dikurangkan dari jeda antiban.
+  waits.length = 0;
+  await guardedSend('62811@s.whatsapp.net', 'lagi', { pacedMs: 5000 }, send);
+  assert.deepEqual(waits, [2000]);
+  waits.length = 0;
+  await guardedSend('62811@s.whatsapp.net', 'lagi', { pacedMs: 9000 }, send);
+  assert.deepEqual(waits, [], 'irama manusia sudah lebih lama: tidak menunggu lagi');
+
+  // Kiriman gagal dilaporkan ke antiban, dan afterSend tidak dipanggil.
+  calls.length = 0;
+  decision = { allowed: true, delayMs: 0, reason: undefined };
+  await assert.rejects(guardedSend('62811@s.whatsapp.net', 'x', {}, async () => { throw new Error('timeout'); }), /timeout/);
+  assert.deepEqual(calls, ['before 62811@s.whatsapp.net x', 'failed timeout']);
+
+  // Keadaan antiban ikut di ringkasan pengaman (dashboard dan laporan bot).
+  assert.match(guardSummary(), / · antiban: risiko rendah, pemanasan hari 3\/7 \(4\/40 hari ini\), 2 ditahan$/);
+  setAntiBan(null);
+  assert.ok(!guardSummary().includes('antiban'));
+  setGuardListener(null);
+
+  console.error = quiet;
+  console.log('pengaman nomor: OK');
+})().catch((e) => {
+  console.error = quiet;
+  console.error('pengaman nomor: GAGAL\n', e);
+  process.exitCode = 1;
+});
+

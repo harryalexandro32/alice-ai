@@ -14,7 +14,8 @@ Bot mengabari orang saat ada yang butuh manusia. Ada dua hal yang diatur, di dua
 | Lead baru | data pelanggan lengkap | staf |
 | Pelanggan butuh staf | bot tidak bisa menjawab, pelanggan minta orang, kirim suara/dokumen, foto yang gagal dianalisis | staf |
 | WhatsApp terputus | sesi dicabut dari HP / direbut sesi lain | pemilik |
-| Kiriman dijeda | pengaman nomor menahan kiriman | pemilik |
+| Kiriman dijeda | pengaman nomor atau antiban menahan kiriman | pemilik |
+| Balasan dari dashboard gagal terkirim | balasan yang diketik di halaman percakapan gagal terkirim 5 kali | pemilik |
 | LLM bermasalah | tiga panggilan beruntun gagal, atau jatah harian habis | pemilik |
 | Bot berhenti | proses bot mati (dikabarkan pengawas) | pemilik |
 
@@ -72,7 +73,7 @@ Penyedia lain sama saja: ganti host, port (465 = SSL; 587 = STARTTLS), pengguna,
 
 - Dashboard → Pengaturan → Notifikasi: baris di bawah tabel menulis jalur mana yang **siap**
   menurut bot (kredensialnya terisi). Itu belum berarti kirimannya sampai.
-- Dashboard → **Peringatan & log**: kiriman yang gagal muncul sebagai `[notifikasi] … gagal`
-  di catatan galat, lengkap dengan alasannya (mis. sandi salah, id chat tidak dikenal).
+- Dashboard → Pengaturan → **Lanjutan** → **Catatan galat**: kiriman yang gagal muncul sebagai
+  `[notifikasi] … gagal`, lengkap dengan alasannya (mis. sandi salah, id chat tidak dikenal).
 - Cara termudah mengetes: tanyakan ke bot sesuatu yang tidak ada di datanya dari nomor
   pelanggan uji — kabar "pelanggan butuh staf" seharusnya sampai ke semua jalur staf.

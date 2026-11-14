@@ -40,6 +40,9 @@ export async function leadRows(): Promise<LeadRow[]> {
     summary: c.summary ?? '',
     // Diimpor dengan "bot diam" tapi belum pernah chat: alamatnya belum ada, tandanya ada di kontak.
     hold: c.pending_off ? 'tombol' : holdFrom(holds, c.address, t),
+    stage: c.stage,
+    note: c.note ?? '',
+    waName: c.wa_name ?? '',
   }));
 }
 

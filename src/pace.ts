@@ -49,8 +49,8 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 const lastSentAt = new Map<string, number>();
 let previousDelay: number | null = null;
 
-/** Tunggu dengan irama manusia sebelum mengirim ke `key`. */
-export async function humanPause(key: string, textLength: number, startTyping: () => Promise<void>): Promise<void> {
+/** Tunggu dengan irama manusia sebelum mengirim ke `key`. Mengembalikan lamanya menunggu (ms). */
+export async function humanPause(key: string, textLength: number, startTyping: () => Promise<void>): Promise<number> {
   const delay = pickDelayMs(Date.now() - (lastSentAt.get(key) ?? 0), previousDelay);
   if (delay >= 6000) previousDelay = delay;
 
@@ -61,4 +61,5 @@ export async function humanPause(key: string, textLength: number, startTyping: (
 
   lastSentAt.set(key, Date.now());
   if (lastSentAt.size > 5000) lastSentAt.delete(lastSentAt.keys().next().value as string);
+  return delay;
 }

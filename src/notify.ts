@@ -16,7 +16,7 @@ import { biz } from './business';
 import type { NotifyKind, Recipient, Route } from './business/types';
 import { cfg } from './config';
 
-export const NOTIFY_KINDS: readonly NotifyKind[] = ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'llm', 'bot-mati'];
+export const NOTIFY_KINDS: readonly NotifyKind[] = ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati'];
 
 /** Rute bawaan: urusan pelanggan ke staf, urusan sistem ke pemilik. */
 export const DEFAULT_ROUTES: Record<NotifyKind, Route> = {
@@ -24,6 +24,7 @@ export const DEFAULT_ROUTES: Record<NotifyKind, Route> = {
   'butuh-staf': 'staff',
   'wa-putus': 'owner',
   'kiriman-dijeda': 'owner',
+  'kiriman-gagal': 'owner',
   llm: 'owner',
   'bot-mati': 'owner',
 };

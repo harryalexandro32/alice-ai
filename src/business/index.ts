@@ -285,7 +285,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('notifyRoutes' in input) {
     const raw = (input.notifyRoutes && typeof input.notifyRoutes === 'object' ? input.notifyRoutes : {}) as Record<string, unknown>;
     const routes: Partial<Record<NotifyKind, Route>> = {};
-    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'llm', 'bot-mati'] as const) {
+    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati'] as const) {
       const v = raw[k];
       if (v === 'owner' || v === 'staff' || v === 'both' || v === 'none') routes[k] = v;
     }
@@ -310,6 +310,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
     }
     if (typeof raw.llmVision === 'boolean') out.llmVision = raw.llmVision;
     if (typeof raw.followupSmart === 'boolean') out.followupSmart = raw.followupSmart;
+    if (typeof raw.transcribeVoice === 'boolean') out.transcribeVoice = raw.transcribeVoice;
     if (Array.isArray(raw.onlyNumbers)) {
       const list = raw.onlyNumbers.map((x) => String(x).trim()).filter(Boolean);
       const bad = list.find((x) => !normPhone(x));

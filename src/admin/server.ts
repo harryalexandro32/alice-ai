@@ -6,10 +6,13 @@
  * pesan berikutnya.
  *
  * Satu dashboard untuk semua proyek (satu proyek = satu bisnis = satu nomor
- * WhatsApp). Alamatnya /admin/<proyek>/api/…: tiap permintaan dijalankan di
- * dalam proyeknya (withProject), jadi `biz`, `cfg`, dan penyimpanan otomatis
- * memakai proyek itu. Dashboard berjalan di proses sendiri; keadaan bot
- * (WhatsApp, QR, kode pairing) dibaca dari laporan berkalanya di database.
+ * WhatsApp). Tiap menu punya alamatnya sendiri dengan id proyek di depan:
+ * /gfan, /gfan/percakapan, /gfan/pengetahuan/produk, /gfan/pengaturan/whatsapp,
+ * …; semuanya page.html, dan router di app.js membaca alamatnya. Data lewat
+ * /api/<proyek>/…: tiap permintaan dijalankan di dalam proyeknya
+ * (withProject), jadi `biz`, `cfg`, dan penyimpanan otomatis memakai proyek
+ * itu. Dashboard berjalan di proses sendiri; keadaan bot (WhatsApp, QR, kode
+ * pairing) dibaca dari laporan berkalanya di database.
  *
  * Yang dijaga, karena halaman ini bisa mengubah apa yang dikatakan bot ke
  * semua pelanggan:
@@ -32,21 +35,26 @@ import { isPdf } from '../business/catalog';
 import type { MediaFile } from '../business/types';
 import { cfg, normPhone, parseSalesNumber } from '../config';
 import { ensureProject } from '../db/seed';
-import { markHandled, switchBot } from '../flow';
+import { localDay } from '../clock';
+import { applyHumanReply, holdReason, markHandled, switchBot } from '../flow';
 import { llmEnabled } from '../llm/provider';
 import { currentProject, withProject } from '../project';
+import { MAX_REPLY_ATTEMPTS, type ReplyPayload } from '../sinks/outbox';
 import {
-  countImported, getProject, importContact, listProjects, readAllStatus, readStatus, setPairingRequest, updateProject,
-  type Project, type ProjectPatch,
+  countImported, getContact, getHandoff, getProject, importContact, listHandoffs, listProjects, messagePage, metrics, normQuestion,
+  outboxAdd, pendingReplies, readAllStatus, readStatus, resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
+  type HandoffRow, type Project, type ProjectPatch, type Stage,
 } from '../store';
 import { matchProducts, pdfPlain, squash } from './pdftext';
-import type { AdminStore } from './stores';
+import type { AdminStore, UsageReport } from './stores';
 
 const SESSION_MS = 12 * 3_600_000;
 /** Di bawah batas badan permintaan fungsi Vercel (4,5 MB). */
 const MAX_FILE_BYTES = 4_000_000;
 const MAX_FILES = 400;
 const COOKIE = 'admin_session';
+/** Proyek yang terakhir dibuka; "/" kembali ke sana. */
+const LAST_PROJECT = 'last_project';
 
 let brain: Brain = llmBrain;
 /** Tes: ganti otak yang dipakai tombol "Uji". */
@@ -61,9 +69,13 @@ function sign(expires: number): string {
   return `${expires}.${createHmac('sha256', sessionKey()).update(String(expires)).digest('base64url')}`;
 }
 
+function cookieOf(req: IncomingMessage, name: string): string {
+  const raw = (req.headers.cookie ?? '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`${name}=`));
+  return raw?.slice(name.length + 1) ?? '';
+}
+
 function authed(req: IncomingMessage): boolean {
-  const raw = (req.headers.cookie ?? '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`${COOKIE}=`));
-  const token = raw?.slice(COOKIE.length + 1) ?? '';
+  const token = cookieOf(req, COOKIE);
   const [exp, mac] = token.split('.');
   if (!exp || !mac || Number(exp) < Date.now()) return false;
   const expected = Buffer.from(sign(Number(exp)));
@@ -108,7 +120,7 @@ function fileExt(b: Buffer): 'jpg' | 'png' | 'webp' | 'pdf' | null {
 }
 
 const TYPES: Record<string, string> = {
-  html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8',
+  html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8',
   jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf',
 };
 
@@ -120,11 +132,45 @@ function asset(name: string): Buffer {
 
 const label = (v: unknown, max: number): string => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
-/** Id proyek: huruf kecil, angka, tanda minus. "api" dan "media" dipakai alamat dashboard. */
+/** Berkas halaman yang dilayani apa adanya: alamat -> [nama berkas, jenis]. */
+const ASSETS: Record<string, [string, string]> = {
+  '/assets/app.js': ['app.js', 'js'],
+  '/assets/app.css': ['app.css', 'css'],
+  '/assets/qrcode.js': ['qrcode.js', 'js'],
+};
+
+/**
+ * Id proyek: huruf kecil, angka, tanda minus. Kata-kata ini dipakai alamat
+ * dashboard (atau dialihkan Caddy ke bot) dan tidak pernah sah sebagai id.
+ */
 const PROJECT_ID = /^[a-z0-9-]{2,32}$/;
-const RESERVED = new Set(['api', 'media']);
+export const RESERVED = new Set(['api', 'login', 'logout', 'assets', 'admin', 'health', 'webhook', 'robots.txt', 'favicon.ico']);
 /** Nomor pelanggan di alamat: "+62…" atau "lid:…". */
 const CONTACT = /^(\+\d{8,15}|lid:\d{5,20})$/;
+
+/** Halaman di bawah /<proyek>/ (tanpa garis miring di depan); percakapan per nomor diperiksa terpisah. */
+const PAGE_PATHS = [
+  /^$/,
+  /^percakapan$/,
+  /^pengetahuan\/(identitas|produk|rekomendasi|brosur|lainnya)$/,
+  /^pengaturan$/,
+  /^pengaturan\/(whatsapp|notifikasi|lanjutan)$/,
+];
+
+function validContactPath(rest: string): boolean {
+  const m = rest.match(/^percakapan\/([^/]+)$/);
+  if (!m) return false;
+  try {
+    return CONTACT.test(decodeURIComponent(m[1] as string));
+  } catch {
+    return false;
+  }
+}
+
+/** Tujuan setelah masuk: hanya alamat di situs ini sendiri. */
+function safeNext(next: string | null): string {
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/';
+}
 
 /** Baris proyek yang boleh dilihat dashboard (tanpa permintaan internal untuk bot). */
 const projectView = (p: Project) => ({
@@ -161,6 +207,40 @@ function projectPatch(body: Record<string, unknown>): ProjectPatch {
   return out;
 }
 
+/** Balasan dari dashboard paling panjang sekian karakter. */
+const MAX_REPLY = 4000;
+const DAY = 86_400_000;
+const METRIC_DAYS = 7;
+
+/** Perkiraan biaya LLM bulan ini (bulan menurut zona waktu bot), dalam USD dan Rupiah. */
+function monthCost(u: UsageReport | null): { usd: number; idr: number } {
+  if (!u) return { usd: 0, idr: 0 };
+  const month = localDay(Date.now()).slice(0, 7);
+  const usd = u.days
+    .filter((d) => d.day.startsWith(month))
+    .reduce((a, d) => a + ((d.promptTokens - d.cachedTokens) * u.price.in + d.cachedTokens * u.price.cached + d.completionTokens * u.price.out) / 1e6, 0);
+  return { usd, idr: Math.round(usd * u.usdIdr) };
+}
+
+/** Kelompokkan pertanyaan yang sama (setelah dinormalkan); baris masuk terbaru dulu. */
+function groupHandoffs(rows: HandoffRow[]) {
+  const groups = new Map<string, { id: number; question: string; count: number; last_at: number; phone: string; phones: Set<string>; answer: string | null; resolution: string | null; resolved_at: number | null }>();
+  for (const r of rows) {
+    const key = normQuestion(r.question);
+    const g = groups.get(key);
+    if (g) {
+      g.count += 1;
+      g.phones.add(r.phone);
+    } else {
+      groups.set(key, {
+        id: r.id, question: r.question, count: 1, last_at: r.at, phone: r.phone, phones: new Set([r.phone]),
+        answer: r.answer, resolution: r.resolution, resolved_at: r.resolved_at,
+      });
+    }
+  }
+  return [...groups.values()].map(({ phones, ...g }) => ({ ...g, people: phones.size }));
+}
+
 export function createAdminHandler(store: AdminStore) {
   /**
    * Teks sebuah PDF. Dibaca sekali lalu disimpan di samping PDF-nya sebagai
@@ -183,6 +263,31 @@ export function createAdminHandler(store: AdminStore) {
     return { readable: Boolean(text), matches: matchProducts(text, names) };
   };
 
+  /** Satu pelanggan untuk halaman percakapan: data, riwayat pesan (per halaman), balasan yang belum terkirim. */
+  async function leadDetail(phone: string, url: URL, json: (code: number, body: unknown) => void): Promise<void> {
+    const c = await getContact(phone);
+    if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
+    const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 100));
+    const before = Math.floor(Number(url.searchParams.get('before')));
+    const [messages, pending] = await Promise.all([messagePage(phone, limit, before > 0 ? before : undefined), pendingReplies(phone)]);
+    const hold = c.pending_off ? 'tombol' : c.address ? await holdReason(c.address, Date.now()) : null;
+    return json(200, {
+      contact: {
+        phone: c.phone, waName: c.wa_name, lead: c.lead, needsSales: Boolean(c.needs_sales), complete: Boolean(c.lead_sent_at),
+        lastAt: c.last_inbound_at, lastDir: c.last_dir, summary: c.summary ?? '', hold, stage: c.stage, note: c.note ?? '',
+        imported: Boolean(c.imported), handledAt: c.handled_at, canReply: Boolean(c.address),
+      },
+      fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })),
+      messages,
+      more: messages.length === limit,
+      // Balasan dari dashboard yang belum terkirim; yang hilang dari sini sudah terkirim.
+      pending_replies: pending.map((r) => {
+        const p = r.payload as ReplyPayload;
+        return { id: r.id, message_id: p.message_id ?? null, text: p.text, at: r.created_at, attempts: r.attempts, failed: r.attempts >= MAX_REPLY_ATTEMPTS };
+      }),
+    });
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://x');
     const path = url.pathname;
@@ -198,24 +303,74 @@ export function createAdminHandler(store: AdminStore) {
       res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(body));
     };
-    const page = (name: string, ext: string) => {
-      res.writeHead(200, {
+    const file = (name: string, ext: string, code = 200, headers: Record<string, string> = {}) => {
+      res.writeHead(code, {
         'content-type': TYPES[ext] as string,
+        // Berkas halaman berganti tiap deploy: peramban boleh menyimpan, tapi harus bertanya dulu.
+        ...(ext === 'html' ? {} : { 'cache-control': 'no-cache' }),
         'content-security-policy':
           "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src https://fonts.gstatic.com; img-src 'self' blob: data:; frame-ancestors 'none'",
+        ...headers,
       });
       res.end(asset(name));
     };
+    const redirect = (code: 301 | 302, location: string) => {
+      res.writeHead(code, { location });
+      res.end();
+    };
+    const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
 
+    // --- berkas halaman ---
+    if (method === 'GET' && ASSETS[path]) return file(...(ASSETS[path] as [string, string]));
+
+    // Alamat lama (/admin, /admin/#gfan, /admin/gfan/api/…) -> beranda baru.
+    if (path === '/admin' || path.startsWith('/admin/')) return redirect(301, '/');
+
+    if (path.startsWith('/api/')) return handleApi(req, res, path, url, method, json, secure);
+
+    if (method !== 'GET' && method !== 'HEAD') return json(405, { error: 'Tidak ada.' });
+
+    // --- halaman: semuanya page.html; alamatnya dibaca router di app.js ---
     if (path === '/') {
-      res.writeHead(302, { location: '/admin' });
-      return void res.end();
+      // Tanpa sesi: ke halaman masuk (daftar proyek tidak dibuka ke orang yang belum masuk).
+      if (!authed(req)) return redirect(302, '/login');
+      const last = cookieOf(req, LAST_PROJECT);
+      const rows = await listProjects();
+      const target = rows.find((p) => p.id === last) ?? rows.find((p) => p.enabled) ?? rows[0];
+      return redirect(302, target ? `/${target.id}` : '/login');
     }
-    if (path === '/admin') return page('page.html', 'html');
-    if (path === '/admin/app.js') return page('app.js', 'js');
-    if (path === '/admin/qrcode.js') return page('qrcode.js', 'js');
+    if (path === '/login') {
+      // Sudah masuk tapi belum ada proyek sama sekali: halaman ini menampilkan
+      // formulir "Proyek baru" (kalau dialihkan ke "/", "/" mengembalikan ke sini).
+      if (authed(req) && (url.searchParams.has('next') || (await listProjects()).length)) {
+        return redirect(302, safeNext(url.searchParams.get('next')));
+      }
+      return file('page.html', 'html');
+    }
+    const m = path.match(/^\/([a-z0-9-]{2,32})(?:\/(.*?))?\/?$/);
+    if (!m || RESERVED.has(m[1] as string)) return file('page.html', 'html', 404);
+    const id = m[1] as string;
+    const rest = m[2] ?? '';
+    if (rest === 'pengetahuan') return redirect(302, `/${id}/pengetahuan/identitas`);
+    const known = PAGE_PATHS.some((re) => re.test(rest)) || validContactPath(rest);
+    if (!known || !(await getProject(id))) return file('page.html', 'html', 404);
+    // Proyek terakhir yang dibuka: "/" kembali ke sini.
+    return file('page.html', 'html', 200, {
+      'set-cookie': `${LAST_PROJECT}=${id}; SameSite=Strict; Path=/; Max-Age=${365 * 86400}${secure}`,
+    });
+  }
 
+  /** /api/…: masuk, keluar, daftar proyek, dan /api/<proyek>/… untuk satu proyek. */
+  async function handleApi(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+    url: URL,
+    method: string,
+    json: (code: number, body: unknown) => void,
+    secure: string
+  ): Promise<void> {
     if (!cfg.adminPassword || cfg.adminPassword.length < 8) {
       return json(503, { error: 'Dashboard belum diatur: ADMIN_PASSWORD kosong atau kurang dari 8 karakter.' });
     }
@@ -229,7 +384,7 @@ export function createAdminHandler(store: AdminStore) {
       }
     }
 
-    if (path === '/admin/api/login' && method === 'POST') {
+    if (path === '/api/login' && method === 'POST') {
       if (Date.now() < lockedUntil) {
         return json(429, { error: `Terlalu banyak percobaan. Coba lagi dalam ${Math.ceil((lockedUntil - Date.now()) / 1000)} detik.` });
       }
@@ -241,22 +396,21 @@ export function createAdminHandler(store: AdminStore) {
         return json(401, { error: 'Kata sandi salah.' });
       }
       fails = 0;
-      const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
       res.setHeader(
         'set-cookie',
-        `${COOKIE}=${sign(Date.now() + SESSION_MS)}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=${SESSION_MS / 1000}${secure}`
+        `${COOKIE}=${sign(Date.now() + SESSION_MS)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MS / 1000}${secure}`
       );
       return json(200, { ok: true });
     }
 
     if (!authed(req)) return json(401, { error: 'Belum masuk.' });
 
-    if (path === '/admin/api/logout' && method === 'POST') {
-      res.setHeader('set-cookie', `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=0`);
+    if (path === '/api/logout' && method === 'POST') {
+      res.setHeader('set-cookie', `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
       return json(200, { ok: true });
     }
 
-    if (path === '/admin/api/projects' && method === 'GET') {
+    if (path === '/api/projects' && method === 'GET') {
       const [rows, statuses] = await Promise.all([listProjects(), readAllStatus()]);
       const byId = new Map(statuses.map((x) => [x.project, x]));
       return json(200, {
@@ -270,11 +424,11 @@ export function createAdminHandler(store: AdminStore) {
 
     // Proyek baru = bisnis baru dengan nomor WhatsApp-nya sendiri. Bot-nya
     // dinyalakan server (alice-reconcile.timer) begitu barisnya ada.
-    if (path === '/admin/api/projects' && method === 'POST') {
+    if (path === '/api/projects' && method === 'POST') {
       const body = JSON.parse((await readBody(req, 4000)).toString('utf8') || '{}') as Record<string, unknown>;
       const id = String(body.id ?? '').trim().toLowerCase();
       if (!PROJECT_ID.test(id) || RESERVED.has(id)) {
-        return json(400, { error: 'Id proyek: 2–32 huruf kecil, angka, atau tanda minus (mis. toko-budi).' });
+        return json(400, { error: 'Id proyek: 2–32 huruf kecil, angka, atau tanda minus (mis. toko-budi), dan bukan kata yang dipakai alamat dashboard (api, login, assets, …).' });
       }
       const template = String(body.template ?? 'generic');
       if (!TEMPLATES.includes(template)) return json(400, { error: `Bibit profil tidak dikenal. Pilih: ${TEMPLATES.join(', ')}` });
@@ -290,15 +444,15 @@ export function createAdminHandler(store: AdminStore) {
       return json(200, { ok: true, project: projectView((await getProject(id)) as Project) });
     }
 
-    // Semua yang lain milik satu proyek: /admin/<proyek>/api/… dan /admin/<proyek>/media/….
-    const scoped = path.match(/^\/admin\/([a-z0-9-]{2,32})(\/(?:api|media)\/.*)$/);
+    // Semua yang lain milik satu proyek: /api/<proyek>/….
+    const scoped = path.match(/^\/api\/([a-z0-9-]{2,32})(\/.*)$/);
     if (!scoped || RESERVED.has(scoped[1] as string)) return json(404, { error: 'Tidak ada.' });
     const ctx = await loadProject(scoped[1] as string);
     if (!ctx) return json(404, { error: 'Proyek tidak ditemukan.' });
-    return withProject(ctx, () => handleProject(req, res, `/admin${scoped[2]}`, url, method, json));
+    return withProject(ctx, () => handleProject(req, res, scoped[2] as string, url, method, json));
   }
 
-  /** Permintaan untuk satu proyek; `path` sudah tanpa id proyeknya (/admin/api/…). */
+  /** Permintaan untuk satu proyek; `path` sudah tanpa /api/<proyek> (mis. /state). */
   async function handleProject(
     req: IncomingMessage,
     res: ServerResponse,
@@ -309,7 +463,7 @@ export function createAdminHandler(store: AdminStore) {
   ): Promise<void> {
     const project = currentProject();
 
-    if (path === '/admin/api/state' && method === 'GET') {
+    if (path === '/state' && method === 'GET') {
       return json(200, {
         profile: editableView(),
         business: biz.id,
@@ -317,10 +471,11 @@ export function createAdminHandler(store: AdminStore) {
         testReady: llmEnabled() || brain !== llmBrain,
         status: await store.status(),
         alerts: await store.alerts(),
+        month: monthCost(await store.usage()),
       });
     }
 
-    if (path === '/admin/api/profile' && method === 'PUT') {
+    if (path === '/profile' && method === 'PUT') {
       const body = JSON.parse((await readBody(req, 400_000)).toString('utf8')) as Record<string, unknown>;
       let changes;
       try {
@@ -363,7 +518,7 @@ export function createAdminHandler(store: AdminStore) {
       return json(200, { ok: true, profile: editableView(), autoPdf });
     }
 
-    if (path === '/admin/api/leads' && method === 'GET') {
+    if (path === '/leads' && method === 'GET') {
       return json(200, {
         fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })),
         rows: await store.leads(),
@@ -372,10 +527,11 @@ export function createAdminHandler(store: AdminStore) {
       });
     }
 
-    // Tombol per pelanggan di halaman Lead. Ditulis langsung ke database; bot
+    // Satu pelanggan: percakapannya, tahap pipeline + catatan, balasan dari
+    // web, dan tombol bot / sudah ditangani. Ditulis langsung ke database; bot
     // membaca penahan chat di tiap giliran, jadi berlaku seketika.
-    const lead = path.match(/^\/admin\/api\/leads\/([^/]+)\/(bot|handled)$/);
-    if (lead && method === 'POST') {
+    const lead = path.match(/^\/leads\/([^/]+)(?:\/(bot|handled|reply))?$/);
+    if (lead) {
       let phone = '';
       try {
         phone = decodeURIComponent(lead[1] as string);
@@ -383,20 +539,110 @@ export function createAdminHandler(store: AdminStore) {
         // alamat rusak: dianggap nomor tidak sah di bawah
       }
       if (!CONTACT.test(phone)) return json(400, { error: 'Nomor tidak sah.' });
-      if (lead[2] === 'bot') {
-        const body = JSON.parse((await readBody(req, 200)).toString('utf8') || '{}') as { mode?: string };
-        if (body.mode !== 'on' && body.mode !== 'off') return json(400, { error: 'mode harus "on" atau "off".' });
-        if (!(await switchBot(phone, body.mode, Date.now()))) return json(404, { error: 'Kontak tidak ditemukan.' });
-      } else if (!(await markHandled(phone, Date.now()))) {
-        return json(404, { error: 'Kontak tidak ditemukan.' });
+      if (!lead[2] && method === 'GET') return leadDetail(phone, url, json);
+      if (!lead[2] && method === 'PUT') {
+        const body = JSON.parse((await readBody(req, 8000)).toString('utf8') || '{}') as Record<string, unknown>;
+        const patch: { stage?: Stage; note?: string | null } = {};
+        if ('stage' in body) {
+          if (!STAGES.includes(body.stage as Stage)) return json(400, { error: `Tahap harus salah satu dari: ${STAGES.join(', ')}.` });
+          patch.stage = body.stage as Stage;
+        }
+        if ('note' in body) {
+          const note = String(body.note ?? '').replace(/\r\n/g, '\n').trim();
+          if (note.length > 2000) return json(400, { error: 'Catatan terlalu panjang (maksimal 2.000 karakter).' });
+          patch.note = note || null;
+        }
+        if (!Object.keys(patch).length) return json(400, { error: 'Isi stage atau note.' });
+        const c = await setStageNote(phone, patch);
+        if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
+        return json(200, { ok: true, stage: c.stage, note: c.note });
       }
-      return json(200, { ok: true });
+      if (lead[2] === 'reply' && method === 'POST') {
+        const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as { text?: unknown };
+        const text = String(body.text ?? '').replace(/\r\n/g, '\n').trim();
+        if (!text) return json(400, { error: 'Balasan kosong.' });
+        if (text.length > MAX_REPLY) return json(400, { error: `Balasan terlalu panjang (maksimal ${MAX_REPLY.toLocaleString('id-ID')} karakter).` });
+        const c = await getContact(phone);
+        if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
+        if (!c.address) return json(400, { error: 'Pelanggan ini belum pernah chat ke nomor bot, jadi belum bisa dibalas dari sini. Balas dari aplikasi WhatsApp.' });
+        // Sama persis dengan admin yang membalas dari HP: bot mundur di chat ini.
+        const at = Date.now();
+        const taken = await applyHumanReply(c.address, text, at, 'dashboard');
+        const payload: ReplyPayload = { phone, address: c.address, text, by: 'dashboard', message_id: taken?.messageId ?? null };
+        const outboxId = await outboxAdd('reply', payload, at);
+        console.log(`[dashboard] ${currentProject().id}: balasan ke ${phone} diantre (#${outboxId})`);
+        return json(200, {
+          ok: true,
+          outbox_id: outboxId,
+          message: { id: taken?.messageId ?? null, dir: 'human', text, at, kind: 'dashboard' },
+          stage: taken?.contact.stage ?? c.stage,
+        });
+      }
+      if (lead[2] && lead[2] !== 'reply' && method === 'POST') {
+        if (lead[2] === 'bot') {
+          const body = JSON.parse((await readBody(req, 200)).toString('utf8') || '{}') as { mode?: string };
+          if (body.mode !== 'on' && body.mode !== 'off') return json(400, { error: 'mode harus "on" atau "off".' });
+          if (!(await switchBot(phone, body.mode, Date.now()))) return json(404, { error: 'Kontak tidak ditemukan.' });
+        } else if (!(await markHandled(phone, Date.now()))) {
+          return json(404, { error: 'Kontak tidak ditemukan.' });
+        }
+        return json(200, { ok: true });
+      }
+    }
+
+    // Pertanyaan yang dioper ke staf, dikelompokkan per pertanyaan yang sama.
+    if (path === '/handoffs' && method === 'GET') {
+      const resolved = url.searchParams.get('status') === 'resolved';
+      return json(200, { groups: groupHandoffs(await listHandoffs(resolved, resolved ? 500 : 2000)) });
+    }
+
+    // Jawab satu pertanyaan (masuk ke "Pengetahuan lain") atau abaikan; semua
+    // pertanyaan yang sama di kelompoknya ikut selesai.
+    const resolve = path.match(/^\/handoffs\/(\d{1,10})\/resolve$/);
+    if (resolve && method === 'POST') {
+      const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as { answer?: unknown; resolution?: unknown };
+      if (body.resolution !== 'ditambahkan' && body.resolution !== 'diabaikan') {
+        return json(400, { error: 'resolution harus "ditambahkan" atau "diabaikan".' });
+      }
+      const row = await getHandoff(Number(resolve[1]));
+      if (!row) return json(404, { error: 'Pertanyaan tidak ditemukan.' });
+      if (row.resolved_at) return json(409, { error: 'Pertanyaan ini sudah diselesaikan.' });
+      const norm = normQuestion(row.question);
+      const ids = (await listHandoffs(false)).filter((r) => normQuestion(r.question) === norm).map((r) => r.id);
+      const at = Date.now();
+      if (body.resolution === 'diabaikan') {
+        await resolveHandoffs(ids, 'diabaikan', null, at);
+        return json(200, { ok: true, resolved: ids.length });
+      }
+      const answer = String(body.answer ?? '').replace(/\r\n/g, '\n').trim();
+      if (!answer) return json(400, { error: 'Tulis jawabannya dulu.' });
+      if (answer.length > 4000) return json(400, { error: 'Jawaban terlalu panjang (maksimal 4.000 karakter).' });
+      const block = `T: ${row.question.replace(/\s+/g, ' ').trim()}\nJ: ${answer}`;
+      const notes = biz.notes.trim() ? `${biz.notes.trimEnd()}\n\n${block}` : block;
+      let changes;
+      try {
+        changes = validate({ notes });
+      } catch {
+        return json(400, { error: 'Pengetahuan lain sudah terlalu panjang untuk ditambah jawaban ini (maksimal 30.000 karakter). Rapikan dulu di Pengetahuan > Lainnya.' });
+      }
+      await store.save(changes);
+      await resolveHandoffs(ids, 'ditambahkan', answer, at);
+      console.log(`[dashboard] ${currentProject().id}: jawaban untuk "${row.question.slice(0, 60)}" ditambahkan ke pengetahuan (${ids.length} pertanyaan)`);
+      return json(200, { ok: true, resolved: ids.length, profile: editableView() });
+    }
+
+    // Empat angka Beranda, 7 hari terakhir menurut zona waktu bot.
+    if (path === '/metrics' && method === 'GET') {
+      const t = Date.now();
+      const days = Array.from({ length: METRIC_DAYS }, (_, i) => localDay(t - (METRIC_DAYS - 1 - i) * DAY));
+      const m = await metrics(days, t - (METRIC_DAYS + 1) * DAY, cfg.tz);
+      return json(200, { windowDays: METRIC_DAYS, ...m, today: m.days[m.days.length - 1]?.conversations ?? 0 });
     }
 
     // Pelanggan lama: daftar nomor (dan nama) yang sudah dikenal bisnis ini,
     // dicatat langsung sebagai kontak. Impor baru digabung dengan yang lama;
     // kontak yang sudah ada tidak ditimpa.
-    if (path === '/admin/api/known' && method === 'POST') {
+    if (path === '/known' && method === 'POST') {
       const body = JSON.parse((await readBody(req, 400_000)).toString('utf8') || '{}') as { text?: string; off?: boolean };
       const list = new Map<string, string>();
       let invalid = 0;
@@ -425,7 +671,7 @@ export function createAdminHandler(store: AdminStore) {
     }
 
     // --- WhatsApp proyek ini: keadaan, kode pairing, tautkan ulang ---
-    if (path === '/admin/api/wa' && method === 'GET') {
+    if (path === '/wa' && method === 'GET') {
       const st = await readStatus(project.id);
       return json(200, {
         wa: st
@@ -440,7 +686,7 @@ export function createAdminHandler(store: AdminStore) {
       });
     }
 
-    if (path === '/admin/api/wa/pair' && method === 'POST') {
+    if (path === '/wa/pair' && method === 'POST') {
       if (project.row.transport !== 'baileys') return json(400, { error: 'Jalur Cloud API tidak memakai kode pairing.' });
       const body = JSON.parse((await readBody(req, 500)).toString('utf8') || '{}') as { number?: string };
       const raw = String(body.number ?? project.row.wa_number ?? '').trim();
@@ -451,14 +697,14 @@ export function createAdminHandler(store: AdminStore) {
       return json(200, { ok: true });
     }
 
-    if (path === '/admin/api/wa/reset' && method === 'POST') {
+    if (path === '/wa/reset' && method === 'POST') {
       await setPairingRequest(project.id, { reset: true, at: Date.now() });
       console.log(`[dashboard] ${project.id}: sesi WhatsApp diputus untuk ditautkan ulang`);
       return json(200, { ok: true });
     }
 
     // Baris proyek: nama, nomor bot, nomor sales, jalur, aktif, dan jeda semua chat.
-    if (path === '/admin/api/project' && method === 'PUT') {
+    if (path === '/project' && method === 'PUT') {
       const body = JSON.parse((await readBody(req, 4000)).toString('utf8') || '{}') as Record<string, unknown>;
       let patch: ProjectPatch;
       try {
@@ -472,15 +718,15 @@ export function createAdminHandler(store: AdminStore) {
       return json(200, { ok: true, project: projectView(row) });
     }
 
-    if (path === '/admin/api/alerts' && method === 'GET') {
+    if (path === '/alerts' && method === 'GET') {
       return json(200, { alerts: await store.alerts(), errors: await store.errors(), status: await store.status() });
     }
 
-    if (path === '/admin/api/usage' && method === 'GET') {
+    if (path === '/usage' && method === 'GET') {
       return json(200, { usage: await store.usage() });
     }
 
-    if (path === '/admin/api/test' && method === 'POST') {
+    if (path === '/test' && method === 'POST') {
       const body = JSON.parse((await readBody(req, 20_000)).toString('utf8')) as {
         text?: string;
         history?: { dir: 'in' | 'out'; text: string }[];
@@ -504,7 +750,7 @@ export function createAdminHandler(store: AdminStore) {
 
     // Unggah foto atau PDF. Berkasnya baru "dipakai" setelah daftar produk (atau
     // logo) yang merujuknya disimpan; yang tidak pernah dirujuk dibuang saat itu.
-    if (path === '/admin/api/files' && method === 'POST') {
+    if (path === '/files' && method === 'POST') {
       if (biz.files.length >= MAX_FILES) return json(400, { error: `Maksimal ${MAX_FILES} berkas.` });
       let data: Buffer;
       try {
@@ -527,7 +773,7 @@ export function createAdminHandler(store: AdminStore) {
       });
     }
 
-    const one = path.match(/^\/admin\/api\/files\/(d[0-9a-f]{8})(\/match|\/read)?$/);
+    const one = path.match(/^\/files\/(d[0-9a-f]{8})(\/match|\/read)?$/);
     if (one) {
       const f = fileById(one[1] as string);
       if (!f) return json(404, { error: 'PDF tidak ditemukan.' });
@@ -559,7 +805,7 @@ export function createAdminHandler(store: AdminStore) {
     }
 
     // Berkas unggahan: hanya yang terdaftar di profil, jadi tidak ada jalan keluar folder.
-    const media = path.match(/^\/admin\/media\/([fd][0-9a-f]{8}\.(jpg|png|webp|pdf))$/);
+    const media = path.match(/^\/media\/([fd][0-9a-f]{8}\.(jpg|png|webp|pdf))$/);
     if (media && method === 'GET') {
       const f = biz.files.find((x) => x.file === media[1]);
       const data = f ? await store.getPhoto(f.file) : null;
@@ -607,7 +853,7 @@ export async function startAdmin(store: AdminStore): Promise<number> {
   });
   server = s;
   const port = adminPort() as number;
-  console.log(`[dashboard] http://${cfg.adminHost === '0.0.0.0' ? 'localhost' : cfg.adminHost}:${port}/admin`);
+  console.log(`[dashboard] http://${cfg.adminHost === '0.0.0.0' ? 'localhost' : cfg.adminHost}:${port}/`);
   if (cfg.adminHost !== '127.0.0.1' && cfg.adminHost !== 'localhost') {
     console.log('[dashboard] PERINGATAN: terbuka ke jaringan. Taruh di belakang HTTPS.');
   }

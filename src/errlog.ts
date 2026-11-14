@@ -5,7 +5,7 @@
  * memegang dashboard belum tentu bisa melihat terminalnya. Jadi semua yang
  * ditulis ke console.error / console.warn — ditambah galat dari pustaka
  * WhatsApp — juga disimpan di database, per proyek, dan tampil di dashboard
- * (halaman "Peringatan & log").
+ * (dashboard: Pengaturan > Lanjutan > Catatan galat).
  */
 
 import { format } from 'node:util';

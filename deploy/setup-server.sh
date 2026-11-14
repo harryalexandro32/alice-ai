@@ -135,4 +135,4 @@ echo
 echo "Berikutnya: isi LLM_API_KEY (dan Telegram/SMTP kalau perlu) di $APP_DIR/.env, lalu:"
 echo "  systemctl restart alice-admin 'alice-bot@*'"
 echo "  journalctl -u alice-admin -u 'alice-bot@*' -f"
-echo "Buka https://$DOMAIN/admin (atau alice.lukicenturi.com) > Pengaturan > WhatsApp untuk menautkan nomor."
+echo "Buka https://$DOMAIN/gfan/pengaturan/whatsapp (atau https://alice.lukicenturi.com/gfan/pengaturan/whatsapp) untuk menautkan nomor."
