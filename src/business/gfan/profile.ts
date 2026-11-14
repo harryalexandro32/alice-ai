@@ -81,7 +81,23 @@ export const gfan: Business = {
     '3. Pilih model TERKECIL yang air delivery-nya sudah mencukupi kebutuhan, dan sebutkan satu tingkat di atasnya sebagai pilihan kalau ingin cadangan. Jangan melompati model yang sudah cukup. Kalau tidak ada satu unit yang cukup, jumlah unit = kebutuhan ÷ air delivery per unit, dibulatkan ke atas.\n' +
     '   Contoh: kebutuhan 72–90 m³/h → GFC10-10A (100 m³/h) sudah cukup, jadi itu yang disarankan; GFC10-12A (120 m³/h) hanya disebut sebagai pilihan cadangan.\n' +
     '4. Pilih seri menurut cara pasang: di plafon → Ceiling Fan GFC; di dinding → GFAF-A, atau GFAF-AB kalau perlu shutter yang menutup saat mati; lewat ducting → GAI; parkiran/basement → Jet Fan GZ (jumlahnya ditentukan tim teknis).\n' +
-    '5. Tutup dengan catatan bahwa ini perkiraan awal dan tim teknis GFAN akan memastikan sebelum pemesanan.',
+    '5. Tutup dengan catatan bahwa ini perkiraan awal dan tim teknis GFAN akan memastikan sebelum pemesanan.\n\n' +
+    'AIR COOLER (pendingin evaporatif) untuk pabrik, gudang, workshop, showroom, padel court, area komersial\n' +
+    'Air cooler berbeda dengan AC: butuh udara segar masuk dan jalur buang udara panas supaya pendinginannya terasa. Tabel pergantian udara di atas untuk ventilasi; untuk air cooler pakai tabel ini.\n' +
+    'Pergantian udara per jam (ACH) untuk air cooler, acuan awal desain, bukan angka wajib:\n' +
+    '- gudang: 10–15\n' +
+    '- pabrik umum: 15–25\n' +
+    '- area produksi panas: 20–30\n' +
+    '- workshop: 15–25\n' +
+    '- area komersial terbuka (showroom, padel court): 10–20\n' +
+    'Langkah:\n' +
+    '1. Volume (m³) = panjang × lebar × tinggi. Tinggi bangunan seperti ini jangan diasumsikan, tanyakan.\n' +
+    '2. Kebutuhan airflow (m³/jam) = volume × ACH.\n' +
+    '3. Jumlah unit = kebutuhan airflow ÷ airflow per unit air cooler, dibulatkan ke atas.\n' +
+    '   Contoh: gudang 50 × 20 × 7 m = 7.000 m³; target 15 ACH → 105.000 m³/jam; unit 18.000 m³/jam → 105.000 ÷ 18.000 = 5,83 → 6 unit (terpasang 108.000 m³/jam).\n' +
+    '4. Air cooler tidak ada di DAFTAR PRODUK. Jangan mengarang model atau kapasitas air cooler. Kalau pelanggan menyebut airflow per unitnya, hitungkan jumlah unitnya; kalau tidak, hitung kebutuhan airflow-nya saja dan sampaikan tim kami yang akan menginfokan unitnya (set "intent" ke "handoff").\n' +
+    '5. Jumlah unit saja belum menjamin ruangan adem. Sarankan juga exhaust fan untuk membuang udara panas dan lembap (dinding → GFAF-A/GFAF-AB, ducting → GAI) dan pastikan ada jalur udara masuk; jumlah exhaust fan dan posisinya ditentukan tim teknis.\n' +
+    '6. Ingatkan singkat bila relevan: arah hembusan sebaiknya mengikuti aliran udara ruangan; air cooler kurang efektif kalau udaranya sudah lembap; panas mesin, atap, matahari, dan jumlah orang ikut memengaruhi hasil.',
 
   handoffTopics: 'harga, diskon, stok, waktu kirim, ongkir, garansi, cara bayar, alamat/kontak toko',
   handoffLabel: 'harga/stok',
@@ -102,6 +118,7 @@ export const gfan: Business = {
   replyDelayMax: 30,
 
   evalCases: [
+    { q: 'gudang 50x20 tinggi 7 m mau pakai air cooler 18000 m3/jam per unit, butuh berapa unit?', has: [/105\.?000/, /\b6\*? unit/] },
     { q: 'GFAF-40A berapa watt dan berapa air delivery nya?', has: [/130/, /2\.?880/] },
     { q: 'exhaust fan industri yang 24 inci ada? modelnya apa', has: [/GFAF-60A/] },
     { q: 'kipas plafon buat toilet yang paling kecil apa', has: [/GFC10-10A/] },
