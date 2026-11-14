@@ -338,18 +338,28 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="ch"><h2>Follow-up</h2><p class="help" data-en="The reminder sent when a customer goes quiet. The wait is picked at random between the earliest and latest value for each customer, so reminders do not all arrive exactly the same number of hours later. It is only sent between the “from” and “until” hours.">Pesan pengingat saat pelanggan diam. Lamanya diacak di antara “paling cepat” dan “paling lama” untuk tiap pelanggan, supaya pengingat tidak selalu datang tepat sekian jam kemudian. Hanya dikirim di antara jam “mulai” dan “sampai”.</p></div>
+        <div class="card fu">
+          <div class="ch"><h2>Follow-up</h2><p class="help" data-en="An automatic reminder when a customer stops replying.">Pengingat otomatis kalau pelanggan berhenti membalas.</p></div>
           <div class="cb">
-            <label class="check"><input type="checkbox" data-set-bool="followupSmart"><span data-en="<b>Write each follow-up for that conversation.</b> The bot refers to what was last discussed instead of sending everyone the same sentence. If the LLM is unavailable, the fixed sentence below is used."><b>Tulis follow-up menurut isi percakapannya.</b> Bot menyinggung hal yang terakhir dibahas, bukan mengirim kalimat yang sama ke semua orang. Kalau LLM sedang tidak bisa dipakai, kalimat tetap di bawah yang dikirim.</span></label>
-            <div class="row5">
-              <label class="f"><span data-en="After being quiet for, at the earliest (hours)">Setelah diam, paling cepat (jam)</span><input type="number" min="1" max="72" data-set="followupAfterHours"></label>
-              <label class="f"><span data-en="…at the latest (hours)">…paling lama (jam)</span><input type="number" min="1" max="96" data-set="followupAfterHoursMax"></label>
-              <label class="f"><span data-en="At most per customer">Paling banyak per pelanggan</span><input type="number" min="0" max="5" data-set="followupMaxTotal"></label>
-              <label class="f"><span data-en="From hour">Mulai jam</span><input type="number" min="0" max="23" data-set="followupStartHour"></label>
-              <label class="f"><span data-en="Until hour">Sampai jam</span><input type="number" min="1" max="24" data-set="followupEndHour"></label>
+            <div class="sub fu-first" data-en="When it is sent">Kapan dikirim</div>
+            <!-- Teks di antara kotak dipecah per span: applyLang mengganti innerHTML tiap [data-en], jadi kotak isian tidak boleh berada di dalamnya. -->
+            <p class="fu-line"><span data-en="After the customer has been quiet for">Setelah pelanggan diam</span> <input type="number" class="fu-num" min="1" max="72" data-set="followupAfterHours" aria-label="Kirim setelah pelanggan diam paling cepat (jam)" data-en-title="Send after the customer has been quiet for at least (hours)"> <span class="fu-pair"><span data-en="to">sampai</span> <input type="number" class="fu-num" min="1" max="96" data-set="followupAfterHoursMax" aria-label="Kirim setelah pelanggan diam paling lama (jam)" data-en-title="Send after the customer has been quiet for at most (hours)"></span> <span class="fu-pair"><span data-en="hours, only between">jam, hanya antara pukul</span> <input type="number" class="fu-num" min="0" max="23" data-set="followupStartHour" aria-label="Kirim hanya mulai pukul (jam 0–23)" data-en-title="Send only from (hour, 0–23)"></span> <span class="fu-pair"><span data-en="and">dan</span> <input type="number" class="fu-num" min="1" max="24" data-set="followupEndHour" aria-label="Kirim hanya sampai pukul (jam 1–24)" data-en-title="Send only until (hour, 1–24)"></span><span data-en="&nbsp;o'clock.">.</span></p>
+            <p class="fu-line"><span class="fu-pair"><span data-en="At most">Maksimal</span> <input type="number" class="fu-num" min="0" max="5" data-set="followupMaxTotal" aria-label="Paling banyak follow-up per pelanggan" data-en-title="Most follow-ups per customer"></span> <span data-en="times per customer.">kali per pelanggan.</span></p>
+            <div class="sub" id="fuModeLbl" data-en="Message">Isi pesan</div>
+            <!-- Kotak centang tersembunyi tetap menjadi isian followupSmart (data-set-bool); dua tombol di bawah hanya mengubahnya. -->
+            <input type="checkbox" id="fuSmart" data-set-bool="followupSmart" checked hidden>
+            <div class="filters fu-mode" id="fuMode" role="radiogroup" aria-labelledby="fuModeLbl">
+              <button type="button" role="radio" class="on" aria-checked="true" tabindex="0" data-val="1" data-en="Based on the conversation (recommended)">Sesuai percakapan (disarankan)</button>
+              <button type="button" role="radio" aria-checked="false" tabindex="-1" data-val="0" data-en="Fixed sentence">Kalimat tetap</button>
             </div>
-            <label class="f" style="margin:0"><span data-en="Follow-up sentence">Kalimat follow-up</span><input type="text" data-key="followupClosing"><small data-en="The end of the fixed reminder when the customer's data is complete but they have gone quiet.">Ujung pesan pengingat tetap saat data pelanggan sudah lengkap tapi ia diam.</small></label>
+            <label class="f"><span data-smart="1" data-en="Fallback sentence">Kalimat cadangan</span><span data-smart="0" data-en="Sentence that is sent" hidden>Kalimat yang dikirim</span><input type="text" data-key="followupClosing"><small data-smart="1" data-en="Used when the LLM is unavailable.">Dipakai kalau LLM sedang tidak bisa dipakai.</small><small data-smart="0" data-en="The end of the fixed reminder when the customer's data is complete but they have gone quiet." hidden>Ujung pesan pengingat saat data pelanggan sudah lengkap tapi ia diam.</small></label>
+            <details class="fold">
+              <summary data-en="How it works">Cara kerjanya</summary>
+              <div class="fold-body">
+                <p class="help" data-en="The wait is picked at random between the two values for each customer, so reminders do not all arrive at the same hour.">Lama tunggu diacak di antara kedua angka untuk tiap pelanggan, supaya pengingat tidak datang pada jam yang sama.</p>
+                <p class="help" data-en="Nothing is sent outside these hours.">Di luar jam tersebut tidak ada yang dikirim.</p>
+              </div>
+            </details>
           </div>
         </div>
 

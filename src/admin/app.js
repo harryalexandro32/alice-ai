@@ -205,6 +205,7 @@ function fillSettings() {
     const k = n.dataset.setList;
     n.value = (set[k] ?? eff[k] ?? []).join(', ');
   }
+  syncFollowupMode();
 }
 function touchSetting(apply) {
   profile.settings = { ...(profile.settings || {}) };
@@ -217,6 +218,39 @@ document.addEventListener('input', (e) => {
   if (d.set) touchSetting((x) => { if (e.target.value === '') delete x[d.set]; else x[d.set] = Number(e.target.value); });
   else if (d.setBool) touchSetting((x) => { x[d.setBool] = e.target.checked; });
   else if (d.setList) touchSetting((x) => { x[d.setList] = e.target.value.split(/[,;\s]+/).map((v) => v.trim()).filter(Boolean); });
+});
+
+// Follow-up, "Isi pesan": dua tombol (radiogroup) mengubah kotak centang tersembunyi #fuSmart
+// (data-set-bool="followupSmart") lalu memicu event input, jadi muat, tanda berubah, dan simpan
+// tetap lewat jalur data-set-bool di atas. Label kotak kalimat ikut pilihan ([data-smart]).
+function syncFollowupMode() {
+  const smart = $('fuSmart').checked;
+  for (const b of $('fuMode').querySelectorAll('[role=radio]')) {
+    const on = (b.dataset.val === '1') === smart;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
+  }
+  for (const n of document.querySelectorAll('.fu [data-smart]')) n.hidden = (n.dataset.smart === '1') !== smart;
+}
+function pickFollowupMode(smart) {
+  const box = $('fuSmart');
+  if (box.checked !== smart) {
+    box.checked = smart;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  syncFollowupMode();
+}
+$('fuMode').addEventListener('click', (e) => {
+  const b = e.target.closest('[role=radio]');
+  if (b) pickFollowupMode(b.dataset.val === '1');
+});
+// Panah kiri/kanan/atas/bawah berpindah pilihan, seperti radio biasa.
+$('fuMode').addEventListener('keydown', (e) => {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+  e.preventDefault();
+  pickFollowupMode(!$('fuSmart').checked);
+  $('fuMode').querySelector('[aria-checked=true]').focus();
 });
 
 // ---------- penerima notifikasi & rute ----------

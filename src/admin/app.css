@@ -151,6 +151,18 @@ label.inline select { width: auto; min-width: 140px; font-weight: 400; }
 .check { display: flex; gap: 9px; align-items: flex-start; margin-bottom: 12px; }
 .check input { margin-top: 3px; }
 div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+/* Kartu Follow-up: satu kalimat dengan kotak angka di dalamnya. Tinggi baris = tinggi kotak + jarak,
+   jadi baris yang terbungkus di HP tetap rata dan kotaknya sejajar dengan teks. */
+.fu .sub.fu-first { margin-top: 0; }
+.fu-line { margin: 0 0 4px; line-height: calc(var(--control-h) + 8px); }
+.fu .fu-num { width: 64px; padding: 0 8px; vertical-align: middle; }
+/* Kata sambung pendek tetap satu baris dengan kotaknya (kalimat pembuka terlalu panjang untuk itu). */
+.fu-pair { white-space: nowrap; }
+.fu-mode { margin-bottom: 14px; }
+/* Pilihan panjang (EN) boleh dua baris di HP: tinggi ikut isi, bukan terpotong di 30 px. */
+.filters.fu-mode button { height: auto; min-height: var(--control-h-sm); padding-top: 6px; padding-bottom: 6px; line-height: 1.3; text-align: center; }
+.fu details.fold { margin: 0; }
+.fu details.fold .help { margin-bottom: 8px; }
 .guide { color: var(--muted); font-size: 13px; }
 .guide ol { margin: 6px 0 12px; padding-left: 20px; }
 .guide li { margin-bottom: 3px; }
