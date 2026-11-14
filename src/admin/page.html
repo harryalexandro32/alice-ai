@@ -104,8 +104,8 @@
 <div class="app" id="app" hidden>
   <aside>
     <nav id="nav">
-      <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span><span class="badge" id="homeBadge"></span></a>
-      <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span></a>
+      <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span></a>
+      <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span><span class="badge" id="convBadge"></span></a>
       <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span data-en="Bot knowledge">Pengetahuan bot</span></div>
       <a data-nav="identitas" class="sub"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg><span data-en="Identity">Identitas</span></a>
       <a data-nav="produk" class="sub"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
@@ -138,9 +138,12 @@
       <!-- ================= Beranda ================= -->
       <section data-page="beranda">
         <div class="tiles four" id="tiles"></div>
+        <!-- Grafik digambar app.js (columnChart / stackedBar100) setelah angkanya dimuat. -->
+        <div class="charts"><div id="chartConv"></div><div id="chartMsgs"></div></div>
+        <div id="chartStages"></div>
         <div class="card">
           <div class="ch"><h2 data-en="Needs attention">Perlu perhatian</h2><p class="help" data-en="Customers waiting for a person, and problems with the bot in the last 24 hours. Open a conversation to reply from here.">Pelanggan yang menunggu orang, dan masalah bot dalam 24 jam terakhir. Buka percakapannya untuk membalas dari sini.</p></div>
-          <div class="cb"><div class="scroll"><table class="list" id="attention"></table></div></div>
+          <div class="cb"><p class="help" id="attentionHelp" hidden></p><div class="scroll"><table class="list" id="attention"></table></div></div>
         </div>
         <div class="card">
           <div class="ch"><h2 data-en="Unanswered questions">Pertanyaan yang belum terjawab</h2><p class="help" data-en="Questions the bot handed to your staff because it did not know the answer. Answer one once and the bot can answer it next time.">Pertanyaan yang dioper bot ke staf karena ia tidak tahu jawabannya. Jawab sekali, lain kali bot bisa menjawabnya sendiri.</p></div>

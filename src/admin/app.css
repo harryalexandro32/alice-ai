@@ -9,6 +9,11 @@
   --field: #ffffff; --surface2: #fafafb; --surface3: #f3f4f5; --hover: #f2f3f4; --code: #f0f1f2; --chip: #eef0f1;
   --inverse: #1d1f20; --off: #c5c8cc; --ink2: #36393a; --field-line: #b6b9bd; --dash: #a9adb2; --warn-line: #efd9a8; --focus: #9cc0f5;
   --bubble-in: #ffffff; --bubble-out: #e8f0fc; --bubble-human: #e6f4ea;
+  /* Warna grafik: seri 1 selalu --viz-1, seri 2 selalu --viz-2, dst. (urutan tetap, tidak diputar).
+     --viz-on-N: warna teks di atas segmen berwarna N. --viz-track: jalur meter (biru lebih muda). */
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-4: #eda100;
+  --viz-grid: var(--line-soft); --viz-surface: var(--card); --viz-track: #cde2fb;
+  --viz-on-1: #ffffff; --viz-on-2: #1d1f20; --viz-on-3: #1d1f20; --viz-on-4: #1d1f20;
 }
 :root[data-theme=dark] {
   color-scheme: dark;
@@ -18,6 +23,8 @@
   --field: #15181a; --surface2: #202427; --surface3: #23272b; --hover: #24282c; --code: #2a2f33; --chip: #2a2f33;
   --inverse: #0b0c0d; --off: #4a5056; --ink2: #cfd3d7; --field-line: #454b51; --dash: #555c63; --warn-line: #5c4a22; --focus: #2f5ea8;
   --bubble-in: #202427; --bubble-out: #1a2c47; --bubble-human: #17301f;
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500; --viz-track: #184f95;
+  --viz-on-1: #121416; --viz-on-2: #121416; --viz-on-3: #121416; --viz-on-4: #121416;
 }
 :root[data-theme=dark] .topbar, :root[data-theme=dark] aside, :root[data-theme=dark] .strip { background: var(--card); }
 :root[data-theme=dark] .btn.ghost, :root[data-theme=dark] .btn.danger { background: var(--card); }
@@ -147,8 +154,8 @@ div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
 .guide li { margin-bottom: 3px; }
 .guide b { color: var(--ink); }
 .logo-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.logo-box { width: 132px; height: 60px; border: 1px dashed var(--dash); border-radius: var(--radius); display: grid; place-items: center; background: var(--surface2); color: var(--faint); font-size: 12px; overflow: hidden; }
-.logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.logo-box { width: 120px; height: 120px; flex: none; padding: 8px; border: 1px dashed var(--dash); border-radius: var(--radius); display: grid; place-items: center; background: var(--surface2); color: var(--faint); font-size: 12px; text-align: center; overflow: hidden; }
+.logo-box img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; }
 .links { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .tilelink { display: block; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; text-decoration: none; color: var(--ink); cursor: pointer; background: var(--surface2); }
 .tilelink:hover { border-color: var(--blue); background: var(--blue-soft); }
@@ -229,9 +236,44 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .tile .k { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .tile .v { font-size: 26px; font-weight: 600; letter-spacing: -.01em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
 .tile .s { color: var(--muted); font-size: 13px; }
-.spark { display: flex; align-items: flex-end; gap: 3px; height: 28px; margin-top: 6px; }
-.spark span { flex: 1; background: var(--blue); opacity: .35; border-radius: 2px 2px 0 0; min-height: 2px; }
-.spark span.today { opacity: .9; }
+.meter { height: 6px; border-radius: 3px; background: var(--viz-track); margin: 6px 0 6px; overflow: hidden; }
+.meter span { display: block; height: 100%; background: var(--viz-1); border-radius: 3px; }
+
+/* ---- grafik (SVG polos dari app.js) ---- */
+/* Dua grafik bersebelahan di layar lebar, bertumpuk di HP. */
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.chart-card > .ch { display: flex; align-items: flex-start; gap: 12px; }
+.chart-card > .ch > div { flex: 1; min-width: 0; }
+.chart-card .tbl-toggle { flex: none; }
+.chart-card .tbl-toggle[aria-pressed=true] { background: var(--blue-soft); border-color: var(--blue); }
+.plot { position: relative; min-height: 40px; }
+.plot svg { display: block; width: 100%; overflow: visible; }
+.plot text { font-family: inherit; font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.plot text.total { fill: var(--ink); font-weight: 600; }
+.plot text.empty { fill: var(--muted); font-size: 13px; }
+.plot .gridline { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.plot .track { fill: var(--viz-grid); }
+.plot .hit { fill: transparent; cursor: default; outline: none; }
+.plot .hit.link { cursor: pointer; }
+.plot .hit:focus-visible { stroke: var(--focus); stroke-width: 2; }
+/* Tanda yang disorot sedikit lebih terang. */
+.plot .mark.hot { opacity: .8; }
+.plot .seg-label { font-size: 12px; font-weight: 600; pointer-events: none; }
+.viz1 { fill: var(--viz-1); background: var(--viz-1); } .viz2 { fill: var(--viz-2); background: var(--viz-2); }
+.viz3 { fill: var(--viz-3); background: var(--viz-3); } .viz4 { fill: var(--viz-4); background: var(--viz-4); }
+.plot text.on1 { fill: var(--viz-on-1); } .plot text.on2 { fill: var(--viz-on-2); } .plot text.on3 { fill: var(--viz-on-3); } .plot text.on4 { fill: var(--viz-on-4); }
+.tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 8px rgba(0,0,0,.12); padding: 7px 10px; font-size: 12px; line-height: 1.5; white-space: nowrap; }
+.tip .t { color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.tip .r { display: flex; align-items: center; gap: 6px; }
+.tip .r b { font-variant-numeric: tabular-nums; min-width: 2ch; }
+.tip .r.cur b, .tip .r.cur span { font-weight: 700; color: var(--ink); }
+.tip .r span { color: var(--muted); }
+.tip .r.sum { border-top: 1px solid var(--line-soft); margin-top: 3px; padding-top: 3px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.legend > * { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; }
+.legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.legend a:hover span { text-decoration: underline; }
 .bar { height: 6px; background: var(--blue); border-radius: 3px; min-width: 2px; opacity: .8; }
 
 /* ---- percakapan ---- */
@@ -251,6 +293,9 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .switch input:checked { background: var(--ok); }
 .switch input:checked::after { left: 18px; }
 .switch small { color: var(--muted); }
+#attention .acts-in { display: inline-flex; gap: 6px; }
+/* Tombol "Buka chat" adalah tautan di dalam tabel: tetap berteks putih, tidak ikut warna tautan tabel. */
+#attention a.btn, :root[data-theme=dark] #attention a.btn { color: #fff; text-decoration: none; }
 td.sum { max-width: 340px; min-width: 200px; color: var(--ink2); }
 td.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-word; }
 tr.stale td { background: var(--danger-soft); }
@@ -343,7 +388,7 @@ tr.stale td { background: var(--danger-soft); }
   .pagehead { padding: 14px 16px 12px; }
   .pagehead h1 { font-size: 20px; }
   .content { padding: 16px 16px 60px; }
-  .row, .row3, .row4, .row5, .tiles, .tiles.four, .links { grid-template-columns: 1fr; }
+  .row, .row3, .row4, .row5, .tiles, .tiles.four, .links, .charts { grid-template-columns: 1fr; }
   .tiles.four { grid-template-columns: 1fr 1fr; }
   .brand { display: none; }
   .topbar { padding: 0 12px; gap: 6px; }
@@ -355,6 +400,7 @@ tr.stale td { background: var(--danger-soft); }
   #attention td { border: 0; padding: 0; }
   #attention td.sum { flex-basis: 100%; min-width: 0; max-width: none; }
   #attention td.acts { text-align: left; width: auto; }
+  #attention .acts-in { flex-wrap: wrap; }
   .card > .ch { padding: 14px 14px 0; }
   .card > .cb { padding: 12px 14px 16px; }
   .cardfoot { padding: 10px 14px; }

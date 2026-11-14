@@ -651,7 +651,8 @@ const PNG = Buffer.from(
         await addMessage(A, 'in', 'yang 16 inci ada?', t - 30_000);
         await addMessage(A, 'out', 'Ada, Pak.', t);
         await addMessage(B, 'in', 'bisa custom?', t - 20_000);
-        await updateContact(B, { needs_sales: 1 });
+        await addMessage(B, 'human', 'Bisa, Pak. Saya bantu.', t - 10_000);
+        await updateContact(B, { needs_sales: 1, stage: 'closing' });
       });
       const m = (await call('/api/metrik/metrics')).body;
       assert.equal(m.windowDays, 7);
@@ -661,8 +662,27 @@ const PNG = Buffer.from(
       assert.deepEqual(m.handed, { total: 2, count: 1 }, 'satu dari dua percakapan dioper ke staf');
       assert.equal(m.replyMedianSec, 45, 'median dari 60 dan 30 detik; follow-up tidak dihitung sebagai balasan');
       assert.deepEqual(m.followup, { sent: 1, answered: 1 });
+      // Pesan per hari menurut arah, terlama dulu, satu baris per hari di jendela.
+      assert.equal(m.messagesByDay.length, 7);
+      assert.deepEqual(m.messagesByDay.map((d: { day: string }) => d.day), m.days.map((d: { day: string }) => d.day));
+      type MsgDay = { in: number; out: number; human: number };
+      const total = m.messagesByDay.reduce((a: MsgDay, d: MsgDay) => ({ in: a.in + d.in, out: a.out + d.out, human: a.human + d.human }), { in: 0, out: 0, human: 0 });
+      assert.deepEqual(total, { in: 3, out: 3, human: 1 }, 'follow-up ikut dihitung sebagai pesan bot');
+      const { day: _today, ...todayMsgs } = m.messagesByDay[6];
+      assert.deepEqual(todayMsgs, { in: 2, out: 1, human: 1 });
+      // Tahap lead: semua kontak proyek, tidak dibatasi jendela.
+      assert.deepEqual(m.stages, { baru: 1, dihubungi: 0, closing: 1, batal: 0 });
+      // ?days=: jendela lain untuk grafik, paling banyak 90; yang tidak sah kembali ke 7.
+      const m14 = (await call('/api/metrik/metrics?days=14')).body;
+      assert.deepEqual([m14.windowDays, m14.days.length, m14.messagesByDay.length], [14, 14, 14]);
+      assert.equal(m14.days[13].day, m.days[6].day, 'hari terakhir tetap hari ini');
+      assert.equal(m14.messagesByDay.reduce((a: number, d: { in: number }) => a + d.in, 0), 3);
+      assert.deepEqual(m14.stages, m.stages);
+      assert.equal((await call('/api/metrik/metrics?days=500')).body.windowDays, 90);
+      for (const bad of ['abc', '0', '-3', '']) assert.equal((await call('/api/metrik/metrics?days=' + bad)).body.windowDays, 7, `days=${bad}`);
       const empty = (await call('/api/toko-b/metrics')).body;
       assert.deepEqual([empty.today, empty.handed, empty.replyMedianSec, empty.followup], [0, { total: 0, count: 0 }, null, { sent: 0, answered: 0 }]);
+      assert.ok(empty.messagesByDay.every((d: MsgDay) => d.in === 0 && d.out === 0 && d.human === 0));
       assert.equal((await call('/api/metrik/metrics', {}, false)).status, 401);
     }
 

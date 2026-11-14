@@ -211,6 +211,7 @@ function projectPatch(body: Record<string, unknown>): ProjectPatch {
 const MAX_REPLY = 4000;
 const DAY = 86_400_000;
 const METRIC_DAYS = 7;
+const MAX_METRIC_DAYS = 90;
 
 /** Perkiraan biaya LLM bulan ini (bulan menurut zona waktu bot), dalam USD dan Rupiah. */
 function monthCost(u: UsageReport | null): { usd: number; idr: number } {
@@ -631,12 +632,15 @@ export function createAdminHandler(store: AdminStore) {
       return json(200, { ok: true, resolved: ids.length, profile: editableView() });
     }
 
-    // Empat angka Beranda, 7 hari terakhir menurut zona waktu bot.
+    // Angka dan grafik Beranda: 7 hari terakhir menurut zona waktu bot, atau
+    // ?days=N (paling banyak 90) untuk grafik yang lebih panjang.
     if (path === '/metrics' && method === 'GET') {
       const t = Date.now();
-      const days = Array.from({ length: METRIC_DAYS }, (_, i) => localDay(t - (METRIC_DAYS - 1 - i) * DAY));
-      const m = await metrics(days, t - (METRIC_DAYS + 1) * DAY, cfg.tz);
-      return json(200, { windowDays: METRIC_DAYS, ...m, today: m.days[m.days.length - 1]?.conversations ?? 0 });
+      const asked = Math.floor(Number(url.searchParams.get('days')));
+      const n = Number.isFinite(asked) && asked >= 1 ? Math.min(MAX_METRIC_DAYS, asked) : METRIC_DAYS;
+      const days = Array.from({ length: n }, (_, i) => localDay(t - (n - 1 - i) * DAY));
+      const m = await metrics(days, t - (n + 1) * DAY, cfg.tz);
+      return json(200, { windowDays: n, ...m, today: m.days[m.days.length - 1]?.conversations ?? 0 });
     }
 
     // Pelanggan lama: daftar nomor (dan nama) yang sudah dikenal bisnis ini,

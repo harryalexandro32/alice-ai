@@ -874,6 +874,312 @@ const idr = (n) => 'Rp ' + n.toLocaleString(locale(), { maximumFractionDigits: n
 const pct = (a, b) => (b ? Math.round((a * 100) / b) + '%' : '—');
 const emptyRow = (cols, text) => el('tr', {}, el('td', { colSpan: cols, style: 'color:var(--muted)', textContent: text }));
 
+// ---------- grafik ----------
+// Grafik sebagai SVG polos yang digambar di sini (dashboard tanpa pustaka grafik).
+// Semua grafik memakai columnChart (batang per hari, tunggal atau bertumpuk) dan
+// stackedBar100 (satu batang 100 %), supaya tampilan dan perilakunya sama:
+// - seri N selalu berwarna --viz-N (urutan tetap, tidak diputar atau diurutkan ulang);
+// - teks memakai warna teks; identitas seri hanya dari kotak warna di sampingnya;
+// - legenda hanya kalau ada 2 seri atau lebih;
+// - tiap batang/segmen bisa disorot dengan tetikus dan papan ketik (satu tooltip per grafik);
+// - tombol "Tabel" menukar grafik dengan tabel angkanya: tidak ada angka yang hanya ada di tooltip.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const COL_MAX = 24; // batang paling tebal
+const GAP = 2; // celah antarsegmen bertumpuk, dalam warna permukaan kartu
+const RADIUS = 4; // sudut atas batang (alasnya tetap persegi)
+
+function svg(tag, attrs = {}, ...kids) {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined) n.setAttribute(k, String(v));
+  for (const k of kids) if (k !== null && k !== undefined) n.append(k);
+  return n;
+}
+
+/** Tanggal "YYYY-MM-DD" (hari menurut zona waktu bot) -> Date tengah hari, aman dari geser zona waktu. */
+const dayDate = (d) => new Date(d + 'T12:00:00');
+const dayShort = (d) => dayDate(d).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+const dayLong = (d) => dayDate(d).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+
+let measureCtx = null;
+/** Lebar teks dalam piksel dengan huruf dashboard; dipakai supaya label tidak bertumpuk atau terpotong. */
+function textWidth(text, font = '11px') {
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return String(text).length * 7;
+  measureCtx.font = font + ' ' + getComputedStyle(document.body).fontFamily;
+  return measureCtx.measureText(String(text)).width;
+}
+
+/** Garis bantu sumbu y di angka bulat (1, 2, atau 5 × 10ⁿ), 3–4 garis termasuk garis dasar. */
+function niceTicks(max) {
+  const raw = Math.max(1, max) / 3;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = Math.max(1, [1, 2, 5, 10].map((f) => f * mag).find((s) => s >= raw));
+  const top = Math.max(step, Math.ceil(max / step) * step);
+  const ticks = [];
+  for (let v = 0; v <= top; v += step) ticks.push(v);
+  return { top, ticks };
+}
+
+/** Jalur persegi dengan sudut membulat sendiri-sendiri: [kiri-atas, kanan-atas, kanan-bawah, kiri-bawah]. */
+function roundRect(x, y, w, h, radii) {
+  const [tl, tr, br, bl] = radii.map((r) => Math.max(0, Math.min(r, w / 2, h / 2)));
+  const a = (r, ex, ey) => (r ? 'A' + r + ',' + r + ' 0 0 1 ' + ex + ',' + ey : '');
+  return 'M' + (x + tl) + ',' + y + 'H' + (x + w - tr) + a(tr, x + w, y + tr) + 'V' + (y + h - br) + a(br, x + w - br, y + h) +
+    'H' + (x + bl) + a(bl, x, y + h - bl) + 'V' + (y + tl) + a(tl, x + tl, y) + 'Z';
+}
+
+/** Gambar ulang setiap kali lebar wadahnya berubah (layar diputar, panel dibuka, tabel ditutup). */
+function onWidth(node, draw) {
+  let last = -1;
+  const run = () => {
+    const w = Math.floor(node.clientWidth);
+    if (w > 0 && w !== last) { last = w; draw(w); }
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(run).observe(node);
+  run();
+}
+
+const swatch = (slot) => el('span', { className: 'sw viz' + slot });
+
+/**
+ * Kerangka kartu grafik: judul, keterangan, tombol "Tabel", lalu grafik (dengan legenda) atau tabelnya.
+ * Pilihan grafik/tabel disimpan di kartu, jadi tetap saat kartu digambar ulang (mis. ganti bahasa).
+ */
+function chartFrame(host, title, help) {
+  host.classList.add('card', 'chart-card');
+  const asTable = host.dataset.view === 'table';
+  const view = el('div', { hidden: asTable });
+  const plot = el('div', { className: 'plot' });
+  const tip = el('div', { className: 'tip', hidden: true });
+  tip.setAttribute('aria-hidden', 'true');
+  plot.append(tip);
+  view.append(plot);
+  const table = el('div', { className: 'scroll', hidden: !asTable });
+  const toggle = el('button', { type: 'button', className: 'btn ghost sm tbl-toggle' }, ico('list'), T('Tabel', 'Table'));
+  toggle.setAttribute('aria-pressed', String(asTable));
+  toggle.title = T('Tampilkan angkanya sebagai tabel', 'Show the numbers as a table');
+  toggle.addEventListener('click', () => {
+    const on = toggle.getAttribute('aria-pressed') !== 'true';
+    host.dataset.view = on ? 'table' : 'chart';
+    toggle.setAttribute('aria-pressed', String(on));
+    view.hidden = on;
+    table.hidden = !on;
+  });
+  host.replaceChildren(
+    el('div', { className: 'ch' }, el('div', {}, el('h2', { textContent: title }), help ? el('p', { className: 'help', textContent: help }) : null), toggle),
+    el('div', { className: 'cb' }, view, table));
+  return { view, plot, tip, table };
+}
+
+/** Isi tooltip: judul, lalu satu baris per seri (angka dulu, lalu nama, dengan kotak warna). */
+function fillTip(tip, head, rows, sum) {
+  tip.replaceChildren(el('div', { className: 't', textContent: head }),
+    ...rows.map((r) => el('div', { className: 'r' + (r.cur ? ' cur' : '') }, swatch(r.slot), el('b', { textContent: r.value }), el('span', { textContent: r.label }))),
+    sum ? el('div', { className: 'r sum' }, el('b', { textContent: sum.value }), el('span', { textContent: sum.label })) : null);
+  tip.hidden = false;
+}
+
+/** Letakkan tooltip di samping tanda yang disorot (kanan, atau kiri kalau tidak muat), tidak menutupinya. */
+function placeTip(tip, plotWidth, x0, x1, top) {
+  const tw = tip.offsetWidth;
+  let left = x1 + 8;
+  if (left + tw > plotWidth) left = x0 - 8 - tw;
+  if (left < 0) left = Math.max(0, Math.min(plotWidth - tw, x1 + 8));
+  tip.style.left = Math.round(left) + 'px';
+  tip.style.top = Math.round(top) + 'px';
+}
+
+/** Legenda: kotak warna + nama (+ jumlah); kalau ada href, tiap butir adalah tautan. */
+function legend(items) {
+  return el('div', { className: 'legend' }, ...items.map((it) => {
+    const kids = [swatch(it.slot), el('span', { textContent: it.label }), it.count !== undefined ? el('b', { textContent: it.count }) : null];
+    return it.href ? el('a', { href: it.href }, ...kids) : el('div', {}, ...kids);
+  }));
+}
+
+/** Teks label sumbu x: di tengah batangnya, tapi digeser masuk kalau akan terpotong di tepi. */
+function edgeText(x, y, text, w, width, cls) {
+  let anchor = 'middle';
+  if (x + w / 2 > width) { anchor = 'end'; x = width; } else if (x - w / 2 < 0) { anchor = 'start'; x = 0; }
+  return svg('text', { x, y, 'text-anchor': anchor, class: cls || null }, text);
+}
+
+/**
+ * Grafik batang per hari.
+ * days: [{ day: "YYYY-MM-DD", [key]: angka }] terlama dulu (paling kiri).
+ * series: [{ key, label, slot }] dengan slot 1–4 = --viz-1…4. Tanpa stacked hanya seri pertama yang dipakai.
+ * format: angka -> teks untuk sumbu, label, tooltip, dan tabel (bawaan: bilangan bulat dengan pemisah ribuan).
+ */
+function columnChart({ el: host, title, help, days, series, stacked = false, format = int }) {
+  const ser = stacked ? series : series.slice(0, 1);
+  const val = (d, s) => Number(d[s.key]) || 0;
+  const totalOf = (d) => ser.reduce((a, s) => a + val(d, s), 0);
+  const peak = Math.max(0, ...days.map(totalOf));
+  const { view, plot, tip, table } = chartFrame(host, title, help);
+  if (ser.length >= 2) view.append(legend(ser.map((s) => ({ slot: s.slot, label: s.label }))));
+
+  // Tampilan tabel: semua angka, hari terbaru di atas.
+  const showSum = ser.length >= 2;
+  const th = (t, num) => el('th', { className: num ? 'num' : '', textContent: t });
+  const td = (t, num) => el('td', { className: num ? 'num' : '', textContent: t });
+  table.append(el('table', { className: 'list' },
+    el('thead', {}, el('tr', {}, th(T('Tanggal', 'Date')), ...ser.map((s) => th(s.label, true)), showSum ? th('Total', true) : null)),
+    el('tbody', {}, ...days.slice().reverse().map((d) => el('tr', {}, td(dayLong(d.day)), ...ser.map((s) => td(format(val(d, s)), true)), showSum ? td(format(totalOf(d)), true) : null))),
+    el('tfoot', {}, el('tr', {}, td(T('Jumlah', 'Sum')), ...ser.map((s) => td(format(days.reduce((a, d) => a + val(d, s), 0)), true)),
+      showSum ? td(format(days.reduce((a, d) => a + totalOf(d), 0)), true) : null))));
+
+  const draw = (W) => {
+    const H = 190, mt = 20, mb = 24, mr = 2;
+    const { top, ticks } = niceTicks(peak);
+    const empty = peak === 0;
+    const left = empty ? 0 : Math.ceil(Math.max(...ticks.map((v) => textWidth(format(v))))) + 8;
+    const pw = Math.max(10, W - left - mr), ph = H - mt - mb;
+    const n = Math.max(1, days.length), band = pw / n;
+    const cw = Math.max(2, Math.min(COL_MAX, band - Math.max(GAP, band * 0.3)));
+    const y = (v) => mt + ph - (v / top) * ph;
+    const root = svg('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, role: 'group', 'aria-label': title });
+
+    // Garis bantu tipis (garis dasar ikut), label sumbu y di kirinya.
+    for (const v of empty ? [0] : ticks) {
+      const gy = Math.round(y(v)) + 0.5;
+      root.append(svg('line', { class: 'gridline', x1: left, x2: W - mr, y1: gy, y2: gy }));
+      if (!empty) root.append(svg('text', { x: left - 6, y: gy + 4, 'text-anchor': 'end' }, format(v)));
+    }
+    // Label tanggal: sejarang yang perlu supaya tidak bertumpuk, hari terakhir selalu berlabel.
+    const lw = Math.max(...days.map((d) => textWidth(dayShort(d.day)))) + 10;
+    const every = Math.max(1, Math.ceil(lw / band));
+    days.forEach((d, i) => {
+      if ((days.length - 1 - i) % every) return;
+      const t = dayShort(d.day);
+      root.append(edgeText(left + band * (i + 0.5), H - 6, t, textWidth(t), W));
+    });
+    if (empty) {
+      root.append(svg('text', { class: 'empty', x: left + pw / 2, y: mt + ph / 2, 'text-anchor': 'middle' }, T('Belum ada data', 'No data yet')));
+      plot.replaceChildren(root, tip);
+      tip.hidden = true;
+      return;
+    }
+
+    // Batang: segmen dari bawah ke atas, celah 2 px di antaranya, hanya ujung atas yang membulat.
+    const cols = days.map((d, i) => {
+      const cx = left + band * (i + 0.5), x0 = cx - cw / 2;
+      const g = svg('g', { class: 'mark' });
+      const parts = ser.filter((s) => val(d, s) > 0);
+      let base = 0;
+      parts.forEach((s, j) => {
+        const v = val(d, s);
+        const y1 = y(base + v);
+        let h = y(base) - y1 - (j > 0 ? GAP : 0);
+        h = Math.max(1, h);
+        const r = j === parts.length - 1 ? RADIUS : 0;
+        g.append(svg('path', { class: 'viz' + s.slot, d: roundRect(x0, y1, cw, h, [r, r, 0, 0]) }));
+        base += v;
+      });
+      root.append(g);
+      return g;
+    });
+    // Label langsung hanya di batang tertinggi (yang terakhir kalau sama tinggi).
+    let hi = 0;
+    days.forEach((d, i) => { if (totalOf(d) >= totalOf(days[hi])) hi = i; });
+    const ht = format(totalOf(days[hi]));
+    root.append(edgeText(left + band * (hi + 0.5), y(totalOf(days[hi])) - 6, ht, textWidth(ht), W, 'total'));
+
+    // Lapisan sorot: satu sasaran selebar pita per hari, juga untuk papan ketik.
+    const hide = () => { tip.hidden = true; for (const g of cols) g.classList.remove('hot'); };
+    days.forEach((d, i) => {
+      const cx = left + band * (i + 0.5);
+      const rows = ser.map((s) => ({ slot: s.slot, value: format(val(d, s)), label: s.label }));
+      const sum = showSum ? { value: format(totalOf(d)), label: 'Total' } : null;
+      const hit = svg('rect', { class: 'hit', x: left + band * i, y: mt, width: band, height: ph, tabindex: 0,
+        'aria-label': dayLong(d.day) + ': ' + rows.map((r) => r.label + ' ' + r.value).join(', ') + (sum ? ', Total ' + sum.value : '') });
+      const show = () => {
+        hide();
+        cols[i].classList.add('hot');
+        fillTip(tip, dayLong(d.day), rows, sum);
+        placeTip(tip, W, cx - cw / 2, cx + cw / 2, mt);
+      };
+      hit.addEventListener('mouseenter', show);
+      hit.addEventListener('focus', show);
+      hit.addEventListener('click', show);
+      hit.addEventListener('mouseleave', hide);
+      hit.addEventListener('blur', hide);
+      root.append(hit);
+    });
+    plot.replaceChildren(root, tip);
+    tip.hidden = true;
+  };
+  onWidth(plot, draw);
+}
+
+/**
+ * Satu batang mendatar 100 % (bagian dari keseluruhan).
+ * parts: [{ key, label, value, slot, href }] dalam urutan tetap; klik segmen atau butir legenda membuka href.
+ */
+function stackedBar100({ el: host, title, help, parts }) {
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  const { view, plot, tip, table } = chartFrame(host, title, help);
+  view.append(legend(parts.map((p) => ({ slot: p.slot, label: p.label, count: int(p.value), href: p.href }))));
+  const td = (kid, num) => el('td', { className: num ? 'num' : '' }, kid);
+  table.append(el('table', { className: 'list' },
+    el('thead', {}, el('tr', {}, el('th', { textContent: T('Tahap', 'Stage') }), el('th', { className: 'num', textContent: T('Jumlah', 'Count') }), el('th', { className: 'num', textContent: '%' }))),
+    el('tbody', {}, ...parts.map((p) => el('tr', {}, td(el('a', { href: p.href, textContent: p.label })), td(int(p.value), true), td(pct(p.value, total), true)))),
+    el('tfoot', {}, el('tr', {}, td('Total'), td(int(total), true), td(total ? '100%' : '—', true)))));
+
+  const draw = (W) => {
+    const H = 30, bh = 28;
+    const root = svg('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, role: 'group', 'aria-label': title });
+    if (!total) {
+      root.append(svg('rect', { class: 'track', x: 0, y: 0, width: W, height: bh, rx: RADIUS }));
+      root.append(svg('text', { class: 'empty', x: W / 2, y: bh / 2 + 4, 'text-anchor': 'middle' }, T('Belum ada data', 'No data yet')));
+      plot.replaceChildren(root, tip);
+      tip.hidden = true;
+      return;
+    }
+    const shown = parts.filter((p) => p.value > 0);
+    const avail = W - GAP * (shown.length - 1);
+    const marks = [];
+    let x = 0;
+    shown.forEach((p, j) => {
+      const w = j === shown.length - 1 ? W - x : Math.max(3, (avail * p.value) / total);
+      const rl = j === 0 ? RADIUS : 0, rr = j === shown.length - 1 ? RADIUS : 0;
+      const mark = svg('path', { class: 'mark viz' + p.slot, d: roundRect(x, 0, w, bh, [rl, rr, rr, rl]) });
+      root.append(mark);
+      // Label di dalam segmen hanya kalau muat dengan jarak 8 px di kiri-kanan.
+      const full = p.label + ' ' + int(p.value);
+      const text = textWidth(full, '600 12px') + 16 <= w ? full : textWidth(int(p.value), '600 12px') + 16 <= w ? int(p.value) : '';
+      if (text) root.append(svg('text', { class: 'seg-label on' + p.slot, x: x + w / 2, y: bh / 2 + 4, 'text-anchor': 'middle' }, text));
+      marks.push({ p, x, w, mark });
+      x += w + GAP;
+    });
+    const hide = () => { tip.hidden = true; for (const m of marks) m.mark.classList.remove('hot'); };
+    for (const m of marks) {
+      const rows = parts.map((p) => ({ slot: p.slot, value: int(p.value) + ' (' + pct(p.value, total) + ')', label: p.label, cur: p === m.p }));
+      const hit = svg('rect', { class: 'hit link', x: m.x, y: 0, width: m.w, height: bh, tabindex: 0, role: 'link',
+        'aria-label': m.p.label + ': ' + int(m.p.value) + ' (' + pct(m.p.value, total) + '). ' + T('Buka daftarnya.', 'Open the list.') });
+      const show = () => {
+        hide();
+        m.mark.classList.add('hot');
+        fillTip(tip, title, rows, { value: int(total), label: 'Total' });
+        // Di bawah batang, sejajar dengan segmen yang disorot.
+        const tw = tip.offsetWidth;
+        tip.style.left = Math.round(Math.max(0, Math.min(W - tw, m.x + m.w / 2 - tw / 2))) + 'px';
+        tip.style.top = (bh + 8) + 'px';
+      };
+      const open = () => void go(m.p.href);
+      hit.addEventListener('mouseenter', show);
+      hit.addEventListener('focus', show);
+      hit.addEventListener('mouseleave', hide);
+      hit.addEventListener('blur', hide);
+      hit.addEventListener('click', open);
+      hit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      root.append(hit);
+    }
+    plot.replaceChildren(root, tip);
+    tip.hidden = true;
+  };
+  onWidth(plot, draw);
+}
+
 const STAGES = ['baru', 'dihubungi', 'closing', 'batal'];
 const stageLabel = (s) => ({ baru: T('Baru', 'New'), dihubungi: T('Dihubungi', 'Contacted'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
 function stageSelect(value, onChange) {
@@ -1294,11 +1600,13 @@ async function resolveQuestion(g, resolution, answer, buttons) {
 
 // ---------- beranda ----------
 let homeData = null;
+/** Jendela grafik Beranda (hari); angka di kotak tetap 7 hari. */
+const CHART_DAYS = 14;
 
 async function loadHome() {
   try {
-    const [metrics, h, leads] = await Promise.all([api('metrics'), api('handoffs?status=open'), api('leads')]);
-    homeData = { metrics };
+    const [metrics, trend, h, leads] = await Promise.all([api('metrics'), api('metrics?days=' + CHART_DAYS), api('handoffs?status=open'), api('leads')]);
+    homeData = { metrics, trend };
     handoffData = h.groups;
     leadData = leads;
     renderHome();
@@ -1318,16 +1626,33 @@ function renderHome() {
   if (!homeData) return;
   const m = homeData.metrics;
   const tile = (k, v, s, extra) => el('div', { className: 'tile' }, el('div', { className: 'k', textContent: k }), el('div', { className: 'v', textContent: v }), extra || null, el('div', { className: 's', textContent: s }));
-  const max = Math.max(0, ...m.days.map((d) => d.conversations));
-  const spark = el('div', { className: 'spark' }, ...m.days.map((d, i) =>
-    el('span', { className: i === m.days.length - 1 ? 'today' : '', title: d.day + ': ' + d.conversations, style: 'height:' + (max ? Math.max(6, Math.round((d.conversations / max) * 100)) : 6) + '%' })));
-  spark.setAttribute('aria-hidden', 'true');
+  // Meter: jalur biru muda, isinya sepanjang rasio; angkanya tetap judul kotak.
+  const meter = (a, b) => {
+    const n = el('div', { className: 'meter' }, el('span', { style: 'width:' + (b ? Math.min(100, (a * 100) / b) : 0) + '%' }));
+    n.setAttribute('aria-hidden', 'true');
+    return n;
+  };
   const week = m.days.reduce((a, d) => a + d.conversations, 0);
   $('tiles').replaceChildren(
-    tile(T('Percakapan hari ini', 'Conversations today'), int(m.today), T('Orang yang chat per hari; ', 'People chatting per day; ') + int(week) + T(' dalam 7 hari', ' in 7 days'), spark),
-    tile(T('Dioper ke staf', 'Handed to staff'), pct(m.handed.count, m.handed.total), int(m.handed.count) + T(' dari ', ' of ') + int(m.handed.total) + T(' percakapan dalam 7 hari', ' conversations in 7 days')),
+    tile(T('Percakapan hari ini', 'Conversations today'), int(m.today), T('Orang yang chat hari ini; ', 'People chatting today; ') + int(week) + T(' dalam 7 hari', ' in 7 days')),
+    tile(T('Dioper ke staf', 'Handed to staff'), pct(m.handed.count, m.handed.total), int(m.handed.count) + T(' dari ', ' of ') + int(m.handed.total) + T(' percakapan dalam 7 hari', ' conversations in 7 days'), meter(m.handed.count, m.handed.total)),
     tile(T('Waktu balas median', 'Median reply time'), duration(m.replyMedianSec), T('Dari pesan pelanggan sampai balasan bot', 'From a customer message to the bot\'s reply')),
-    tile(T('Follow-up dijawab', 'Follow-ups answered'), pct(m.followup.answered, m.followup.sent), int(m.followup.answered) + T(' dari ', ' of ') + int(m.followup.sent) + T(' pelanggan membalas dalam 48 jam', ' customers replied within 48 h')));
+    tile(T('Follow-up dijawab', 'Follow-ups answered'), pct(m.followup.answered, m.followup.sent), int(m.followup.answered) + T(' dari ', ' of ') + int(m.followup.sent) + T(' pelanggan membalas dalam 48 jam', ' customers replied within 48 h'), meter(m.followup.answered, m.followup.sent)));
+
+  // Grafik: jendela CHART_DAYS hari (terlama di kiri); tahap lead dari semua kontak.
+  const t = homeData.trend;
+  columnChart({ el: $('chartConv'), title: T('Percakapan per hari', 'Conversations per day'),
+    help: T('Orang yang chat dengan bot, ' + t.windowDays + ' hari terakhir.', 'People who chatted with the bot, last ' + t.windowDays + ' days.'),
+    days: t.days, series: [{ key: 'conversations', label: T('Percakapan', 'Conversations'), slot: 1 }] });
+  columnChart({ el: $('chartMsgs'), title: T('Pesan per hari', 'Messages per day'), stacked: true,
+    help: T('Pesan masuk dan balasan, ' + t.windowDays + ' hari terakhir.', 'Incoming messages and replies, last ' + t.windowDays + ' days.'),
+    days: t.messagesByDay, series: [
+      { key: 'in', label: T('Dari pelanggan', 'From customers'), slot: 1 },
+      { key: 'out', label: T('Dibalas bot', 'Replied by the bot'), slot: 2 },
+      { key: 'human', label: T('Dibalas admin', 'Replied by an admin'), slot: 3 }] });
+  stackedBar100({ el: $('chartStages'), title: T('Tahap lead', 'Lead stages'),
+    help: T('Semua kontak menurut tahapnya. Klik satu tahap untuk membuka daftarnya.', 'All contacts by stage. Click a stage to open its list.'),
+    parts: STAGES.map((s, i) => ({ key: s, label: stageLabel(s), value: Number(t.stages[s]) || 0, slot: i + 1, href: pathOf('percakapan') + '?stage=' + s })) });
 
   // Perlu perhatian: pelanggan yang menunggu staf, lalu masalah bot 24 jam terakhir.
   const rows = [];
@@ -1342,11 +1667,16 @@ function renderHome() {
       } catch (e) { toast(e.message, true); done.disabled = false; }
     });
     const name = nameOf(c);
+    const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka chat', 'Open chat'));
     rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
       el('td', {}, el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff') })),
       el('td', { className: 'sum', textContent: c.summary || '—' }),
-      el('td', { className: 'acts' }, done)));
+      el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
   }
+  // Petunjuk satu baris di atas daftar, hanya kalau ada pelanggan yang menunggu staf.
+  $('attentionHelp').textContent = T('Pelanggan di bawah menanyakan hal yang harus dijawab staf. Buka chatnya, balas, lalu tandai sudah ditangani.',
+    'The customers below asked something that your staff must answer. Open the chat, reply, then mark it as handled.');
+  $('attentionHelp').hidden = !rows.length;
   const day = Date.now() - 86400000;
   for (const a of ((state && state.alerts) || []).filter((x) => x.at > day && x.kind !== 'butuh-staf')) {
     rows.push(el('tr', {}, el('td', { textContent: when(a.at), style: 'white-space:nowrap' }),
@@ -1386,14 +1716,15 @@ function staleMinutes() {
   return mins !== null && mins > 40 ? mins : null;
 }
 
-/** Angka di menu Beranda: pelanggan yang menunggu staf + masalah 24 jam terakhir. */
+/** Angka di menu Percakapan: hanya pelanggan yang menunggu balasan staf. */
 function setBadge() {
-  const day = Date.now() - 86400000;
-  const staff = leadData ? leadData.rows.filter((c) => c.needsSales).length : 0;
-  const alerts = ((state && state.alerts) || []).filter((a) => a.at > day && a.kind !== 'butuh-staf').length;
-  const n = staff + alerts + (staleMinutes() !== null ? 1 : 0);
-  $('homeBadge').textContent = n > 99 ? '99+' : String(n);
-  $('homeBadge').classList.toggle('on', n > 0);
+  const n = leadData ? leadData.rows.filter((c) => c.needsSales).length : 0;
+  const b = $('convBadge');
+  b.textContent = n > 99 ? '99+' : String(n);
+  b.classList.toggle('on', n > 0);
+  const tip = n + T(' pelanggan menunggu balasan staf', n === 1 ? ' customer waiting for a staff reply' : ' customers waiting for a staff reply');
+  b.title = n > 0 ? tip : '';
+  if (n > 0) b.setAttribute('aria-label', tip); else b.removeAttribute('aria-label');
 }
 
 async function loadAlerts() {
@@ -1731,7 +2062,12 @@ function show(next, r = {}) {
   if (page !== 'chat') { if (noteTimer) void saveNote(); conv = null; }
   renderMeta();
   if (page === 'beranda') void loadHome();
-  if (page === 'percakapan') void loadLeads();
+  if (page === 'percakapan') {
+    // ?stage=<tahap> (mis. dari grafik "Tahap lead" di Beranda) memilih saringannya.
+    const st = new URLSearchParams(location.search).get('stage');
+    if (st && FILTERS().some(([k]) => k === st)) leadFilter = st;
+    void loadLeads();
+  }
   if (page === 'chat') void openConv(r.phone);
   if (page === 'lainnya') void loadHandoffs();
   if (page === 'whatsapp') { renderStatus(); void loadWa(); }
@@ -1840,7 +2176,7 @@ async function route() {
   const want = exists ? r.project : project || defaultProject();
   if (want !== project || !state) {
     await openProject(want);
-    // Angka di menu Beranda butuh daftar pelanggan; dua halaman ini memuatnya sendiri.
+    // Angka di menu Percakapan butuh daftar pelanggan; dua halaman ini memuatnya sendiri.
     if (r.page !== 'beranda' && r.page !== 'percakapan') void loadLeads();
   }
   renderProjects();
