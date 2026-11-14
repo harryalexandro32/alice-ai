@@ -4,8 +4,8 @@
  * Bot bisa jalan di mana saja (PC ini, server klien), dan siapa pun yang
  * memegang dashboard belum tentu bisa melihat terminalnya. Jadi semua yang
  * ditulis ke console.error / console.warn — ditambah galat dari pustaka
- * WhatsApp — juga disimpan di database bot dan dikirim bersama laporan
- * berkalanya ke dashboard (halaman "Peringatan & log").
+ * WhatsApp — juga disimpan di database, per proyek, dan tampil di dashboard
+ * (halaman "Peringatan & log").
  */
 
 import { format } from 'node:util';
@@ -22,9 +22,10 @@ export function recordError(level: 'galat' | 'peringatan', text: string): void {
   if (!clean || clean === last) return;
   last = clean;
   try {
-    addError({ at: now(), level, text: clean });
+    // Tidak ditunggu: console.error tidak boleh menunggu database.
+    void addError({ at: now(), level, text: clean }).catch(() => {});
   } catch {
-    // database belum terbuka / sedang terkunci: catatan di terminal tetap ada
+    // database belum terbuka / belum ada proyek: catatan di terminal tetap ada
   }
 }
 

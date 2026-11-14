@@ -1,16 +1,13 @@
 /**
- * Tempat dashboard membaca dan menyimpan. Dua wujud, satu bentuk:
+ * Bentuk tempat dashboard membaca dan menyimpan, untuk proyek permintaan yang
+ * sedang dilayani. Wujudnya ada di store-local.ts: database bersama dan folder
+ * data/<proyek>/media/, di mesin yang sama dengan bot.
  *
- *   - lokal: folder data/ dan database milik bot (dashboard satu mesin dengan bot);
- *   - blob : Vercel Blob (dashboard di-hosting terpisah). Lihat src/remote.ts.
- *
- * Berkas ini sengaja tidak mengimpor database: fungsi di Vercel tidak punya
- * (dan tidak butuh) SQLite. Penyimpanan lokal ada di store-local.ts.
+ * Dashboard online (Vercel) tidak punya penyimpanan sendiri: ia hanya
+ * meneruskan permintaan ke server bot (lihat vercel.json dan docs/deploy.md).
  */
 
-import { applyOverrides } from '../business';
 import type { Editable } from '../business/types';
-import { blob, getJson, remotePath } from '../remote';
 
 export interface LeadRow {
   phone: string;
@@ -50,9 +47,9 @@ export interface BotStatus {
   effective?: Record<string, number | boolean | string[]>;
   /** Jalur notifikasi yang kredensialnya sudah diisi di .env bot. */
   channels?: { email: boolean; telegram: boolean; stt?: boolean };
-  /** Pemakaian jatah penyimpanan bersama hari ini. */
-  quota?: string;
-  /** Kapan bot terakhir melapor (ms). Null = dashboard satu proses dengan bot. */
+  /** Keadaan WhatsApp menurut laporan terakhir bot (connected, qr, …). */
+  wa?: string;
+  /** Kapan bot terakhir melapor (ms). Null = bot belum pernah melapor. */
   reportedAt: number | null;
 }
 
@@ -66,70 +63,15 @@ export interface UsageReport {
   days: { day: string; calls: number; promptTokens: number; cachedTokens: number; completionTokens: number }[];
 }
 
-/** Yang dikirim bot ke penyimpanan bersama untuk ditampilkan dashboard. */
-export interface Snapshot {
-  at: number;
-  status: Omit<BotStatus, 'reportedAt'>;
-  leads: LeadRow[];
-  usage?: UsageReport;
-  alerts?: AlertItem[];
-  errors?: ErrorItem[];
-}
-
 export interface AdminStore {
-  /** Muat profil terbaru ke `biz` sebelum melayani permintaan. */
-  refresh(): Promise<void>;
   save(changes: Partial<Editable>): Promise<void>;
   putPhoto(file: string, data: Buffer, contentType: string): Promise<void>;
   getPhoto(file: string): Promise<Buffer | null>;
   delPhoto(file: string): Promise<void>;
   leads(): Promise<LeadRow[]>;
   status(): Promise<BotStatus | null>;
-  /** Null = bot belum pernah melapor. */
   usage(): Promise<UsageReport | null>;
   alerts(): Promise<AlertItem[]>;
   /** Catatan galat bot, terbaru dulu. */
   errors(): Promise<ErrorItem[]>;
-}
-
-export function blobStore(): AdminStore {
-  let current: Partial<Editable> = {};
-  // Satu permintaan dashboard sering butuh beberapa bagian laporan yang sama
-  // (status + peringatan + galat). Tiap pembacaan memakai jatah penyimpanan,
-  // jadi laporannya dibaca sekali per permintaan: refresh() membuang ingatannya.
-  let memo: Promise<Snapshot | null> | null = null;
-  const snapshot = () => (memo ??= getJson<Snapshot>(remotePath.snapshot()));
-
-  return {
-    async refresh() {
-      memo = null;
-      current = (await getJson<Partial<Editable>>(remotePath.profile())) ?? {};
-      applyOverrides(current);
-    },
-    async save(changes) {
-      // Baca ulang dulu: fungsi lain mungkin baru saja menyimpan hal lain.
-      current = { ...((await getJson<Partial<Editable>>(remotePath.profile())) ?? {}), ...changes };
-      await blob().put(remotePath.profile(), JSON.stringify(current, null, 2), 'application/json');
-      applyOverrides(current);
-    },
-    putPhoto: (file, data, contentType) => blob().put(remotePath.media(file), data, contentType),
-    getPhoto: (file) => blob().getBytes(remotePath.media(file)),
-    delPhoto: (file) => blob().del(remotePath.media(file)),
-    async leads() {
-      return (await snapshot())?.leads ?? [];
-    },
-    async status() {
-      const s = await snapshot();
-      return s ? { ...s.status, reportedAt: s.at } : null;
-    },
-    async usage() {
-      return (await snapshot())?.usage ?? null;
-    },
-    async alerts() {
-      return (await snapshot())?.alerts ?? [];
-    },
-    async errors() {
-      return (await snapshot())?.errors ?? [];
-    },
-  };
 }

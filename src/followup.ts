@@ -9,12 +9,10 @@
  */
 
 import { followupBrain } from './brain';
-import { refreshBiz } from './business';
 import { llmEnabled } from './llm/provider';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
-import { contactName, missingFields, type Sender } from './flow';
-import { applyBotSwitches, humanHolds } from './flow';
+import { contactName, humanHolds, missingFields, projectPaused, type Sender } from './flow';
 import { addMessage, followupCandidates, recentMessages, updateContact, type Contact } from './store';
 import { followupText, noDash } from './texts';
 
@@ -24,7 +22,7 @@ export type FollowupWriter = (c: Contact, hours: number) => Promise<string | nul
 const llmWriter: FollowupWriter = async (c, hours) => {
   if (!cfg.followupSmart || !llmEnabled()) return null;
   // Tanpa percakapan sungguhan tidak ada yang bisa disambung: kalimat tetap lebih jujur.
-  const history = recentMessages(c.phone, 12);
+  const history = await recentMessages(c.phone, 12);
   if (history.filter((m) => m.dir === 'in').length < 2 && !c.summary) return null;
   return followupBrain({ known: c.lead, history, summary: c.summary, missing: missingFields(c).map((f) => f.label), hours });
 };
@@ -78,17 +76,17 @@ export function followupDueAt(lastInbound: number, key = ''): number {
 }
 
 export async function runFollowups(send: Sender): Promise<number> {
-  refreshBiz();
+  // Bot dijeda untuk semua chat: tidak ada follow-up sama sekali.
+  if (projectPaused()) return 0;
   const t = now();
   let sent = 0;
-  applyBotSwitches();
 
-  for (const c of followupCandidates()) {
+  for (const c of await followupCandidates()) {
     const due = followupDueAt(c.last_inbound_at, c.phone);
     if (t < due) continue;
 
     const skip =
-      humanHolds(c.address, t)
+      (await humanHolds(c.address, t))
         ? 'sedang ditangani manusia'
         : t > due + GRACE_MS
           ? 'sudah terlalu lama lewat'
@@ -99,7 +97,7 @@ export async function runFollowups(send: Sender): Promise<number> {
               : null;
     if (skip) {
       console.log(`[follow-up] ${c.phone}: dilewat (${skip})`);
-      updateContact(c.phone, { followup_state: 'idle' });
+      await updateContact(c.phone, { followup_state: 'idle' });
       continue;
     }
 
@@ -119,8 +117,8 @@ export async function runFollowups(send: Sender): Promise<number> {
       console.error(`[follow-up] ${c.phone}: gagal kirim: ${e instanceof Error ? e.message : e}`);
       continue;
     }
-    addMessage(c.phone, 'out', text, t);
-    updateContact(c.phone, {
+    await addMessage(c.phone, 'out', text, t);
+    await updateContact(c.phone, {
       last_dir: 'out',
       last_out_text: text,
       followup_state: 'idle',

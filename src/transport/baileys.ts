@@ -15,7 +15,11 @@
  * pemilik nomor ikut membalas dari HP. Pesan `fromMe` yang bukan kiriman bot
  * berarti manusia sedang mengambil alih percakapan itu.
  *
- * Folder kredensial (WA_AUTH_DIR) setara akses penuh ke nomor tersebut.
+ * Menautkan nomor dilakukan dari dashboard: QR dan kode pairing dilaporkan
+ * lewat onState (lalu heartbeat.ts menulisnya ke database), dan dashboard bisa
+ * meminta kode pairing atau memutus sesi untuk ditautkan ulang.
+ *
+ * Folder kredensial (auth/<proyek>/) setara akses penuh ke nomor tersebut.
  */
 
 import makeWASocket, {
@@ -25,7 +29,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   type WASocket,
 } from '@whiskeysockets/baileys';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 
 import pino from 'pino';
 
@@ -34,7 +38,7 @@ import qrcode from 'qrcode-terminal';
 import { cfg } from '../config';
 import { recordError } from '../errlog';
 import { afterSend, beforeSend, onDisconnect, onOpen, onSendError } from './sendguard';
-import type { MediaKind, SendOptions, Transport, TransportHandlers } from './types';
+import type { MediaKind, SendOptions, Transport, TransportHandlers, TransportState } from './types';
 
 /** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
 const MIN_GAP_MS = 1200;
@@ -47,6 +51,17 @@ let retryDelayMs = 2_000;
 let lastSentAt = 0;
 let sendChain: Promise<void> = Promise.resolve();
 let selfNumber: string | null = null;
+/** Kredensial sesi yang sedang dipakai (untuk tahu sudah tertaut atau belum). */
+let creds: { registered?: boolean } | null = null;
+/** Kode pairing sudah diminta untuk socket ini: QR berikutnya tidak menimpanya. */
+let pairing = false;
+
+let current: TransportState = { state: 'starting' };
+let stateListener: ((s: TransportState) => void) | null = null;
+function setState(s: TransportState): void {
+  current = s;
+  stateListener?.(s);
+}
 
 /** Id pesan yang dikirim bot sendiri, buat membedakannya dari balasan manusia. */
 const sentIds = new Set<string>();
@@ -151,7 +166,10 @@ export function setFatalListener(fn: ((text: string) => void) | null): void {
 
 async function connect(): Promise<void> {
   const myGeneration = ++generation;
+  pairing = false;
+  if (current.state !== 'starting') setState({ state: 'starting', ...(current.detail ? { detail: current.detail } : {}) });
   const { state, saveCreds } = await useMultiFileAuthState(cfg.waAuthDir);
+  creds = state.creds;
   const { version } = await fetchLatestBaileysVersion();
 
   const s = makeWASocket({
@@ -169,33 +187,24 @@ async function connect(): Promise<void> {
 
   s.ev.on('creds.update', saveCreds);
 
-  if (cfg.waPairingNumber && !state.creds.registered) {
-    const number = cfg.waPairingNumber.replace(/[^0-9]/g, '');
-    setTimeout(async () => {
-      try {
-        const code = await s.requestPairingCode(number);
-        console.log(`\n  KODE PAIRING: ${code}`);
-        console.log('  WhatsApp di HP > Perangkat Tertaut > Tautkan dengan nomor telepon\n');
-      } catch (e) {
-        console.error('Gagal minta kode pairing:', e instanceof Error ? e.message : e);
-      }
-    }, 3_000);
-  }
-
   s.ev.on('connection.update', (u) => {
     if (myGeneration !== generation) return;
     const { connection, lastDisconnect, qr } = u;
 
-    if (qr && !cfg.waPairingNumber) {
-      console.log('\n  Scan QR ini dari WhatsApp > Perangkat Tertaut:\n');
+    // Setelah kode pairing diminta, QR baru tidak ditampilkan: yang berlaku kodenya.
+    if (qr && !pairing) {
+      console.log('\n  Scan QR ini dari WhatsApp > Perangkat Tertaut (atau dari dashboard, Pengaturan > WhatsApp):\n');
       qrcode.generate(qr, { small: true });
+      setState({ state: 'qr', qr });
     }
 
     if (connection === 'open') {
       retryDelayMs = 2_000;
+      pairing = false;
       onOpen();
       selfNumber = jidToE164(s.user?.id);
       console.log(`[wa] tersambung sebagai ${s.user?.id ?? '?'} — SIAP`);
+      setState({ state: 'connected', ...(selfNumber ? { selfPhone: selfNumber } : {}) });
     }
 
     if (connection === 'close') {
@@ -210,13 +219,15 @@ async function connect(): Promise<void> {
       if (code === DisconnectReason.loggedOut) {
         onFatal?.('Sesi WhatsApp dicabut dari HP. Bot tidak bisa menerima maupun membalas pesan sampai ditautkan ulang.');
         console.error(
-          `\n[wa] SESI DICABUT dari HP. Hapus folder ${cfg.waAuthDir} lalu jalankan ulang buat pairing.\n`
+          `\n[wa] SESI DICABUT dari HP. Tautkan ulang dari dashboard (Pengaturan > WhatsApp > Putuskan & tautkan ulang).\n`
         );
+        setState({ state: 'logged_out', detail: 'Sesi dicabut dari HP. Tekan "Putuskan & tautkan ulang" untuk menautkan lagi.' });
         process.exitCode = 1;
         return;
       }
       if (code === DisconnectReason.connectionReplaced) {
         onFatal?.('Sesi WhatsApp direbut sesi lain (440). Bot berhenti dan tidak menyambung ulang sendiri.');
+        setState({ state: 'conflict', detail: 'Ada sesi lain yang memakai kredensial ini (440). Pastikan hanya satu bot yang jalan, lalu nyalakan ulang bot.' });
         console.error(
           '\n[wa] SESI DIREBUT (440) — ada sesi lain yang pakai kredensial ini.\n' +
             '     Hampir selalu: ada `npm start` kedua yang masih jalan. Tutup semuanya,\n' +
@@ -229,6 +240,8 @@ async function connect(): Promise<void> {
       // Pengaman boleh meminta jeda lebih panjang (mis. setelah 403/429).
       const delay = Math.max(retryDelayMs, onDisconnect(code));
       console.warn(`[wa] terputus (${code ?? 'tanpa kode'}), menyambung lagi dalam ${Math.round(delay / 1000)}s`);
+      // Selama belum tertaut, sambungan memang ditutup tiap kali QR habis; itu bukan gangguan.
+      if (creds?.registered) setState({ state: 'disconnected', detail: `Terputus (${code ?? 'tanpa kode'}), menyambung lagi` });
       setTimeout(() => void connect(), delay);
       retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_MS);
     }
@@ -392,6 +405,42 @@ export const baileysTransport: Transport = {
   selfPhone: () => selfNumber,
   async start(h) {
     handlers = h;
+    await connect();
+  },
+  onState(cb) {
+    stateListener = cb;
+    cb(current);
+  },
+  async requestPairingCode(number) {
+    const s = sock;
+    if (!s) throw new Error('WhatsApp belum siap; coba lagi sebentar lagi');
+    if (creds?.registered) throw new Error('Nomor sudah tertaut. Putuskan dulu untuk menautkan nomor lain.');
+    const code = await s.requestPairingCode(number.replace(/[^0-9]/g, ''));
+    pairing = true;
+    console.log(`\n  KODE PAIRING: ${code}`);
+    console.log('  WhatsApp di HP > Perangkat Tertaut > Tautkan dengan nomor telepon\n');
+    setState({ state: 'pairing', pairingCode: code, detail: `Ketik kode ini di HP nomor +${number.replace(/[^0-9]/g, '')}` });
+    return code;
+  },
+  async relink() {
+    const old = sock;
+    // Socket lama tidak boleh lagi menulis kredensial atau menjadwalkan sambungan.
+    generation += 1;
+    sock = null;
+    if (old) {
+      old.ev.removeAllListeners('creds.update');
+      old.ev.removeAllListeners('connection.update');
+      old.ev.removeAllListeners('messages.upsert');
+      old.ev.removeAllListeners('messages.update');
+      if (creds?.registered) await old.logout().catch(() => {});
+      old.end(undefined);
+    }
+    rmSync(cfg.waAuthDir, { recursive: true, force: true });
+    selfNumber = null;
+    creds = null;
+    retryDelayMs = 2_000;
+    console.log(`[wa] sesi lama diputus dan ${cfg.waAuthDir} dihapus; menautkan dari awal`);
+    setState({ state: 'starting', detail: 'Sesi lama diputus; QR baru sedang disiapkan' });
     await connect();
   },
   async typing(to) {

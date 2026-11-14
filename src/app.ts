@@ -10,22 +10,19 @@
  *     tidak menghasilkan dua salam.
  */
 
-import { startAdmin } from './admin/server';
-import { localStore } from './admin/store-local';
-import { initBiz } from './business';
+import { refreshBiz } from './business';
 import { cfg, MINUTE } from './config';
 import { humanPause } from './pace';
 import { waTargets } from './notify';
-import { remoteEnabled } from './remote';
-import { pullProfile, pushSoon, startSync } from './sync';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
+import { startHeartbeat } from './heartbeat';
 import { runFollowups } from './followup';
 import { deliverOutbox, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
-import { raiseAlert, setAlertWhatsApp, setDashboardSignal } from './alerts';
+import { raiseAlert, setAlertWhatsApp } from './alerts';
 import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
 import { setGuardListener } from './transport/sendguard';
-import { addUsage, openDb } from './store';
+import { addUsage } from './store';
 import { noDash } from './texts';
 import type { Transport, TransportInbound } from './transport/types';
 
@@ -62,7 +59,7 @@ export function makeWaSender(transport: Transport): (phone: string, text: string
 /**
  * Ke mana ringkasan lead dan kabar "butuh staf" dikirim lewat WhatsApp: semua
  * nomor penerima jenis kabar itu (Pengaturan > Notifikasi di dashboard, atau
- * SALES_NUMBER selama daftarnya masih kosong).
+ * nomor sales proyek selama daftarnya masih kosong).
  */
 export function makeSalesNotifier(transport: Transport): SalesNotifier {
   const sendTo = makeWaSender(transport);
@@ -132,14 +129,32 @@ function withoutDashes(transport: Transport): Transport {
   return transport;
 }
 
+/**
+ * Jalankan bot untuk proyek proses ini. Database dan proyeknya sudah dimuat
+ * (lihat index.ts: openDb lalu initBiz).
+ */
 export async function startApp(raw: Transport): Promise<void> {
   const transport = withoutDashes(raw);
-  openDb(cfg.dbPath);
   // Mulai sekarang semua galat juga tersimpan untuk dashboard.
   installErrorLog();
-  initBiz();
   // Tiap panggilan LLM dicatat per hari, supaya biayanya terlihat di dashboard.
   setUsageRecorder(addUsage);
+  // Muat ulang profil dan baris proyek kalau pemilik baru menyimpan di dashboard.
+  // Jalur WhatsApp yang diganti baru berlaku setelah bot dinyalakan ulang:
+  // keluar, dan pengawas (systemd / npm start) menyalakannya lagi.
+  const startedOn = cfg.transport;
+  const reload = async (force: boolean) => {
+    try {
+      if ((await refreshBiz(force)) && cfg.transport !== startedOn) {
+        console.log(`[bot] jalur WhatsApp diganti ke ${cfg.transport} dari dashboard; bot dinyalakan ulang`);
+        process.exit(0);
+      }
+    } catch (e) {
+      console.error(`[profil] gagal memeriksa perubahan: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+  // Sebelum tiap giliran (paling sering tiap 5 detik).
+  setBeforeTurn(() => reload(false));
 
   // Balasan ke pelanggan menunggu dulu dengan irama manusia (lihat pace.ts).
   // Notifikasi ke sales dan follow-up tidak: keduanya bukan balasan.
@@ -160,18 +175,9 @@ export async function startApp(raw: Transport): Promise<void> {
     setFatalListener((text) => void raiseAlert('wa-putus', text, { whatsapp: false }));
   }
 
-  if (remoteEnabled()) {
-    // Dashboard-nya di-hosting terpisah; bot ini hanya mengikuti apa yang disimpan di sana.
-    await startSync();
-    setBeforeTurn(() => pullProfile());
-    setDashboardSignal(pushSoon);
-  } else if (cfg.adminPassword) {
-    await startAdmin(localStore()).catch((e) =>
-      console.error(`[dashboard] tidak bisa dinyalakan: ${e instanceof Error ? e.message : e}`)
-    );
-  } else {
-    console.log('[dashboard] mati — isi ADMIN_PASSWORD di .env untuk menyalakannya');
-  }
+  // Laporan berkala untuk dashboard (keadaan WhatsApp, QR, kode pairing), dan
+  // permintaan dari dashboard (kode pairing, tautkan ulang).
+  startHeartbeat(transport);
 
   await transport.start({
     onInbound(m) {
@@ -192,12 +198,16 @@ export async function startApp(raw: Transport): Promise<void> {
       });
     },
     onHumanReply(m) {
-      handleHumanReply(m);
+      void handleHumanReply(m).catch((e) => console.error(`[app] balasan manusia tidak tercatat: ${e instanceof Error ? e.message : e}`));
     },
   });
 
+  // Perubahan dari dashboard juga dimuat walau tidak ada pesan masuk.
+  setInterval(() => void reload(true), 30_000);
+
   const tick = async () => {
     try {
+      await reload(true);
       await runFollowups((to, text) => transport.send(to, text));
       await deliverOutbox();
     } catch (e) {

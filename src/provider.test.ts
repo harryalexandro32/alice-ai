@@ -10,6 +10,11 @@ import type { AddressInfo } from 'node:net';
 import { llmBrain } from './brain';
 import { cfg } from './config';
 import { llmUsageToday, setUsageRecorder, type UsageDelta } from './llm/provider';
+import { seedCtx } from './business';
+import { setDefaultProject } from './project';
+
+// Prompt dirakit dari profil proyek: bibit gfan, tanpa database.
+setDefaultProject(seedCtx('gfan'));
 
 let seen: { auth?: string; body?: any } = {};
 let status = 200;

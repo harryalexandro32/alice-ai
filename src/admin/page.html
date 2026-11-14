@@ -211,6 +211,24 @@
   .viewer.on { display: flex; }
   .viewer img { max-width: 100%; max-height: 100%; border-radius: 6px; background: var(--field); }
 
+  /* ---- proyek & WhatsApp ---- */
+  .projsel { max-width: 220px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); font-weight: 600; }
+  .wa { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .wa .qr { width: 232px; height: 232px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 8px; display: grid; place-items: center; flex: none; }
+  .wa .qr img { width: 100%; height: 100%; image-rendering: pixelated; }
+  .wa .info { flex: 1; min-width: 240px; }
+  .wa .code { font-family: ui-monospace, Consolas, monospace; font-size: 26px; font-weight: 700; letter-spacing: .12em; margin: 4px 0 8px; }
+  .wa .pair { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 8px; }
+  .wa .pair input { max-width: 220px; }
+  .chip.danger { background: var(--danger-soft); color: var(--danger); }
+  .pausebar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .pausebar.on { color: var(--danger); font-weight: 600; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 22; }
+  .modal.on { display: flex; }
+  .modal form { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 24px; width: 100%; max-width: 460px; }
+  .modal h2 { margin: 0 0 4px; font-size: 18px; }
+  .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
   @media (max-width: 820px) {
     .app { grid-template-columns: minmax(0, 1fr); }
     aside { position: static; height: auto; padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
@@ -239,10 +257,29 @@
   </form>
 </div>
 
+<div class="modal" id="newProject">
+  <form id="newProjectForm">
+    <h2 data-en="New project">Proyek baru</h2>
+    <p class="help" data-en="One project = one business = one WhatsApp number, with its own leads, texts, files and settings. The bot for it starts on the server within a minute; link its WhatsApp from Settings.">Satu proyek = satu bisnis = satu nomor WhatsApp, dengan lead, teks, berkas, dan pengaturannya sendiri. Bot-nya dinyalakan server dalam ±1 menit; tautkan WhatsApp-nya dari halaman Pengaturan.</p>
+    <div class="row">
+      <label class="f"><span data-en="Id (short, in the address)">Id (pendek, dipakai di alamat)</span><input type="text" id="npId" required pattern="[a-z0-9\-]{2,32}" placeholder="mis. toko-budi" data-en-ph="e.g. toko-budi"></label>
+      <label class="f"><span data-en="Name">Nama</span><input type="text" id="npName" required placeholder="mis. Toko Budi" data-en-ph="e.g. Toko Budi"></label>
+    </div>
+    <label class="f"><span data-en="Starting profile">Bibit profil</span><select id="npTemplate"></select><small data-en="“generic” starts empty; “gfan” copies the GFAN product data.">“generic” mulai kosong; “gfan” menyalin data produk GFAN.</small></label>
+    <div class="row">
+      <label class="f"><span data-en="Bot WhatsApp number">Nomor WA bot</span><input type="text" id="npWa" placeholder="0812…"></label>
+      <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="npSales" placeholder="0812… / self"></label>
+    </div>
+    <p class="err" id="npErr"></p>
+    <div class="actions"><button class="btn ghost" type="button" id="npCancel" data-en="Cancel">Batal</button><button class="btn" data-en="Create">Buat</button></div>
+  </form>
+</div>
+
 <div class="topbar">
   <div class="mark">A</div>
   <img class="logo" id="logoTop" alt="">
   <div class="brand">Alice AI</div>
+  <select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)"></select>
   <div class="brand-sub" id="brandSub"></div>
   <div class="spacer"></div>
   <span class="chip" id="chipLlm"></span>
@@ -392,7 +429,47 @@
       </section>
 
       <section id="tab-pengaturan">
-        <p class="help" style="margin:-6px 0 16px" data-en="Everything adjustable about the bot is here. Empty number fields follow the value in the bot's <code>.env</code> (shown in grey). Passwords and API keys are never stored here — they stay in <code>.env</code> on the bot's machine.">Semua yang bisa diatur dari bot ada di sini. Kotak angka yang kosong mengikuti nilai di <code>.env</code> bot (tampil abu-abu). Kata sandi dan kunci API tidak pernah disimpan di sini — tetap di <code>.env</code> di mesin bot.</p>
+        <p class="help" style="margin:-6px 0 16px" data-en="Everything adjustable about the bot is here. Empty number fields follow the server default (shown in grey). Passwords and API keys are never stored here — they stay in <code>.env</code> on the server.">Semua yang bisa diatur dari bot ada di sini. Kotak angka yang kosong mengikuti bawaan server (tampil abu-abu). Kata sandi dan kunci API tidak pernah disimpan di sini — tetap di <code>.env</code> di server.</p>
+
+        <div class="card">
+          <div class="ch"><h2>WhatsApp</h2><p class="help" data-en="Link this project's WhatsApp number here, without a terminal. On the phone: WhatsApp &gt; Linked devices &gt; Link a device, then scan the QR code — or choose “Link with phone number instead” and type the pairing code.">Tautkan nomor WhatsApp proyek ini dari sini, tanpa terminal. Di HP: WhatsApp &gt; Perangkat tertaut &gt; Tautkan perangkat, lalu pindai QR-nya — atau pilih “Tautkan dengan nomor telepon saja” dan ketik kode pairing-nya.</p></div>
+          <div class="cb">
+            <div class="wa">
+              <div class="qr" id="waQr" hidden><img alt="QR WhatsApp" id="waQrImg"></div>
+              <div class="info">
+                <div><span class="chip" id="waState"></span> <span class="help" id="waSeen"></span></div>
+                <div id="waCodeBox" hidden><div class="sub" data-en="Pairing code">Kode pairing</div><div class="code" id="waCode"></div></div>
+                <div class="help" id="waDetail"></div>
+                <div class="pair">
+                  <input type="text" id="waNumber" placeholder="0812…" aria-label="Nomor WA bot">
+                  <button class="btn ghost small" type="button" id="waPair" data-en="Request pairing code">Minta kode pairing</button>
+                </div>
+                <button class="btn danger small" type="button" id="waReset" data-en="Disconnect &amp; link again">Putuskan &amp; tautkan ulang</button>
+              </div>
+            </div>
+          </div>
+          <div class="cardfoot" id="waFoot"></div>
+        </div>
+
+        <div class="card">
+          <div class="ch"><h2 data-en="Project">Proyek</h2><p class="help" data-en="The business behind this WhatsApp number. Saved separately from the rest of this page.">Bisnis di balik nomor WhatsApp ini. Disimpan terpisah dari isian lain di halaman ini.</p></div>
+          <div class="cb">
+            <div class="pausebar" id="pauseBar">
+              <label class="switch"><input type="checkbox" id="projPaused"><span data-en="Bot paused for all chats">Bot dijeda untuk semua chat</span></label>
+              <small class="help" data-en="Messages are still recorded, but the bot does not reply and sends no follow-ups until you switch this off.">Pesan tetap dicatat, tapi bot tidak membalas dan tidak mengirim follow-up sampai ini dimatikan.</small>
+            </div>
+            <div class="row" style="margin-top:14px">
+              <label class="f"><span data-en="Project name">Nama proyek</span><input type="text" id="projName"></label>
+              <label class="f"><span data-en="WhatsApp channel">Jalur WhatsApp</span><select id="projTransport"><option value="baileys">Baileys (QR / kode pairing)</option><option value="cloud">Cloud API (Meta)</option></select></label>
+            </div>
+            <div class="row">
+              <label class="f"><span data-en="Bot WhatsApp number">Nomor WA bot</span><input type="text" id="projWa" placeholder="0812…"></label>
+              <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="projSales" placeholder="0812… / self"><small data-en="Gets lead summaries on WhatsApp while the recipient list under Notifications is empty. “self” = the bot's own number.">Menerima ringkasan lead lewat WhatsApp selama daftar penerima di Notifikasi masih kosong. “self” = nomor bot sendiri.</small></label>
+            </div>
+            <label class="check" style="margin:0"><input type="checkbox" id="projEnabled"><span data-en="<b>Project active.</b> Off: the server stops this project's bot."><b>Proyek aktif.</b> Mati: server menghentikan bot proyek ini.</span></label>
+          </div>
+          <div class="cardfoot"><button class="btn small" type="button" id="projSave" data-en="Save project">Simpan proyek</button></div>
+        </div>
 
         <div class="card">
           <div class="ch"><h2 data-en="Notifications">Notifikasi</h2><p class="help" data-en="Who the bot contacts — owner and staff — and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email, Telegram chat id. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot — pemilik dan staf — dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email, id chat Telegram. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
@@ -511,7 +588,7 @@
         </div>
 
         <div class="card">
-          <div class="ch"><h2 data-en="Bot status">Keadaan bot</h2><p class="help" data-en="As last reported by the bot. The WhatsApp connection, API keys and passwords are set in <code>.env</code> on the bot's machine and need a restart.">Menurut laporan terakhir bot. Sambungan WhatsApp, kunci API, dan kata sandi diatur di <code>.env</code> di mesin bot dan butuh nyala ulang.</p></div>
+          <div class="ch"><h2 data-en="Bot status">Keadaan bot</h2><p class="help" data-en="As last reported by the bot. API keys and passwords are set in <code>.env</code> on the server and need a restart.">Menurut laporan terakhir bot. Kunci API dan kata sandi diatur di <code>.env</code> di server dan butuh nyala ulang.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="envInfo"></table></div></div>
         </div>
       </section>
@@ -532,7 +609,7 @@
 
       <section id="tab-lead">
         <div class="card">
-          <div class="ch"><h2 data-en="Recent conversations">Percakapan terbaru</h2><p class="help" data-en="The last 200 contacts, each with a short summary of the conversation so far. Use the <b>Bot</b> switch to hand a chat to your staff (off) or back to the bot (on). When this dashboard is online, the bot refreshes the list and picks up a switch within about 15 minutes, or as soon as that customer writes again.">200 kontak terakhir, masing-masing dengan ringkasan singkat percakapannya. Pakai tombol <b>Bot</b> untuk menyerahkan sebuah chat ke staf (mati) atau mengembalikannya ke bot (nyala). Kalau dashboard ini online, bot memperbarui daftar dan menjalankan tombol dalam ±15 menit, atau begitu pelanggan itu chat lagi.</p></div>
+          <div class="ch"><h2 data-en="Recent conversations">Percakapan terbaru</h2><p class="help" data-en="The last 200 contacts, each with a short summary of the conversation so far. Use the <b>Bot</b> switch to hand a chat to your staff (off) or back to the bot (on). It takes effect immediately.">200 kontak terakhir, masing-masing dengan ringkasan singkat percakapannya. Pakai tombol <b>Bot</b> untuk menyerahkan sebuah chat ke staf (mati) atau mengembalikannya ke bot (nyala). Berlaku seketika.</p></div>
           <div class="cb">
             <div class="leadbar">
               <input type="text" id="leadSearch" placeholder="Cari nomor, nama, kota, kebutuhan, ringkasan…" data-en-ph="Search number, name, city, need, summary…">
@@ -565,7 +642,7 @@
           <div class="cb"><div class="scroll"><table class="list" id="alerts"></table></div></div>
         </div>
         <div class="card">
-          <div class="ch"><h2 data-en="Error log">Catatan galat</h2><p class="help" data-en="Every error and warning the bot wrote, newest first — the same lines as in its terminal, so you do not need access to the machine it runs on. When this dashboard is online the list is refreshed about every 15 minutes. The full log is in the <code>logs</code> folder next to the bot.">Semua galat dan peringatan yang ditulis bot, terbaru dulu — baris yang sama dengan di terminalnya, jadi Anda tidak perlu akses ke mesin tempat bot jalan. Kalau dashboard ini online, daftarnya diperbarui tiap ±15 menit. Log lengkapnya ada di folder <code>logs</code> di samping bot.</p></div>
+          <div class="ch"><h2 data-en="Error log">Catatan galat</h2><p class="help" data-en="Every error and warning the bot wrote, newest first — the same lines as in its terminal, so you do not need access to the server it runs on. The full log is in the server journal (<code>journalctl -u alice-bot@&lt;project&gt;</code>).">Semua galat dan peringatan yang ditulis bot, terbaru dulu — baris yang sama dengan di terminalnya, jadi Anda tidak perlu akses ke server tempat bot jalan. Log lengkapnya ada di jurnal server (<code>journalctl -u alice-bot@&lt;proyek&gt;</code>).</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="errors"></table></div></div>
         </div>
       </section>
@@ -587,6 +664,7 @@
 <input type="file" id="pickPdfs" accept="application/pdf" multiple hidden>
 <div class="viewer" id="viewer"><img alt=""></div>
 <div class="toast" id="toast"></div>
+<script src="/admin/qrcode.js"></script>
 <script src="/admin/app.js"></script>
 </body>
 </html>

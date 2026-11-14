@@ -37,6 +37,19 @@ export interface SendOptions {
   fileName?: string;
 }
 
+/** Keadaan sambungan WhatsApp, dilaporkan ke dashboard lewat detak jantung bot. */
+export interface TransportState {
+  state: 'starting' | 'qr' | 'pairing' | 'connected' | 'disconnected' | 'logged_out' | 'conflict' | 'stopped';
+  /** Isi QR mentah (state 'qr'). */
+  qr?: string;
+  /** Kode pairing 8 huruf (state 'pairing'). */
+  pairingCode?: string;
+  /** Nomor bot sendiri, "+62…" (state 'connected'). */
+  selfPhone?: string;
+  /** Alasan / keterangan untuk ditampilkan. */
+  detail?: string;
+}
+
 export interface Transport {
   name: string;
   start(handlers: TransportHandlers): Promise<void>;
@@ -52,4 +65,10 @@ export interface Transport {
    * dirinya lewat API.
    */
   canMessageSelf: boolean;
+  /** Dengarkan perubahan keadaan sambungan (langsung dipanggil sekali dengan keadaan sekarang). */
+  onState?(cb: (s: TransportState) => void): void;
+  /** Minta kode pairing untuk menautkan nomor ini (hanya angka) tanpa memindai QR. */
+  requestPairingCode?(number: string): Promise<string>;
+  /** Putuskan sesi WhatsApp yang sekarang, hapus kredensialnya, dan mulai menautkan dari awal. */
+  relink?(): Promise<void>;
 }

@@ -6,12 +6,19 @@
  */
 
 import { checkReply, llmBrain } from './brain';
-import { biz, initBiz } from './business';
+import { biz, initBiz, seedCtx } from './business';
+import { openDb } from './db';
 import { llmEnabled, llmUsageToday } from './llm/provider';
+import { setDefaultProject } from './project';
 
 (async () => {
-  // Yang diukur adalah profil yang sedang dipakai, termasuk perubahan dari dashboard.
-  initBiz();
+  // Yang diukur adalah profil proyek yang sedang dipakai, termasuk perubahan
+  // dari dashboard. Tanpa DATABASE_URL: bibitnya saja (PROJECT = nama bibit).
+  const id = process.env.PROJECT?.trim() || 'gfan';
+  if (process.env.DATABASE_URL?.trim()) {
+    await openDb();
+    await initBiz(id, { requireEnabled: false });
+  } else setDefaultProject(seedCtx(id));
   if (!llmEnabled()) {
     console.error('LLM_API_KEY kosong — eval butuh LLM sungguhan.');
     process.exit(1);

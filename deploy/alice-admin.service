@@ -1,0 +1,25 @@
+# /etc/systemd/system/alice-admin.service — dashboard untuk semua proyek.
+#   journalctl -u alice-admin -f
+
+[Unit]
+Description=Alice AI - dashboard
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alice
+Group=alice
+WorkingDirectory=/opt/alice-ai
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run admin
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/alice-ai
+
+[Install]
+WantedBy=multi-user.target

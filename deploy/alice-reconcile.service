@@ -1,0 +1,10 @@
+# Menyamakan layanan bot dengan tabel projects (lihat reconcile.sh). Sebagai
+# root, karena menyalakan dan mematikan layanan systemd.
+[Unit]
+Description=Alice AI - nyalakan/matikan bot sesuai daftar proyek
+After=postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/alice-ai
+ExecStart=/opt/alice-ai/deploy/reconcile.sh

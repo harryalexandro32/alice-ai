@@ -7,13 +7,11 @@
  * bisnis.
  */
 
-import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
 import { join } from 'node:path';
 
-import { readFileSync } from 'node:fs';
-
+import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
 import { ALERT_TITLES, raiseAlert, signalDashboard } from './alerts';
-import { biz, fileById, mediaDir, productOfFile, refreshBiz } from './business';
+import { biz, fileById, mediaDir, productOfFile } from './business';
 import type { LeadField } from './business/types';
 import { cfg, HOUR, MINUTE } from './config';
 import { now } from './clock';
@@ -21,11 +19,11 @@ import { llmEnabled } from './llm/provider';
 import { sttEnabled, transcribe } from './llm/stt';
 import { plausibleName } from './names';
 import { deliverExternal, recipientPhones } from './notify';
+import { currentProject } from './project';
 import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
-  addMessage, contactByAddress, countInboundSince, createContact, getContact, humanSeenAt, importContact, isBotOff, markHuman,
-  markSwitchApplied, outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, switchAppliedAt,
-  updateContact, type Contact,
+  addMessage, contactByAddress, countInboundSince, createContact, getContact, humanSeenAt, isBotOff, markHuman,
+  outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact,
 } from './store';
 import { askMissing, handoffText, mediaAck, noDash, NON_TEXT } from './texts';
 import type { MediaKind } from './transport/types';
@@ -35,7 +33,7 @@ export type Sender = (to: { phone: string; address: string }, text: string, imag
 
 let send: Sender = async () => {};
 let brain: Brain = llmBrain;
-/** Dijalankan sebelum tiap giliran — dipakai untuk menarik profil terbaru. */
+/** Dijalankan sebelum tiap giliran — dipakai bot untuk memuat profil terbaru. */
 let beforeTurn: () => Promise<void> = async () => {};
 
 export function setSender(fn: Sender): void {
@@ -91,7 +89,7 @@ async function reply(c: Contact, raw: string): Promise<Contact> {
   // tetap, maupun jawaban LLM sama-sama lewat sini.
   const text = noDash(raw);
   await send({ phone: c.phone, address: c.address }, text);
-  addMessage(c.phone, 'out', text, now());
+  await addMessage(c.phone, 'out', text, now());
   return updateContact(c.phone, { last_dir: 'out', last_out_text: text });
 }
 
@@ -121,66 +119,53 @@ function awaitsCustomer(c: Contact): boolean {
  * sekali admin membalas, bot tidak ikut campur lagi; tanpa itu, bot hanya diam
  * selama HUMAN_PAUSE_HOURS.
  */
-export function humanHolds(address: string, at: number): boolean {
-  return isBotOff(address) || pausedUntil(address) > at || (biz.stopAfterHuman && humanSeenAt(address) > 0);
+export async function humanHolds(address: string, at: number): Promise<boolean> {
+  return (await isBotOff(address)) || (await pausedUntil(address)) > at || (biz.stopAfterHuman && (await humanSeenAt(address)) > 0);
 }
 
 /** Kenapa bot diam di chat ini, untuk ditampilkan di dashboard; null = bot aktif. */
-export function holdReason(address: string, at: number): 'tombol' | 'admin' | null {
-  return isBotOff(address) ? 'tombol' : humanHolds(address, at) ? 'admin' : null;
+export async function holdReason(address: string, at: number): Promise<'tombol' | 'admin' | null> {
+  return (await isBotOff(address)) ? 'tombol' : (await humanHolds(address, at)) ? 'admin' : null;
 }
 
-/**
- * Jalankan perintah tombol "bot aktif / diam" dari dashboard (halaman Lead).
- * Tiap perintah dijalankan sekali: menyalakan = melepas semua penahan saat itu
- * (kalau admin membalas lagi nanti, bot mundur lagi); mematikan = diam sampai
- * dinyalakan lagi.
- */
-export function applyBotSwitches(): void {
-  for (const [phone, sw] of Object.entries(biz.botSwitch)) {
-    if (sw.at <= switchAppliedAt(phone)) continue;
-    const c = getContact(phone);
-    if (!c) continue;
-    // Pelanggan lama yang belum pernah chat belum punya alamat: tandanya disimpan di kontak.
-    if (!c.address) updateContact(phone, { pending_off: sw.mode === 'off' ? 1 : 0 });
-    else if (sw.mode === 'off') setBotOff(c.address, sw.at);
-    else {
-      releaseToBot(c.address);
-      updateContact(phone, { pending_off: 0 });
-    }
-    markSwitchApplied(phone, sw.at);
-    console.log(`[alur] ${phone}: bot ${sw.mode === 'off' ? 'DIMATIKAN' : 'DINYALAKAN lagi'} untuk chat ini lewat dashboard`);
-  }
-  // "Sudah ditangani": tanda "perlu staf" dihapus sampai pelanggan itu butuh staf lagi.
-  for (const [phone, at] of Object.entries(biz.handled)) {
-    const c = getContact(phone);
-    if (!c || at <= (c.handled_at ?? 0)) continue;
-    updateContact(phone, { needs_sales: 0, handled_at: at });
-    console.log(`[alur] ${phone}: ditandai sudah ditangani lewat dashboard`);
-  }
-  applyKnownContacts();
+/** Sama dengan holdReason, dari penahan yang sudah dibaca sekaligus (daftar lead). */
+export function holdFrom(
+  h: { off: Set<string>; pauses: Map<string, number>; human: Set<string> },
+  address: string,
+  at: number
+): 'tombol' | 'admin' | null {
+  if (h.off.has(address)) return 'tombol';
+  return (h.pauses.get(address) ?? 0) > at || (biz.stopAfterHuman && h.human.has(address)) ? 'admin' : null;
 }
 
+/** Bot dijeda untuk semua chat proyek ini (tombol di dashboard). */
+export const projectPaused = (): boolean => currentProject().row.paused;
+
 /**
- * Pelanggan lama yang diimpor pemilik (halaman Lead). Mereka dicatat sebagai
- * kontak yang sudah dikenal, jadi saat chat mereka tidak disambut seperti orang
- * baru; yang diimpor dengan "bot diam" langsung diserahkan ke staf.
+ * Tombol "bot aktif / diam" untuk satu pelanggan (halaman Lead). Menyalakan =
+ * melepas semua penahan saat itu (kalau admin membalas lagi nanti, bot mundur
+ * lagi); mematikan = diam sampai dinyalakan lagi. False kalau kontaknya tidak ada.
  */
-function applyKnownContacts(): void {
-  if (!biz.knownAt || biz.knownAt <= switchAppliedAt('#pelanggan-lama')) return;
-  let rows: { phone: string; name?: string; off?: boolean }[];
-  try {
-    rows = (JSON.parse(readFileSync(join(mediaDir(), `known-${biz.knownAt}.json`), 'utf8')) as { rows: typeof rows }).rows;
-  } catch {
-    return; // berkasnya belum sampai di mesin ini; dicoba lagi di giliran berikutnya
+export async function switchBot(phone: string, mode: 'on' | 'off', at: number): Promise<boolean> {
+  const c = await getContact(phone);
+  if (!c) return false;
+  // Pelanggan lama yang belum pernah chat belum punya alamat: tandanya disimpan di kontak.
+  if (!c.address) await updateContact(phone, { pending_off: mode === 'off' ? 1 : 0 });
+  else if (mode === 'off') await setBotOff(c.address, at);
+  else {
+    await releaseToBot(c.address);
+    await updateContact(phone, { pending_off: 0 });
   }
-  const nameKey = biz.leadFields.find((f) => f.isName)?.key;
-  let added = 0;
-  for (const r of rows) {
-    if (importContact(r.phone, nameKey && r.name ? { [nameKey]: r.name } : {}, Boolean(r.off), biz.knownAt)) added += 1;
-  }
-  markSwitchApplied('#pelanggan-lama', biz.knownAt);
-  console.log(`[alur] daftar pelanggan lama dipakai: ${rows.length} nomor (${added} baru dicatat)`);
+  console.log(`[alur] ${phone}: bot ${mode === 'off' ? 'DIMATIKAN' : 'DINYALAKAN lagi'} untuk chat ini lewat dashboard`);
+  return true;
+}
+
+/** "Sudah ditangani": tanda "perlu staf" dihapus sampai pelanggan itu butuh staf lagi. */
+export async function markHandled(phone: string, at: number): Promise<boolean> {
+  if (!(await getContact(phone))) return false;
+  await updateContact(phone, { needs_sales: 0, handled_at: at });
+  console.log(`[alur] ${phone}: ditandai sudah ditangani lewat dashboard`);
+  return true;
 }
 
 /** Foto di atas ukuran ini tidak dikirim ke LLM. */
@@ -206,44 +191,42 @@ const STAFF_NOTIFY_GAP = 30 * MINUTE;
  * Kabari staf bahwa pelanggan ini menunggu manusia: notifikasi WA + baris Sheet
  * (lewat antrean) dan peringatan di dashboard. Tidak diulang tiap pesan.
  */
-function notifyStaff(c: Contact, kind: string, lastMessage: string, at: number): Contact {
+async function notifyStaff(c: Contact, kind: string, lastMessage: string, at: number): Promise<Contact> {
   if (c.handoff_sent_at && at - c.handoff_sent_at < STAFF_NOTIFY_GAP) return c;
   const p = leadPayload(c, kind, lastMessage);
-  outboxAdd('sales', p, at);
-  outboxAdd('sheet', p, at);
+  await outboxAdd('sales', p, at);
+  await outboxAdd('sheet', p, at);
   // WhatsApp-nya sudah lewat antrean di atas; di sini hanya dashboard + Telegram.
-  raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}): "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
+  await raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}): "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
   return updateContact(c.phone, { handoff_sent_at: at });
 }
 
 export async function handleInbound(m: Inbound): Promise<void> {
   // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
   await beforeTurn();
-  refreshBiz();
-  applyBotSwitches();
   // Pemilik dan staf itu penerima notifikasi, bukan calon pelanggan.
   if (recipientPhones().has(m.phone)) return;
   // Mode uji: selain nomor yang didaftarkan, tidak ada yang dibalas maupun
   // dicatat — pelanggan sungguhan di nomor itu tidak boleh ikut jadi bahan uji.
   if (cfg.onlyNumbers.length && !cfg.onlyNumbers.includes(m.phone)) {
-    console.log(`[alur] ${m.phone}: di luar ONLY_NUMBERS, dilewat`);
+    console.log(`[alur] ${m.phone}: di luar daftar mode uji, dilewat`);
     return;
   }
 
   const at = now();
-  const existing = getContact(m.phone);
+  const existing = await getContact(m.phone);
   const caption = m.text?.trim() || '';
   const stored = m.media ? `[${m.media}]${caption ? ` ${caption}` : ''}` : caption || '[bukan teks]';
 
-  let c = existing ?? createContact(m.phone, m.address, at);
-  if (!addMessage(m.phone, 'in', stored, at, m.waId)) {
+  let c = existing ?? (await createContact(m.phone, m.address, at));
+  if (!(await addMessage(m.phone, 'in', stored, at, m.waId))) {
     console.log(`[alur] ${m.phone}: pesan ganda, dilewat`);
     return;
   }
   // Nama profil bisa baru muncul belakangan, atau diganti orangnya.
   const waName = m.profileName?.replace(/\s+/g, ' ').trim().slice(0, 60) || null;
   // Pelanggan membalas: siklus follow-up yang sedang menunggu selesai.
-  c = updateContact(m.phone, {
+  c = await updateContact(m.phone, {
     ...(waName && waName !== c.wa_name ? { wa_name: waName } : {}),
     address: m.address,
     last_inbound_at: at,
@@ -253,14 +236,20 @@ export async function handleInbound(m: Inbound): Promise<void> {
 
   // Pelanggan lama yang diimpor dengan "bot diam": baru sekarang alamat chatnya diketahui.
   if (c.pending_off) {
-    setBotOff(m.address, at);
-    c = updateContact(m.phone, { pending_off: 0 });
+    await setBotOff(m.address, at);
+    c = await updateContact(m.phone, { pending_off: 0 });
   }
-  if (humanHolds(m.address, at)) {
+  // Bot dijeda untuk semua chat: pesannya sudah tercatat, tapi tidak dibalas
+  // dan tidak dijadwalkan follow-up.
+  if (projectPaused()) {
+    console.log(`[alur] ${m.phone}: bot dijeda untuk semua chat, tidak dibalas`);
+    return;
+  }
+  if (await humanHolds(m.address, at)) {
     console.log(`[alur] ${m.phone}: sedang ditangani manusia, bot diam`);
     return;
   }
-  if (countInboundSince(m.phone, at - 24 * HOUR) > cfg.maxInboundPerNumber) {
+  if ((await countInboundSince(m.phone, at - 24 * HOUR)) > cfg.maxInboundPerNumber) {
     console.log(`[alur] ${m.phone}: lewat jatah harian, bot diam`);
     return;
   }
@@ -296,14 +285,14 @@ export async function handleInbound(m: Inbound): Promise<void> {
       console.error(`[alur] ${m.phone}: pesan suara gagal diunduh: ${e instanceof Error ? e.message : e}`);
     }
     if (heard) {
-      addMessage(m.phone, 'in', `[suara, ditranskripsi] ${heard}`, at);
+      await addMessage(m.phone, 'in', `[suara, ditranskripsi] ${heard}`, at);
       text = heard;
       console.log(`[alur] ${m.phone}: pesan suara ditranskripsi (${heard.length} huruf)`);
     }
   }
   if (media && !image && !heard) {
-    c = updateContact(c.phone, { needs_sales: 1 });
-    c = notifyStaff(c, `Kirim ${media}`, stored, at);
+    c = await updateContact(c.phone, { needs_sales: 1 });
+    c = await notifyStaff(c, `Kirim ${media}`, stored, at);
   }
   if (!text && !image) {
     if (media) {
@@ -313,7 +302,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
       // Jangan mengulang pemberitahuan yang sama untuk tiap pesan beruntun.
       c = await reply(c, NON_TEXT);
     }
-    updateContact(c.phone, { followup_state: awaitsCustomer(c) ? 'pending' : 'idle' });
+    await updateContact(c.phone, { followup_state: awaitsCustomer(c) ? 'pending' : 'idle' });
     void deliverOutbox().catch((e) => console.error('[outbox]', e));
     return;
   }
@@ -322,7 +311,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
   const said = text || 'Pelanggan mengirim foto tanpa keterangan.';
   if (!(isNew && text && bareGreeting(text))) {
     // Untuk kontak lama, entri terakhir adalah pesan yang baru saja dicatat.
-    const history = isNew ? [] : recentMessages(c.phone, 12).slice(0, -1);
+    const history = isNew ? [] : (await recentMessages(c.phone, 12)).slice(0, -1);
     const notes = [
       image ? 'Pelanggan melampirkan foto, ikut di pesan ini. Amati fotonya (lihat FOTO DARI PELANGGAN) lalu jawab.' : null,
       heard ? 'Pesan terbaru adalah PESAN SUARA yang ditranskripsi otomatis; bisa ada salah dengar. Kalau ada bagian yang tidak jelas, tanyakan, jangan ditebak.' : null,
@@ -346,7 +335,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
 
     // Data lead: nilai baru menggantikan, kosong tidak pernah menghapus.
     if (result) {
-      c = updateContact(c.phone, {
+      c = await updateContact(c.phone, {
         lead: { ...c.lead, ...result.fields },
         needs_sales: c.needs_sales || result.intent === 'handoff' ? 1 : 0,
         ...(result.summary ? { summary: result.summary } : {}),
@@ -384,7 +373,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
     // di sini hanya rem darurat: dulu ia menahan SEMUA kiriman ulang, sehingga
     // bot bilang "saya lampirkan" padahal tidak ada yang terkirim.
     if (result && !rejected) {
-      const outs = recentMessages(c.phone, 40).filter((t) => t.dir === 'out').map((t) => t.text);
+      const outs = (await recentMessages(c.phone, 40)).filter((t) => t.dir === 'out').map((t) => t.text);
       let failed = false;
       for (const [kind, id] of [...result.photos.map((x) => ['foto', x] as const), ...result.docs.map((x) => ['pdf', x] as const)]) {
         const f = fileById(id);
@@ -400,7 +389,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
         try {
           const fileName = kind === 'pdf' ? `${label.replace(/[^\w .()+-]+/g, ' ').replace(/\s+/g, ' ').trim() || 'brosur'}.pdf` : undefined;
           await send({ phone: c.phone, address: c.address }, label, join(mediaDir(), f.file), fileName);
-          addMessage(c.phone, 'out', mark, now());
+          await addMessage(c.phone, 'out', mark, now());
           console.log(`[alur] ${c.phone}: ${kind} terkirim — ${label}`);
         } catch (e) {
           failed = true;
@@ -419,20 +408,20 @@ export async function handleInbound(m: Inbound): Promise<void> {
     const complete = missingFields(c).length === 0;
     if (complete && !c.lead_sent_at) {
       const p = leadPayload(c, 'Lead lengkap', said);
-      outboxAdd('sales', p, at);
-      outboxAdd('sheet', p, at);
+      await outboxAdd('sales', p, at);
+      await outboxAdd('sheet', p, at);
       // WhatsApp lewat antrean di atas; email dan Telegram langsung.
       void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} | ${biz.brand}`, salesText(p));
       signalDashboard();
-      c = updateContact(c.phone, { lead_sent_at: at });
+      c = await updateContact(c.phone, { lead_sent_at: at });
     } else if (handoff) {
       // Bot tidak bisa menjawab sendiri (di luar pengetahuannya, pelanggan minta
       // orang, atau balasannya ditolak pagar): staf dikabari, dengan pertanyaannya.
-      c = notifyStaff(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Bot tidak bisa menjawab, perlu dibantu', said, at);
+      c = await notifyStaff(c, result?.intent === 'human' ? 'Minta dihubungi' : 'Bot tidak bisa menjawab, perlu dibantu', said, at);
     }
   }
 
-  updateContact(c.phone, { followup_state: awaitsCustomer(c) ? 'pending' : 'idle' });
+  await updateContact(c.phone, { followup_state: awaitsCustomer(c) ? 'pending' : 'idle' });
   void deliverOutbox().catch((e) => console.error('[outbox]', e));
 }
 
@@ -440,14 +429,14 @@ export async function handleInbound(m: Inbound): Promise<void> {
  * Pemilik membalas sendiri dari HP. Bot mundur untuk kontak ini, dan follow-up
  * yang sedang menunggu batal — manusia yang sekarang memegang percakapannya.
  */
-export function handleHumanReply(m: { address: string; text: string }): void {
+export async function handleHumanReply(m: { address: string; text: string }): Promise<void> {
   const at = now();
-  setPause(m.address, at + cfg.humanPauseHours * HOUR);
-  markHuman(m.address, at);
-  const c = contactByAddress(m.address);
+  await setPause(m.address, at + cfg.humanPauseHours * HOUR);
+  await markHuman(m.address, at);
+  const c = await contactByAddress(m.address);
   if (c) {
-    addMessage(c.phone, 'human', m.text || '[bukan teks]', at);
-    updateContact(c.phone, { last_dir: 'human', followup_state: 'idle' });
+    await addMessage(c.phone, 'human', m.text || '[bukan teks]', at);
+    await updateContact(c.phone, { last_dir: 'human', followup_state: 'idle' });
   }
   console.log(`[alur] ${c?.phone ?? m.address}: dibalas manusia, bot ${biz.stopAfterHuman ? 'tidak ikut campur lagi di chat ini' : `diam ${cfg.humanPauseHours} jam`}`);
 }

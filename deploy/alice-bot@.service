@@ -1,0 +1,29 @@
+# /etc/systemd/system/alice-bot@.service — bot WhatsApp, satu layanan per proyek:
+#   alice-bot@gfan.service = proyek "gfan". Dinyalakan/dimatikan otomatis oleh
+#   alice-reconcile.timer menurut kolom `enabled` di tabel projects.
+#   journalctl -u alice-bot@gfan -f
+
+[Unit]
+Description=Alice AI - bot WhatsApp proyek %i
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alice
+Group=alice
+WorkingDirectory=/opt/alice-ai
+Environment=NODE_ENV=production
+Environment=PROJECT=%i
+ExecStart=/usr/bin/npm run bot
+Restart=always
+RestartSec=5
+# Sesi WhatsApp (auth/<proyek>/) hanya boleh dibaca pemiliknya.
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/alice-ai
+
+[Install]
+WantedBy=multi-user.target
