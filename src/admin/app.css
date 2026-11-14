@@ -137,6 +137,8 @@ section[data-page].on { display: block; }
 .help { color: var(--muted); margin: 0; }
 .cb > .help { margin-bottom: 14px; }
 .cardfoot { border-top: 1px solid var(--line-soft); background: var(--surface2); padding: 10px 20px; border-radius: 0 0 var(--radius) var(--radius); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 13px; }
+/* Teks biasa di kaki kartu: satu butir flex, jadi kata tebal di dalamnya tetap sebaris. */
+.cardfoot > .note { display: inline; white-space: normal; margin: 0; min-width: 0; }
 label.f { display: block; margin-bottom: 14px; }
 label.f > span { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 label.f > small { display: block; color: var(--muted); margin-top: 4px; }
@@ -274,7 +276,9 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .legend > * { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; }
 .legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .legend a:hover span { text-decoration: underline; }
-.bar { height: 6px; background: var(--blue); border-radius: 3px; min-width: 2px; opacity: .8; }
+/* Pemakaian & biaya: pilihan rentang di atas kotak angka, keterangan tarif di bawah grafik biaya. */
+.usage-range { margin-bottom: 12px; }
+.chart-note { margin: 10px 0 0; font-size: 12px; }
 
 /* ---- percakapan ---- */
 .leadbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
