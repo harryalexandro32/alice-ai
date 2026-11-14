@@ -140,8 +140,8 @@ const tracked = new Map<string, { what: string; timer: NodeJS.Timeout }>();
 const STATUS = ['gagal', 'menunggu', 'diterima server', 'sampai di HP pelanggan', 'dibaca', 'diputar'];
 
 /**
- * Log Baileys tetap tampil di terminal seperti biasa; baris galat (level 50+)
- * dan peringatan (40) juga disalin ke catatan galat untuk dashboard.
+ * Log Baileys tetap tampil di terminal seperti biasa; baris error (level 50+)
+ * dan warning (40) juga disalin ke catatan error untuk dashboard.
  */
 const waLogger = pino(
   { level: 'info' },
@@ -152,7 +152,7 @@ const waLogger = pino(
         const j = JSON.parse(line) as { level?: number; msg?: string; err?: { message?: string }; trace?: string };
         if ((j.level ?? 0) >= 40) {
           const detail = j.err?.message ?? j.trace?.split('\n')[0] ?? '';
-          recordError(j.level! >= 50 ? 'galat' : 'peringatan', `[baileys] ${j.msg ?? ''}${detail ? ` — ${detail}` : ''}`);
+          recordError(j.level! >= 50 ? 'error' : 'warning', `[baileys] ${j.msg ?? ''}${detail ? ` — ${detail}` : ''}`);
         }
       } catch {
         // bukan baris JSON
@@ -429,7 +429,7 @@ async function sendNow(jid: string, text: string, opts?: SendOptions): Promise<v
     const id = res.key.id;
     const what = `lampiran "${opts.fileName ?? text.slice(0, 40)}" ke ${jid}`;
     const timer = setTimeout(() => {
-      if (tracked.delete(id)) console.error(`[wa] PERINGATAN: ${what} belum ada tanda sampai setelah 2 menit`);
+      if (tracked.delete(id)) console.error(`[wa] WARNING: ${what} belum ada tanda sampai setelah 2 menit`);
     }, 120_000);
     timer.unref();
     tracked.set(id, { what, timer });

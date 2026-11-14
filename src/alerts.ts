@@ -1,5 +1,5 @@
 /**
- * Peringatan untuk pemilik dan staf: hal-hal yang butuh orang, bukan sekadar
+ * Warning untuk pemilik dan staf: hal-hal yang butuh orang, bukan sekadar
  * catatan log.
  *
  *   - bot tidak bisa menjawab pelanggan dan butuh staf (kurang pengetahuan,
@@ -7,7 +7,7 @@
  *   - WhatsApp terputus permanen, kiriman dijeda pengaman, balasan dari
  *     dashboard yang gagal terkirim, LLM bermasalah.
  *
- * Tiap peringatan dicatat (tampil di dashboard: Beranda dan Pengaturan > Lanjutan)
+ * Tiap warning dicatat (tampil di dashboard: Beranda dan Pengaturan > Lanjutan)
  * dan dikirim ke penerima yang diatur di dashboard (lihat notify.ts): lewat
  * WhatsApp selama WhatsApp-nya masih jalan, plus Telegram dan email — dua
  * jalur yang tetap sampai saat WhatsApp-nya sendiri yang bermasalah.
@@ -32,7 +32,7 @@ export const ALERT_TITLES: Record<NotifyKind, string> = {
   'bot-mati': 'Bot berhenti',
 };
 
-/** Peringatan sejenis tidak diulang lebih sering dari ini. */
+/** Warning sejenis tidak diulang lebih sering dari ini. */
 const QUIET: Record<AlertKind, number> = {
   'butuh-staf': 30 * MINUTE,
   'wa-putus': 6 * HOUR,
@@ -47,7 +47,7 @@ let signal: (() => void) | null = null;
 export function setDashboardSignal(fn: (() => void) | null): void {
   signal = fn;
 }
-/** Ada yang perlu segera terlihat di dashboard (peringatan, lead baru). */
+/** Ada yang perlu segera terlihat di dashboard (warning, lead baru). */
 export function signalDashboard(): void {
   signal?.();
 }
@@ -59,7 +59,7 @@ export function setAlertWhatsApp(fn: ((phone: string, text: string) => Promise<u
 }
 
 /**
- * Catat dan kirim peringatan. `key` membedakan peringatan sejenis (mis. nomor
+ * Catat dan kirim warning. `key` membedakan warning sejenis (mis. nomor
  * pelanggan). `whatsapp: false` untuk hal yang sudah punya notifikasi WA
  * sendiri, atau saat WhatsApp-nya yang bermasalah. True kalau benar-benar
  * dicatat (bukan ulangan dalam masa tenang).
@@ -72,15 +72,15 @@ export async function raiseAlert(kind: AlertKind, text: string, opts: { key?: st
     await addAlert({ at, kind, key, text });
   } catch (e) {
     // Database belum terbuka (mis. gagal sangat awal): tetap tampil di log.
-    console.error(`[peringatan] tidak tercatat: ${e instanceof Error ? e.message : e}`);
+    console.error(`[warning] tidak tercatat: ${e instanceof Error ? e.message : e}`);
   }
   signalDashboard();
   const title = `⚠️ ${ALERT_TITLES[kind]} | ${biz.brand}`;
-  console.error(`[peringatan] ${ALERT_TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
+  console.error(`[warning] ${ALERT_TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
   void deliverExternal(kind, title, text);
   if (opts.whatsapp !== false && viaWhatsApp) {
     for (const phone of waTargets(kind)) {
-      void viaWhatsApp(phone, `${title}\n${text}`).catch((e) => console.error(`[peringatan] WA ke ${phone} gagal: ${e instanceof Error ? e.message : e}`));
+      void viaWhatsApp(phone, `${title}\n${text}`).catch((e) => console.error(`[warning] WA ke ${phone} gagal: ${e instanceof Error ? e.message : e}`));
     }
   }
   return true;

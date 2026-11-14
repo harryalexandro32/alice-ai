@@ -271,14 +271,18 @@ export async function addError(e: ErrorRow): Promise<void> {
   }
 }
 
-/** Catatan galat, terbaru dulu. */
+/** Level lama yang masih ada di baris yang sudah tersimpan -> level sekarang. */
+const OLD_LEVELS: Record<string, string> = { galat: 'error', peringatan: 'warning' };
+
+/** Catatan error, terbaru dulu. */
 export async function recentErrors(n: number): Promise<ErrorRow[]> {
-  return db()
+  const rows = await db()
     .select({ at: errors.at, level: errors.level, text: errors.text })
     .from(errors)
     .where(eq(errors.project, pid()))
     .orderBy(desc(errors.id))
     .limit(n);
+  return rows.map((r) => ({ ...r, level: OLD_LEVELS[r.level] ?? r.level }));
 }
 
 export interface AlertRow {
@@ -295,7 +299,7 @@ export async function addAlert(a: AlertRow): Promise<void> {
   await db().delete(alerts).where(and(eq(alerts.project, p), notInArray(alerts.id, keep)));
 }
 
-/** Kapan peringatan sejenis (jenis + kunci) terakhir dicatat; 0 = belum pernah. */
+/** Kapan warning sejenis (jenis + kunci) terakhir dicatat; 0 = belum pernah. */
 export async function lastAlertAt(kind: string, key: string): Promise<number> {
   const [r] = await db()
     .select({ at: sql<string | null>`max(${alerts.at})` })
@@ -304,7 +308,7 @@ export async function lastAlertAt(kind: string, key: string): Promise<number> {
   return Number(r?.at ?? 0);
 }
 
-/** Peringatan terbaru dulu. */
+/** Warning terbaru dulu. */
 export async function recentAlerts(n: number): Promise<AlertRow[]> {
   return db()
     .select({ at: alerts.at, kind: alerts.kind, key: alerts.key, text: alerts.text })

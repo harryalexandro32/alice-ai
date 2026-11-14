@@ -189,7 +189,7 @@ const STAFF_NOTIFY_GAP = 30 * MINUTE;
 
 /**
  * Kabari staf bahwa pelanggan ini menunggu manusia: notifikasi WA (lewat
- * antrean) dan peringatan di dashboard. Tidak diulang tiap pesan.
+ * antrean) dan warning di dashboard. Tidak diulang tiap pesan.
  */
 async function notifyStaff(c: Contact, kind: string, lastMessage: string, at: number): Promise<Contact> {
   if (c.handoff_sent_at && at - c.handoff_sent_at < STAFF_NOTIFY_GAP) return c;

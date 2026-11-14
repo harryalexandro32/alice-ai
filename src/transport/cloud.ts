@@ -13,7 +13,7 @@
  *
  * Dua aturan Cloud API yang membentuk kode ini:
  *   - Teks bebas hanya boleh dalam 24 jam sejak pesan terakhir pelanggan.
- *     Di luar itu wajib template yang disetujui Meta (galat 131047).
+ *     Di luar itu wajib template yang disetujui Meta (error 131047).
  *   - Sebuah nomor tidak bisa mengirimi dirinya sendiri.
  */
 
@@ -301,7 +301,7 @@ export const cloudTransport: Transport = {
       self = normPhone(String(info.display_phone_number ?? ''));
       console.log(`[cloud] nomor: ${info.display_phone_number} (${info.verified_name ?? '-'})`);
     } catch (e) {
-      console.error(`[cloud] PERINGATAN: tidak bisa membaca info nomor: ${e instanceof Error ? e.message : e}`);
+      console.error(`[cloud] WARNING: tidak bisa membaca info nomor: ${e instanceof Error ? e.message : e}`);
     }
 
     server = createServer(onRequest);

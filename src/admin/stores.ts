@@ -77,6 +77,6 @@ export interface AdminStore {
   status(): Promise<BotStatus | null>;
   usage(): Promise<UsageReport | null>;
   alerts(): Promise<AlertItem[]>;
-  /** Catatan galat bot, terbaru dulu. */
+  /** Catatan error bot, terbaru dulu. */
   errors(): Promise<ErrorItem[]>;
 }

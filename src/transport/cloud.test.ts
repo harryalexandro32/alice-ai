@@ -154,7 +154,7 @@ graph.listen(0, '127.0.0.1', async () => {
     await cloudTransport.send({ phone: '+6281211110001', address: '6281211110001' }, 'lagi', { image: img });
     assert.equal(calls.length, before + 1, 'unggahan kedua memakai id yang sudah ada');
 
-    // Di luar jendela 24 jam: galatnya jelas, bukan diam.
+    // Di luar jendela 24 jam: error-nya jelas, bukan diam.
     failNext = { status: 400, body: { error: { code: 131047, message: 'Re-engagement message' } } };
     await assert.rejects(
       cloudTransport.send({ phone: '+6281211110001', address: '6281211110001' }, 'telat'),

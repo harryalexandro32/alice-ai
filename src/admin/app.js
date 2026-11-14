@@ -147,7 +147,7 @@ const PAGES = {
   pengaturan: () => [T('Pengaturan', 'Settings'), T('Umum', 'General'), T('Proyek, saat admin ikut membalas, dan follow-up.', 'Project, when a human admin steps in, and follow-up.')],
   whatsapp: () => [T('Pengaturan', 'Settings'), 'WhatsApp', T('Tautkan nomor bot, lihat keadaan bot, dan pengaman nomornya.', 'Link the bot\'s number, see the bot\'s status and the number safeguard.')],
   notifikasi: () => [T('Pengaturan', 'Settings'), T('Notifikasi', 'Notifications'), T('Siapa yang dikabari bot, dan kabar mana ke siapa.', 'Who the bot notifies, and which news goes to whom.')],
-  lanjutan: () => [T('Pengaturan', 'Settings'), T('Lanjutan', 'Advanced'), T('Mode uji, batas dan pengaman, irama balasan, biaya LLM, riwayat peringatan, dan catatan galat.', 'Test mode, limits and safeguards, reply rhythm, LLM cost, alert history and the error log.')],
+  lanjutan: () => [T('Pengaturan', 'Settings'), T('Lanjutan', 'Advanced'), T('Mode uji, batas dan pengaman, irama balasan, biaya LLM, riwayat warning, dan catatan error.', 'Test mode, limits and safeguards, reply rhythm, LLM cost, alert history and the error log.')],
   notfound: () => ['', T('Halaman tidak ada', 'Page not found'), ''],
 };
 
@@ -1774,7 +1774,7 @@ function renderHome() {
     ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan > Lainnya →', 'Open in Knowledge > Other →');
 }
 
-// ---------- peringatan & catatan galat ----------
+// ---------- warning & catatan error ----------
 const ALERT_KINDS = {
   'butuh-staf': () => T('Pelanggan butuh staf', 'Customer needs staff'),
   'wa-putus': () => T('WhatsApp terputus', 'WhatsApp disconnected'),
@@ -1783,6 +1783,9 @@ const ALERT_KINDS = {
   llm: () => T('LLM bermasalah', 'LLM problem'),
   'bot-mati': () => T('Bot berhenti', 'Bot stopped'),
 };
+
+/** Level baris catatan error; nilai lama di baris yang sudah tersimpan juga dikenali. */
+const isError = (level) => level === 'error' || level === 'galat';
 
 /** Menit sejak laporan terakhir bot, kalau lebih dari 40 menit (bot dianggap mati); selain itu null. */
 function staleMinutes() {
@@ -1812,12 +1815,12 @@ async function loadAlerts() {
     const rows = r.alerts.map((a) => el('tr', {}, el('td', { textContent: when(a.at), style: 'white-space:nowrap' }),
       el('td', {}, el('span', { className: 'chip warn', textContent: (ALERT_KINDS[a.kind] || (() => a.kind))() })), el('td', { textContent: a.text })));
     $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
-      el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada peringatan.', 'No alerts yet.'))])));
+      el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada warning.', 'No alerts yet.'))])));
     const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
-      el('td', {}, el('span', { className: 'chip ' + (e.level === 'galat' ? 'warn' : ''), textContent: e.level === 'galat' ? T('galat', 'error') : T('peringatan', 'warning') })),
+      el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? T('error', 'error') : T('warning', 'warning') })),
       el('td', { className: 'mono', textContent: e.text })));
     $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Isi', 'Message')),
-      el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada galat yang tercatat.', 'No errors recorded yet.'))])));
+      el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
   } catch (e) { toast(e.message, true); }
 }
 

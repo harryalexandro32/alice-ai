@@ -97,7 +97,7 @@ const base = {
 
   humanPauseHours: num('HUMAN_PAUSE_HOURS', 12),
 
-  // Peringatan untuk pemilik lewat Telegram (opsional; lihat src/alerts.ts).
+  // Warning untuk pemilik lewat Telegram (opsional; lihat src/alerts.ts).
   telegramToken: str('TELEGRAM_BOT_TOKEN'),
   telegramChat: str('TELEGRAM_CHAT_ID'),
   // Email lewat SMTP (opsional). Rahasia: hanya di .env, tidak pernah di dashboard.

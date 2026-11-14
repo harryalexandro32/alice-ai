@@ -8,7 +8,7 @@
  *
  * Balasan dari dashboard (jenis `reply`) ditulis dashboard, dikirim bot: proses
  * bot memeriksanya tiap beberapa detik (app.ts). Selama WhatsApp belum
- * tersambung balasan itu menunggu; yang terus gagal dicatat sebagai peringatan.
+ * tersambung balasan itu menunggu; yang terus gagal dicatat sebagai warning.
  */
 
 import { raiseAlert } from '../alerts';

@@ -61,7 +61,7 @@ dibagikan, atau dibuka di tab baru:
 | `/gfan/percakapan/+62812…` | satu percakapan: riwayat lengkap, balas dari web, tahap, catatan |
 | `/gfan/pengetahuan/identitas` | juga `produk`, `rekomendasi`, `brosur`, `lainnya` (panel **Coba bicara** di tiap halaman) |
 | `/gfan/pengaturan` | proyek, saat admin ikut membalas, follow-up |
-| `/gfan/pengaturan/whatsapp` | juga `notifikasi`, `lanjutan` (mode uji, batas, biaya LLM, riwayat peringatan, galat) |
+| `/gfan/pengaturan/whatsapp` | juga `notifikasi`, `lanjutan` (mode uji, batas, biaya LLM, riwayat warning, error) |
 
 Alamat lama `/admin` dialihkan ke `/`. Data lewat `/api/<proyek>/…`; id proyek tidak boleh
 memakai kata yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`,
@@ -76,7 +76,7 @@ memakai kata yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `
   lain hanya berubah dari dashboard.
 - **Balas dari web**: balasan masuk antrean (`outbox`, jenis `reply`) dan dikirim proses bot dalam
   ±3 detik selama WhatsApp tersambung. Bot langsung mundur di chat itu, sama seperti admin yang
-  membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi peringatan
+  membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi warning
   `kiriman-gagal`.
 - **Pertanyaan yang belum terjawab**: tiap pertanyaan yang dioper bot ke staf dicatat (tabel
   `handoffs`) dan dikelompokkan. Tulis jawabannya sekali di Pengetahuan > Lainnya, lalu

@@ -47,7 +47,7 @@ export function setUsageRecorder(fn: ((d: UsageDelta) => unknown) | null): void 
   recorder = fn;
 }
 
-// Pendengar masalah (dipasang app.ts -> peringatan). Seperti pencatat di atas,
+// Pendengar masalah (dipasang app.ts -> warning). Seperti pencatat di atas,
 // penyedia ini sendiri tidak tahu apa-apa soal database maupun WhatsApp.
 let onProblem: ((text: string) => void) | null = null;
 export function setLlmProblemListener(fn: ((text: string) => void) | null): void {

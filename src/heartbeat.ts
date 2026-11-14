@@ -123,7 +123,7 @@ export async function markStopped(): Promise<void> {
 
 /** Mulai melapor. Mengembalikan fungsi untuk berhenti (tes). */
 export function startHeartbeat(transport: Transport): () => void {
-  // Galat yang sama berulang tiap 3 detik (mis. database putus) cukup dicatat sekali.
+  // Error yang sama berulang tiap 3 detik (mis. database putus) cukup dicatat sekali.
   let lastError = '';
   const failed = (what: string) => (e: unknown) => {
     const text = `[detak] ${what} gagal: ${e instanceof Error ? e.message : e}`;
