@@ -2182,6 +2182,7 @@ function renderMeta() {
   const p = projects.find((x) => x.id === project);
   document.title = title + (p ? ' · ' + p.name : '') + ' · Alice AI';
   setDirty(dirty);
+  $('convBack').hidden = page !== 'chat';
   if (page === 'chat' && conv && conv.contact) renderConvHead();
 }
 

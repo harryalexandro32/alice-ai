@@ -126,6 +126,9 @@ main { min-width: 0; }
 .pagehead { padding: 18px 32px 14px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line-soft); }
 .pagehead > div:first-child { flex: 1; min-width: 200px; }
 .pagehead h1 { font-size: 24px; font-weight: 600; margin: 0 0 2px; letter-spacing: -.01em; }
+/* Baris judul: panah kembali (hanya di halaman percakapan) di kiri nama. */
+.pagehead .titlerow { display: flex; align-items: center; gap: 10px; }
+.pagehead .back { width: var(--control-h); padding: 0; justify-content: center; flex: none; }
 .pagehead p { margin: 0; color: var(--muted); max-width: 720px; }
 .pagehead .crumb { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
 .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
