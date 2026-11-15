@@ -12,7 +12,7 @@
 
 import { refreshBiz } from './business';
 import { cfg, MINUTE } from './config';
-import { humanPause } from './pace';
+import { sendPaced, type TypingHooks } from './pace';
 import { waTargets } from './notify';
 import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
 import { startHeartbeat, transportConnected } from './heartbeat';
@@ -50,7 +50,8 @@ export function makeWaSender(transport: Transport): (phone: string, text: string
       }
       return false;
     }
-    await transport.send({ phone: target, address: '' }, text, { notify: true });
+    // Tanpa mikir dan tanpa mengetik, tapi tetap antre di belakang chat yang sedang diketik.
+    await sendPaced(target, text, { mode: 'notify', send: () => transport.send({ phone: target, address: '' }, text, { notify: true }) });
     return true;
   };
 }
@@ -124,6 +125,16 @@ function flush(phone: string): void {
   );
 }
 
+/** "sedang mengetik…" ke satu lawan bicara, kalau jalurnya bisa (Cloud API tidak). */
+function typingHooks(transport: Transport, to: { phone: string; address: string }): TypingHooks | undefined {
+  const { typing, typingStop } = transport;
+  if (!typing) return undefined;
+  return {
+    start: () => typing.call(transport, to),
+    ...(typingStop ? { stop: () => typingStop.call(transport, to) } : {}),
+  };
+}
+
 /** Pagar terakhir: tidak ada teks yang keluar lewat WhatsApp membawa tanda pisah panjang. */
 function withoutDashes(transport: Transport): Transport {
   const send = transport.send.bind(transport);
@@ -158,19 +169,31 @@ export async function startApp(raw: Transport): Promise<void> {
   // Sebelum tiap giliran (paling sering tiap 5 detik).
   setBeforeTurn(() => reload(false));
 
-  // Balasan ke pelanggan menunggu dulu dengan irama manusia (lihat pace.ts).
-  // Notifikasi ke sales dan follow-up tidak: keduanya bukan balasan.
-  // Jeda yang sudah ditunggu ikut diberitahukan ke transport, supaya jeda
-  // pengaman (antiban) tidak ditambahkan lagi di atasnya.
-  setSender(async (to, text, image, fileName) => {
-    const pacedMs = await humanPause(to.address || to.phone, text.length, async () => transport.typing?.(to));
-    await transport.send(to, text, { ...(image ? { image, fileName } : {}), pacedMs });
-  });
+  // Semua kiriman lewat irama manusia (lihat pace.ts): satu lawan bicara pada
+  // satu waktu, dan "sedang mengetik…" selama panjang pesannya. Jeda yang
+  // sudah ditunggu ikut diberitahukan ke transport, supaya jeda pengaman
+  // (antiban) tidak ditambahkan lagi di atasnya.
+  setSender((to, text, image, fileName) =>
+    sendPaced(to.address || to.phone, text, {
+      mode: 'reply',
+      typing: typingHooks(transport, to),
+      send: (pacedMs) => transport.send(to, text, { ...(image ? { image, fileName } : {}), pacedMs }),
+    }).then(() => {})
+  );
+  // Notifikasi ke sales dan kabar "butuh staf": hanya antre (lihat makeWaSender).
   const toSales = makeSalesNotifier(transport);
   setSalesNotifier(toSales);
-  // Balasan staf dari dashboard: dikirim apa adanya, tanpa jeda "manusiawi"
-  // (staf sendiri yang mengetiknya), hanya lewat pengaman nomor di transport.
-  setReplySender((to, text) => transport.send(to, text), transportConnected);
+  // Balasan staf dari dashboard: isinya apa adanya; mikir singkat lalu mengetik
+  // sesuai panjangnya, lalu lewat pengaman nomor di transport.
+  setReplySender(
+    (to, text) =>
+      sendPaced(to.address || to.phone, text, {
+        mode: 'dashboard',
+        typing: typingHooks(transport, to),
+        send: (pacedMs) => transport.send(to, text, { pacedMs }),
+      }).then(() => {}),
+    transportConnected
+  );
 
   // Warning untuk pemilik. Yang soal WhatsApp-nya sendiri tidak dikirim
   // lewat WhatsApp: saat itu jalurnya justru sedang bermasalah.
@@ -226,7 +249,13 @@ export async function startApp(raw: Transport): Promise<void> {
   const tick = async () => {
     try {
       await reload(true);
-      await runFollowups((to, text) => transport.send(to, text));
+      await runFollowups((to, text) =>
+        sendPaced(to.address || to.phone, text, {
+          mode: 'followup',
+          typing: typingHooks(transport, to),
+          send: (pacedMs) => transport.send(to, text, { pacedMs }),
+        }).then(() => {})
+      );
       await deliverOutbox();
     } catch (e) {
       console.error('[app] putaran berkala gagal:', e instanceof Error ? e.message : e);

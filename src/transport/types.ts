@@ -61,8 +61,10 @@ export interface Transport {
   start(handlers: TransportHandlers): Promise<void>;
   /** `address` kosong = turunkan dari `phone`. */
   send(to: { phone: string; address: string }, text: string, opts?: SendOptions): Promise<void>;
-  /** Tampilkan "sedang mengetik…" ke lawan bicara, kalau jalurnya bisa. */
+  /** Tampilkan "sedang mengetik…" ke lawan bicara sekarang, kalau jalurnya bisa. */
   typing?(to: { phone: string; address: string }): Promise<void>;
+  /** Hapus "sedang mengetik…" (berhenti sebentar, atau tepat sebelum pesannya keluar). */
+  typingStop?(to: { phone: string; address: string }): Promise<void>;
   /** Nomor bot sendiri ("+62…"), atau null kalau belum diketahui. */
   selfPhone(): string | null;
   /**

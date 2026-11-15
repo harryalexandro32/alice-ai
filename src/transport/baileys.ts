@@ -503,6 +503,10 @@ export const baileysTransport: Transport = {
     await markRead(jid);
     await sock?.sendPresenceUpdate('composing', jid).catch(() => {});
   },
+  async typingStop(to) {
+    const jid = to.address || `${to.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    await sock?.sendPresenceUpdate('paused', jid).catch(() => {});
+  },
   send(to, text, opts) {
     const jid = to.address || `${to.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
     // Satu antrean: dua kiriman bersamaan tidak boleh saling menyalip jedanya.
