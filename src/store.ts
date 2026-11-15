@@ -12,7 +12,7 @@
  * dikumpulkan ditentukan profil bisnis, bukan skema.
  */
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql } from 'drizzle-orm';
 
 import { db } from './db';
 import {
@@ -58,6 +58,10 @@ export interface Contact {
   stage: Stage;
   /** Catatan staf, atau null. */
   note: string | null;
+  /** Balasan ditunda sampai jam tenang berakhir (ms), atau null. */
+  deferred_until: number | null;
+  /** Kapan pelanggan minta tidak dihubungi lagi (ms), atau null. */
+  opted_out_at: number | null;
 }
 
 export type OutboxKind = 'sales' | 'reply';
@@ -98,6 +102,7 @@ export async function createContact(phone: string, address: string, at: number):
 const UPDATABLE = new Set<keyof Contact>([
   'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
   'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name', 'handled_at', 'pending_off', 'stage', 'note',
+  'deferred_until', 'opted_out_at',
 ]);
 
 export async function updateContact(phone: string, patch: Partial<Contact>): Promise<Contact> {
@@ -324,6 +329,25 @@ export async function followupCandidates(): Promise<Contact[]> {
     .from(contacts)
     .where(and(eq(contacts.project, pid()), eq(contacts.followup_state, 'pending'), eq(contacts.last_dir, 'out')));
   return rows.map((r) => toContact(r) as Contact);
+}
+
+/** Kontak yang balasannya ditunda jam tenang dan sudah waktunya dibalas (`deferred_until` <= at). */
+export async function dueDeferred(at: number): Promise<Contact[]> {
+  const rows = await db()
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.project, pid()), isNotNull(contacts.deferred_until), lte(contacts.deferred_until, at)))
+    .orderBy(contacts.deferred_until);
+  return rows.map((r) => toContact(r) as Contact);
+}
+
+/** Waktu balasan tertunda yang paling dekat (ms), atau null kalau tidak ada. */
+export async function nextDeferredAt(): Promise<number | null> {
+  const [r] = await db()
+    .select({ at: sql<string | null>`min(${contacts.deferred_until})` })
+    .from(contacts)
+    .where(eq(contacts.project, pid()));
+  return r?.at === null || r?.at === undefined ? null : Number(r.at);
 }
 
 /** Kontak terbaru, untuk daftar lead di dashboard. */

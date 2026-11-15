@@ -6,7 +6,8 @@
  * dipakai), tapi percakapan latihan hanya disimpan di memori: data pelanggan
  * sungguhan tidak tersentuh.
  *
- *   /maju 23j        majukan jam (j = jam, m = menit) lalu jalankan follow-up
+ *   /maju 23j        majukan jam (j = jam, m = menit) lalu jalankan balasan
+ *                    yang ditunda jam tenang dan follow-up
  *   /manusia <teks>  pemilik membalas sendiri dari HP
  *   /lead            lihat data kontak ini
  *   /nomor 62812…    pindah jadi nomor lain
@@ -18,7 +19,7 @@ import { createInterface } from 'node:readline';
 import { biz, initBiz, REGISTRY } from './business';
 import { advance, localStamp, now } from './clock';
 import { cfg, HOUR, MINUTE, normPhone } from './config';
-import { handleHumanReply, handleInbound, setSender, type Sender } from './flow';
+import { handleHumanReply, handleInbound, runDeferred, setSender, type Sender } from './flow';
 import { runFollowups } from './followup';
 import { llmEnabled, llmUsageToday } from './llm/provider';
 import { deliverOutbox, setSalesNotifier } from './sinks/outbox';
@@ -85,6 +86,7 @@ async function main() {
       const m = line.match(/(\d+(?:[.,]\d+)?)\s*([jm])/i);
       if (m?.[1] && m[2]) {
         advance(Number(m[1].replace(',', '.')) * (m[2].toLowerCase() === 'j' ? HOUR : MINUTE));
+        await runDeferred();
         const n = await runFollowups(send);
         if (!n) console.log('(tidak ada follow-up yang jatuh tempo)');
       } else console.log('Contoh: /maju 23j   atau   /maju 30m');
@@ -99,6 +101,8 @@ async function main() {
       console.log(`\n👤 ${line}`);
       await handleInbound({ phone, address: phone, text: line });
       await deliverOutbox();
+      const c = await getContact(phone);
+      if (c?.deferred_until) console.log(`(jam tenang: dibalas pukul ${localStamp(c.deferred_until).slice(11)}; /maju untuk memajukan jam)`);
     }
     prompt();
   }

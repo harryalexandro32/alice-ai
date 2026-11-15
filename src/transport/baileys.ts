@@ -169,8 +169,10 @@ const waLogger = pino(
  * Pilihan setelannya:
  *   - preset "conservative", dengan batas per menit/jam/hari dari Pengaturan
  *     proyek (waMaxPer*), jadi angka di dashboard tetap satu-satunya sumber;
- *   - pemanasan 7 hari mulai 20 kiriman di hari pertama; jeda otomatis begitu
- *     risikonya "tinggi"; pesan yang persis sama paling banyak 8 kali sejam;
+ *   - pemanasan 7 hari mulai 20 kiriman di hari pertama (bisa dimatikan per
+ *     proyek lewat waWarmup, untuk nomor yang sudah lama dipakai normal);
+ *     jeda otomatis begitu risikonya "tinggi"; pesan yang persis sama paling
+ *     banyak 40 kali sejam (lihat catatan di syncAntiBan);
  *   - keadaannya disimpan per proyek di <folder sesi>/antiban-state.json;
  *   - log pustakanya dimatikan (keadaannya tampil di dashboard).
  * Yang SENGAJA tidak dipakai (bagian pustaka itu yang menyamarkan atau
@@ -183,7 +185,7 @@ let antibanKey = '';
 
 /** Buat AntiBan (lagi) kalau belum ada, atau kalau batas di Pengaturan berubah. */
 function syncAntiBan(): void {
-  const key = [cfg.waMaxPerMinute, cfg.waMaxPerHour, cfg.waMaxPerDay, cfg.waAuthDir].join('/');
+  const key = [cfg.waMaxPerMinute, cfg.waMaxPerHour, cfg.waMaxPerDay, cfg.waWarmup, cfg.waAuthDir].join('/');
   if (antiban && key === antibanKey) return;
   const old = antiban;
   mkdirSync(cfg.waAuthDir, { recursive: true });
@@ -192,10 +194,18 @@ function syncAntiBan(): void {
     maxPerMinute: cfg.waMaxPerMinute,
     maxPerHour: cfg.waMaxPerHour,
     maxPerDay: cfg.waMaxPerDay,
-    warmupDays: 7,
+    // 0 hari = pemanasan mati: pustaka langsung menganggap nomornya "lulus"
+    // (getDailyLimit di warmup.js), jadi tidak ada batas harian tambahan.
+    warmupDays: cfg.waWarmup ? 7 : 0,
     day1Limit: 20,
     autoPauseAt: 'high',
-    maxIdenticalMessages: 8,
+    // Isi salam dan kalimat tetap (kiriman diterima, minta data, kata berhenti)
+    // memang sengaja berulang ke banyak pelanggan; salamnya sudah divariasikan,
+    // tapi isinya tetap sama. Batas 8 dulu membuat kiriman yang sah ikut
+    // diblokir di jam ramai. Pesan yang benar-benar sama ke 40 orang dalam
+    // satu jam tetap ditahan.
+    maxIdenticalMessages: 40,
+    identicalMessageWindowMs: 3600_000,
     groupProfiles: false,
     persist: join(cfg.waAuthDir, 'antiban-state.json'),
     logging: false,

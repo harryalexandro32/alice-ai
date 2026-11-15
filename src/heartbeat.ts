@@ -20,7 +20,7 @@ import { sttEnabled } from './llm/stt';
 import { llmUsageToday } from './llm/provider';
 import { emailReady, telegramReady } from './notify';
 import { currentProject } from './project';
-import { getProject, setPairingRequest, writeStatus, type StatusPatch } from './store';
+import { getProject, setPairingRequest, updateProject, writeStatus, type StatusPatch } from './store';
 import { guardSummary } from './transport/sendguard';
 import type { Transport, TransportState } from './transport/types';
 
@@ -77,10 +77,42 @@ export function beat(): Promise<void> {
   return writeStatus(snapshot());
 }
 
+/** Nomor bot sudah dicocokkan ke baris proyek di proses ini (cukup sekali). */
+let waNumberChecked = false;
+
+/**
+ * Nomor yang tersambung ditulis ke `projects.wa_number` kalau kolom itu masih
+ * kosong, supaya pemilik tidak perlu mengisinya sendiri. Hanya sekali per
+ * proses, dan nomor yang sudah diisi pemilik tidak pernah ditimpa.
+ */
+export async function fillWaNumber(selfPhone: string | null | undefined): Promise<void> {
+  if (!selfPhone || waNumberChecked) return;
+  waNumberChecked = true;
+  try {
+    const id = currentProject().id;
+    const row = await getProject(id);
+    if (!row || row.wa_number) return;
+    await updateProject(id, { wa_number: selfPhone });
+    console.log(`[wa] nomor bot ${selfPhone} dicatat di proyek ${id}`);
+  } catch (e) {
+    // Gagal (mis. database putus): dicoba lagi di laporan berikutnya.
+    waNumberChecked = false;
+    throw e;
+  }
+}
+
+/** Tes: izinkan fillWaNumber memeriksa lagi. */
+export function resetWaNumberCheck(): void {
+  waNumberChecked = false;
+}
+
 /** Keadaan sambungan berubah (dipanggil transport, atau tes). */
-export function reportState(s: TransportState): Promise<void> {
+export async function reportState(s: TransportState): Promise<void> {
   last = s;
-  return beat();
+  await beat();
+  if (s.selfPhone) {
+    await fillWaNumber(s.selfPhone).catch((e) => console.error(`[wa] nomor bot tidak tercatat: ${e instanceof Error ? e.message : e}`));
+  }
 }
 
 /**

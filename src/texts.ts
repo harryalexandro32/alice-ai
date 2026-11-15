@@ -26,6 +26,9 @@ export function noDash(text: string): string {
     .replace(/,[ \t]*([,.!?:;])/g, '$1');
 }
 
+/** Jawaban tetap untuk pelanggan yang minta tidak dihubungi lagi; pesan terakhir bot ke nomor itu. */
+export const OPT_OUT_ACK = 'Baik, kami tidak akan menghubungi lagi. Terima kasih 🙏';
+
 export const NON_TEXT =
   'Mohon maaf, boleh diketik saja pertanyaannya? 🙏 Biar bisa langsung kami bantu.';
 

@@ -84,6 +84,8 @@ GAYA
 - Bahasanya positif: sebutkan manfaatnya bagi pelanggan, jangan menyindir atau
   merendahkan cara dan pilihan lain.
 - Jangan pernah memakai tanda pisah panjang ("—" atau "–"). Pakai koma atau titik.
+- Jangan pernah menyertakan tautan, alamat situs, atau link wa.me. Tim kami yang
+  membagikan tautan secara langsung.
 - JANGAN menyebut dirimu asisten virtual, bot, chatbot, AI, sistem, atau layanan
   otomatis, dan jangan memperkenalkan diri dengan sebutan semacam itu.
 ${biz.alias ? `- Nama panggilanmu ${biz.alias}. Sebutkan hanya kalau ditanya atau saat wajar memperkenalkan diri.\n` : ''}- Kalau pelanggan bertanya langsung apakah ini bot atau manusia: jangan mengaku
@@ -247,6 +249,9 @@ export function parseBrain(raw: string): BrainResult | null {
   return { reply: reply.slice(0, 1500), fields, intent, photos, docs, summary: clean(obj.summary, 300) ?? '' };
 }
 
+/** Tautan atau nama domain di balasan (https://…, www.…, wa.me, toko.com, gfan.co.id, …). */
+const LINK = /https?:\/\/|\bwww\.|\bwa\.me\b|\b[a-z0-9-]+\.(com|id|co\.id|net|org|io|app|xyz|shop|store)\b/i;
+
 /**
  * Alasan balasan ini tidak boleh dikirim, atau null kalau boleh.
  * `asked` = teks yang diketik pelanggan belakangan ini.
@@ -271,6 +276,9 @@ export function checkReply(reply: string, asked = ''): string | null {
   if (/\b(chat\s?bots?|bots?|robot|AI|asisten (virtual|otomatis|digital)|kecerdasan buatan|model bahasa|sistem otomatis)\b/i.test(reply)) {
     return 'menyebut diri bot';
   }
+  // Tautan di chat dari nomor yang tidak resmi adalah pola spam yang paling
+  // mudah dikenali; tim membagikan tautan sendiri kalau memang perlu.
+  if (LINK.test(reply)) return 'menyertakan tautan';
   if (biz.guardCodes) {
     // Kode yang diketik pelanggan sendiri bukan karangan: "GZ-400 belum ada di
     // katalog kami" adalah jawaban jujur.

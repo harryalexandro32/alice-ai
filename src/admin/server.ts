@@ -271,7 +271,7 @@ export function createAdminHandler(store: AdminStore) {
     const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 100));
     const before = Math.floor(Number(url.searchParams.get('before')));
     const [messages, pending] = await Promise.all([messagePage(phone, limit, before > 0 ? before : undefined), pendingReplies(phone)]);
-    const hold = c.pending_off ? 'tombol' : c.address ? await holdReason(c.address, Date.now()) : null;
+    const hold = c.opted_out_at ? 'berhenti' : c.pending_off ? 'tombol' : c.address ? await holdReason(c.address, Date.now()) : null;
     return json(200, {
       contact: {
         phone: c.phone, waName: c.wa_name, lead: c.lead, needsSales: Boolean(c.needs_sales), complete: Boolean(c.lead_sent_at),

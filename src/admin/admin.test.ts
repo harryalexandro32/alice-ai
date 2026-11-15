@@ -18,13 +18,13 @@ import { cfg } from '../config';
 import { closeDb, openDb } from '../db';
 import { ensureProject } from '../db/seed';
 import { humanHolds } from '../flow';
-import { handlePairingRequest, reportState, startHeartbeat } from '../heartbeat';
+import { handlePairingRequest, reportState, resetWaNumberCheck, startHeartbeat } from '../heartbeat';
 import { pickDelayMs, typingMs } from '../pace';
 import { withProject } from '../project';
 import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender } from '../sinks/outbox';
 import {
   addHandoff, addMessage, addUsage, createContact, getContact, getProfile, getProject, humanSeenAt, pendingReplies, readStatus, recentAlerts,
-  recentMessages, saveProfile, updateContact,
+  recentMessages, saveProfile, updateContact, updateProject,
 } from '../store';
 import type { Transport, TransportState } from '../transport/types';
 import { setAdminBrain, startAdmin, stopAdmin } from './server';
@@ -290,6 +290,16 @@ const PNG = Buffer.from(
       assert.equal((await call('/api/gfan/leads')).body.rows.find((r: { phone: string }) => r.phone === C).hold, 'tombol');
       assert.equal((await sw(C, 'on')).status, 200);
       assert.equal(await humanHolds(C, Date.now()), false, 'dinyalakan lagi');
+      // Menunggu jam tenang dan minta berhenti juga tampil di daftar lead dan di percakapan.
+      const holdOf = async () => (await call('/api/gfan/leads')).body.rows.find((r: { phone: string }) => r.phone === C).hold;
+      await updateContact(C, { deferred_until: Date.now() + 3_600_000 });
+      assert.equal(await holdOf(), 'tenang');
+      assert.equal((await call(`/api/gfan/leads/${encodeURIComponent(C)}`)).body.contact.hold, 'tenang');
+      await updateContact(C, { deferred_until: null, opted_out_at: Date.now() });
+      assert.equal(await holdOf(), 'berhenti');
+      assert.equal((await call(`/api/gfan/leads/${encodeURIComponent(C)}`)).body.contact.hold, 'berhenti');
+      assert.equal((await sw(C, 'on')).status, 200);
+      assert.equal(await holdOf(), null, 'dinyalakan pemilik: permintaan berhenti dihapus');
 
       // Warning dan catatan error tampil di dashboard.
       const { addAlert, addError } = await import('../store');
@@ -324,7 +334,6 @@ const PNG = Buffer.from(
       assert.equal((await imp('   ')).status, 400);
       assert.equal((await call('/api/gfan/known', { method: 'POST', body: '{}' }, false)).status, 401);
       // "Sudah ditangani": tanda "perlu staf" dihapus, langsung di database.
-      const { updateContact } = await import('../store');
       await updateContact(C, { needs_sales: 1 });
       assert.equal((await post(`/api/gfan/leads/${encodeURIComponent('x')}/handled`)).status, 400);
       assert.equal((await post(`/api/gfan/leads/${encodeURIComponent('+6281299999999')}/handled`)).status, 404);
@@ -383,9 +392,18 @@ const PNG = Buffer.from(
       assert.equal((await put({ settings: { followupAfterHours: 20, followupAfterHoursMax: 22 } })).status, 200);
       assert.deepEqual([cfg.followupAfterHours, cfg.followupAfterHoursMax], [20, 22]);
       assert.match((await put({ settings: { onlyNumbers: ['abc'] } })).body.error, /bukan nomor/);
+      // Jam tenang dan pemanasan: diperiksa seperti jam follow-up, langsung berlaku di bot.
+      assert.deepEqual([cfg.quietEnabled, cfg.quietStartHour, cfg.quietEndHour, cfg.waWarmup], [true, 0, 7, true], 'bawaan');
+      assert.match((await put({ settings: { quietStartHour: 8, quietEndHour: 6 } })).body.error, /Jam tenang: jam selesai/);
+      assert.match((await put({ settings: { quietEndHour: 25 } })).body.error, /1–24/);
+      assert.equal((await put({ settings: { quietEnabled: false, quietStartHour: 1, quietEndHour: 6, waWarmup: false } })).status, 200);
+      assert.deepEqual([cfg.quietEnabled, cfg.quietStartHour, cfg.quietEndHour, cfg.waWarmup], [false, 1, 6, false]);
+      const eff = (await call('/api/gfan/state')).body.status.effective;
+      assert.deepEqual([eff.quietEnabled, eff.quietStartHour, eff.quietEndHour, eff.waWarmup], [false, 1, 6, false]);
       // Dikosongkan = kembali ke .env.
       assert.equal((await put({ settings: {} })).status, 200);
       assert.deepEqual([cfg.followupAfterHours, cfg.llmVision, cfg.onlyNumbers], [before.after, before.vision, before.only]);
+      assert.deepEqual([cfg.quietEnabled, cfg.quietEndHour, cfg.waWarmup], [true, 7, true]);
       await put({ recipients: [], notifyRoutes: {} });
     }
 
@@ -474,6 +492,20 @@ const PNG = Buffer.from(
         assert.equal((await readStatus('gfan'))?.qr, 'qr-baru');
         await handlePairingRequest(fake);
         assert.equal(relinked, 1, 'tiap permintaan dijalankan sekali');
+
+        // Nomor yang tersambung mengisi "Nomor WA bot" yang masih kosong, sekali, tanpa menimpa isian pemilik.
+        const before = (await getProject('gfan'))?.wa_number ?? null;
+        await updateProject('gfan', { wa_number: null });
+        resetWaNumberCheck();
+        await reportState({ state: 'connected', selfPhone: '+6281234560099' });
+        assert.equal((await getProject('gfan'))?.wa_number, '+6281234560099');
+        await updateProject('gfan', { wa_number: '+6281234560001' });
+        await reportState({ state: 'connected', selfPhone: '+6281234560099' });
+        assert.equal((await getProject('gfan'))?.wa_number, '+6281234560001', 'sekali per proses');
+        resetWaNumberCheck();
+        await reportState({ state: 'connected', selfPhone: '+6281234560099' });
+        assert.equal((await getProject('gfan'))?.wa_number, '+6281234560001', 'isian pemilik tidak ditimpa');
+        await updateProject('gfan', { wa_number: before });
       } finally {
         stop();
       }
