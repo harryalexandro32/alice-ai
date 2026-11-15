@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alice AI</title>
 <link rel="stylesheet" href="/assets/app.css">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#f6821f">
 </head>
 <body>
 
@@ -48,12 +52,13 @@
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
   <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <!-- Wordmark: tanda oranye (A sebagai path) + teks. "Alice" ikut warna tinta (currentColor), "AI" oranye. Sama dengan brand/wordmark.svg. -->
+  <symbol id="brand-wordmark" viewBox="0 0 92 24"><rect width="24" height="24" rx="6" fill="#f6821f"/><path d="M6.6 18.2 12 5.2l5.4 13M8.18 14.4h7.64" fill="none" stroke="#fff" stroke-width="3.36" stroke-linecap="round" stroke-linejoin="round"/><text x="32" y="18" font-family='-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif' font-size="17" font-weight="700" letter-spacing="-0.34" fill="currentColor">Alice <tspan fill="#f6821f">AI</tspan></text></symbol>
 </svg>
 
 <div class="login" id="login">
   <form id="loginForm">
-    <div class="mark">A</div>
-    <h2>Alice AI</h2>
+    <h2><svg class="wordmark" viewBox="0 0 92 24" width="92" height="24" role="img" aria-label="Alice AI"><use href="#brand-wordmark"/></svg></h2>
     <p data-en="Sign in to manage how the bot answers.">Masuk untuk mengatur cara bot menjawab.</p>
     <label class="f"><span data-en="Password">Kata sandi</span><input type="password" id="pw" autocomplete="current-password" required></label>
     <button class="btn" style="width:100%" data-en="Sign in">Masuk</button>
@@ -93,8 +98,7 @@
 <!-- Bilah atas + bilah keadaan: satu kepala tetap (position: fixed). Tingginya diukur app.js ke --chrome-h. -->
 <header class="chrome" id="chrome">
 <div class="topbar">
-  <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><span class="mark">A</span></a>
-  <div class="brand">Alice AI</div>
+  <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><svg class="wordmark" viewBox="0 0 92 24" width="92" height="24" preserveAspectRatio="xMinYMid slice" role="img" aria-label="Alice AI"><use href="#brand-wordmark"/></svg></a>
   <span class="projwrap"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><img class="projlogo" id="logoTop" alt="" hidden><select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)" data-en-title="Project (one business, one WhatsApp number)"></select></span>
   <div class="spacer"></div>
   <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light / dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>

@@ -580,6 +580,18 @@ const PNG = Buffer.from(
         assert.match(r.headers.get('content-type') ?? '', type);
         assert.equal(r.headers.get('cache-control'), 'no-cache');
       }
+      // Ikon tab dan berkas merek: tanpa sesi, jenis yang benar, boleh disimpan sehari.
+      for (const [path, type] of [
+        ['/favicon.ico', 'image/x-icon'], ['/assets/favicon.svg', 'image/svg+xml'], ['/assets/favicon-32.png', 'image/png'],
+        ['/assets/favicon-192.png', 'image/png'], ['/assets/apple-touch-icon.png', 'image/png'],
+        ['/assets/wordmark.svg', 'image/svg+xml'], ['/assets/wordmark.png', 'image/png'],
+      ] as const) {
+        const r = await page(path, false);
+        assert.equal(r.status, 200, path);
+        assert.equal(r.headers.get('content-type'), type, path);
+        assert.equal(r.headers.get('cache-control'), 'public, max-age=86400', path);
+        assert.ok((await r.arrayBuffer()).byteLength > 0, `${path} tidak kosong`);
+      }
       // Salinan alamat di app.js harus sama dengan routes.ts (app.js tidak bisa mengimpornya).
       {
         const src = readFileSync(join(__dirname, 'app.js'), 'utf8');

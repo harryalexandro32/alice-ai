@@ -124,6 +124,7 @@ function fileExt(b: Buffer): 'jpg' | 'png' | 'webp' | 'pdf' | null {
 const TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8',
   jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf',
+  svg: 'image/svg+xml', ico: 'image/x-icon',
 };
 
 /** Berkas halaman: di samping file ini (lokal) atau di akar proyek (Vercel). */
@@ -139,6 +140,20 @@ const ASSETS: Record<string, [string, string]> = {
   '/assets/app.js': ['app.js', 'js'],
   '/assets/app.css': ['app.css', 'css'],
   '/assets/qrcode.js': ['qrcode.js', 'js'],
+};
+
+/**
+ * Berkas merek (ikon tab, ikon layar utama, wordmark) dari folder brand/: alamat -> [nama berkas, jenis].
+ * Jarang berganti, jadi peramban boleh menyimpannya sehari tanpa bertanya.
+ */
+const BRAND: Record<string, [string, string]> = {
+  '/favicon.ico': ['brand/favicon.ico', 'ico'],
+  '/assets/favicon.svg': ['brand/favicon.svg', 'svg'],
+  '/assets/favicon-32.png': ['brand/favicon-32.png', 'png'],
+  '/assets/favicon-192.png': ['brand/favicon-192.png', 'png'],
+  '/assets/apple-touch-icon.png': ['brand/apple-touch-icon.png', 'png'],
+  '/assets/wordmark.svg': ['brand/wordmark.svg', 'svg'],
+  '/assets/wordmark.png': ['brand/wordmark.png', 'png'],
 };
 
 /**
@@ -324,6 +339,10 @@ export function createAdminHandler(store: AdminStore) {
 
     // --- berkas halaman ---
     if (method === 'GET' && ASSETS[path]) return file(...(ASSETS[path] as [string, string]));
+    if (method === 'GET' && BRAND[path]) {
+      const [name, ext] = BRAND[path] as [string, string];
+      return file(name, ext, 200, { 'cache-control': 'public, max-age=86400' });
+    }
 
     // Alamat lama (/admin, /admin/#gfan, /admin/gfan/api/…) -> beranda baru.
     if (path === '/admin' || path.startsWith('/admin/')) return redirect(301, '/');
