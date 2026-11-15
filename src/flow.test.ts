@@ -12,18 +12,18 @@ import { loadProject, refreshBiz, seedCtx } from './business';
 import { makeSalesNotifier } from './app';
 import { checkReply, parseBrain, systemPrompt, type BrainInput, type BrainResult } from './brain';
 import { biz } from './business';
-import { advance, setNow } from './clock';
+import { advance, now, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
 import { recipientsFor, waTargets } from './notify';
-import { missingFields, greetingFor, handleHumanReply, handleInbound, holdReason, markHandled, setBrain, setSender, switchBot } from './flow';
+import { missingFields, greetingFor, setGreetingRandom, timeOpener, handleHumanReply, handleInbound, holdReason, isOptOut, runDeferred, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
 import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, type ReplyPayload } from './sinks/outbox';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
-import { getContact, listHandoffs, outboxAdd, pendingReplies, recentAlerts, recentMessages, updateContact, updateProject, importContact } from './store';
-import { handoffText, NON_TEXT, noDash, followupText } from './texts';
+import { getContact, listHandoffs, outboxAdd, pendingReplies, recentAlerts, recentMessages, releaseToBot, updateContact, updateProject, importContact } from './store';
+import { handoffText, NON_TEXT, noDash, followupText, OPT_OUT_ACK } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
 setDefaultProject(seedCtx('gfan'));
@@ -31,7 +31,15 @@ setDefaultProject(seedCtx('gfan'));
 const HANDOFF = handoffText();
 import type { Transport } from './transport/types';
 
-const GREETING = biz.greeting;
+/** Isi salam pemilik tanpa kata sapaan di depannya; pembukanya divariasikan bot. */
+const GREETING_BODY = biz.greeting.replace(/^(halo|hallo|hai)\b[\s,.!–—-]*/i, '');
+const OPENER = /^(Halo, selamat|Selamat) (pagi|siang|sore|malam)\b/;
+/** Salam pembuka bot: diawali ucapan menurut jam, dan memuat isi salam pemilik. */
+const greeted = (t: string | undefined): boolean => Boolean(t && OPENER.test(t) && t.includes(GREETING_BODY));
+const onlyGreeting = (msg?: string) => {
+  assert.equal(sent.length, 1, msg);
+  assert.ok(greeted(sent[0]), `${msg ?? 'salam'}: ${sent[0]}`);
+};
 const A = '+6281211110001';
 const SALES = '+6281299990001';
 /** Selasa 10 Nov 2026, 10:00 WIB. */
@@ -72,6 +80,9 @@ async function fresh(): Promise<void> {
   cfg.humanPauseHours = 12;
   cfg.maxInboundPerNumber = 40;
   cfg.onlyNumbers = [];
+  cfg.quietEnabled = true;
+  cfg.quietStartHour = 0;
+  cfg.quietEndHour = 7;
   sent = [];
   sales = [];
   brainCalls = [];
@@ -87,6 +98,8 @@ async function fresh(): Promise<void> {
   cfg.sttBaseUrl = '';
   biz.styleRules = SEED_RULES;
   biz.knownAt = 0;
+  // Variasi salam dibuat tetap: tanpa nama, bentuk "Halo, selamat …".
+  setGreetingRandom(() => 0.9);
   // Tes tidak pernah memanggil LLM sungguhan: bawaan = kalimat tetap.
   setFollowupWriter(async () => null);
   setSender(async (_to, text, image, fileName) =>
@@ -128,11 +141,11 @@ const fakeTransport = (name: string, self: string | null, canMessageSelf: boolea
 const tests: [string, () => Promise<void>][] = [
   ['salam hanya sekali, dan sapaan kosong tidak memanggil LLM', async () => {
     await say('Halo');
-    assert.deepEqual(sent, [GREETING]);
+    onlyGreeting();
     assert.equal(brainCalls.length, 0);
     await say('mau tanya exhaust fan');
     assert.equal(sent.length, 2);
-    assert.notEqual(sent[1], GREETING);
+    assert.ok(!greeted(sent[1]));
     assert.equal(brainCalls.length, 1);
     assert.equal(brainCalls[0]?.justGreeted, false);
   }],
@@ -140,7 +153,9 @@ const tests: [string, () => Promise<void>][] = [
   ['pesan pertama berupa pertanyaan: salam + jawaban', async () => {
     next = () => R('GFAF-40A berukuran 16 inci.');
     await say('exhaust 16 inci ada?');
-    assert.deepEqual(sent, [GREETING, 'GFAF-40A berukuran 16 inci.']);
+    assert.equal(sent.length, 2);
+    assert.ok(greeted(sent[0]));
+    assert.equal(sent[1], 'GFAF-40A berukuran 16 inci.');
     assert.equal(brainCalls[0]?.justGreeted, true);
     assert.deepEqual(brainCalls[0]?.history, []);
   }],
@@ -223,7 +238,7 @@ const tests: [string, () => Promise<void>][] = [
   ['LLM mati dan pesan pertama berupa pertanyaan: cukup salam, sales dikabari', async () => {
     next = () => null;
     await say('ada inline fan 8 inci?');
-    assert.deepEqual(sent, [GREETING]);
+    onlyGreeting();
     assert.equal(sales.length, 1);
   }],
 
@@ -242,6 +257,8 @@ const tests: [string, () => Promise<void>][] = [
   }],
 
   ['pelanggan membalas sebelum jatuh tempo: hitungan mulai lagi dari balasannya', async () => {
+    // Yang diuji di sini jam kirim follow-up; jam tenang balasan dimatikan supaya "Budi" pukul 06:00 langsung dijawab.
+    cfg.quietEnabled = false;
     await say('halo');
     advance(20 * HOUR); // 06:00
     next = () => R('Baik Pak Budi, di kota mana?', { name: 'Budi' });
@@ -489,7 +506,7 @@ const tests: [string, () => Promise<void>][] = [
     // Julukan, inisial, atau tanpa nama: salam biasa.
     for (const [name, phone] of [['demonslayer', '+6281377770022'], ['J', '+6281377770023'], [undefined, '+6281377770024']] as const) {
       await first(name, phone);
-      assert.equal(sent.at(-1), GREETING, String(name));
+      assert.ok(greeted(sent.at(-1)), String(name));
     }
     // Julukan tetap diteruskan ke LLM apa adanya: ia yang menilai di percakapan berikutnya.
     next = () => R('Boleh tahu dengan siapa saya bicara?');
@@ -500,10 +517,254 @@ const tests: [string, () => Promise<void>][] = [
     const known = biz.greetingKnown;
     biz.greetingKnown = '';
     await first('Sari Dewi', '+6281377770025');
-    assert.equal(sent.at(-1), GREETING);
+    assert.ok(greeted(sent.at(-1)));
     biz.greetingKnown = known;
     assert.match(greetingFor({ wa_name: 'Sari Dewi', lead: {} }), /Sari Dewi/);
-    assert.equal(greetingFor({ wa_name: 'Sari Dewi', lead: { name: 'Sari' } }), GREETING, 'nama sudah ada: tidak perlu dipastikan lagi');
+    const named = greetingFor({ wa_name: 'Sari Dewi', lead: { name: 'Sari' } });
+    assert.ok(greeted(named) && !/Dengan Bapak/.test(named), 'nama sudah ada: tidak perlu dipastikan lagi');
+  }],
+
+  ['variasi salam: ucapan menurut jam, dua bentuk acak, nama separuh waktu, isi pemilik utuh', async () => {
+    const wib = (h: number, m = 0) => Date.UTC(2026, 10, 10, h - 7, m);
+    for (const [h, m, want] of [
+      [4, 0, 'Selamat pagi'], [9, 59, 'Selamat pagi'], [10, 0, 'Selamat siang'], [14, 59, 'Selamat siang'], [15, 0, 'Selamat sore'],
+      [17, 59, 'Selamat sore'], [18, 0, 'Selamat malam'], [23, 30, 'Selamat malam'], [0, 0, 'Selamat malam'], [3, 59, 'Selamat malam'],
+    ] as const) assert.equal(timeOpener(wib(h, m)), want, `${h}:${m}`);
+
+    setNow(wib(8));
+    const none = { wa_name: null, lead: {} };
+    setGreetingRandom(() => 0.1);
+    assert.equal(greetingFor(none), `Selamat pagi, ${GREETING_BODY}`);
+    setGreetingRandom(() => 0.9);
+    assert.equal(greetingFor(none), `Halo, selamat pagi, ${GREETING_BODY}`);
+
+    // Nama profil yang layak: disebut separuh dari waktu, kalau salam khusus tidak dipakai.
+    const known = biz.greetingKnown;
+    const greeting = biz.greeting;
+    try {
+      biz.greetingKnown = '';
+      const andi = { wa_name: 'andi', lead: {} };
+      setGreetingRandom(() => 0.1);
+      assert.equal(greetingFor(andi), `Selamat pagi, Bapak/Ibu Andi, ${GREETING_BODY}`);
+      setGreetingRandom(() => 0.9);
+      assert.equal(greetingFor(andi), `Halo, selamat pagi, ${GREETING_BODY}`);
+      assert.equal(greetingFor({ wa_name: 'demonslayer', lead: {} }), `Halo, selamat pagi, ${GREETING_BODY}`, 'julukan tidak disebut');
+
+      // Salam khusus sudah menyebut nama: tidak ditambah nama lagi.
+      biz.greetingKnown = known;
+      setGreetingRandom(() => 0.1);
+      const k = greetingFor(andi);
+      assert.match(k, /^Selamat pagi, terima kasih/);
+      assert.match(k, /Dengan Bapak\/Ibu Andi, betul\?/);
+
+      // Salam pemilik tanpa kata sapaan: ucapan di barisnya sendiri.
+      biz.greeting = 'Terima kasih sudah menghubungi kami.';
+      assert.equal(greetingFor(none), 'Selamat pagi!\nTerima kasih sudah menghubungi kami.');
+
+      // Acakan sungguhan menghasilkan lebih dari satu bentuk.
+      biz.greeting = greeting;
+      biz.greetingKnown = '';
+      setGreetingRandom(null);
+      const seen = new Set(Array.from({ length: 40 }, () => greetingFor(andi)));
+      assert.ok(seen.size >= 2, 'salam tidak selalu sama');
+      for (const g of seen) assert.ok(greeted(g), g);
+    } finally {
+      biz.greetingKnown = known;
+      biz.greeting = greeting;
+    }
+
+    // Ujung ke ujung: pelanggan baru di malam hari disapa "selamat malam".
+    setGreetingRandom(() => 0.9);
+    setNow(wib(20));
+    await say('halo');
+    assert.ok(sent[0]?.startsWith('Halo, selamat malam, terima kasih'), sent[0]);
+  }],
+
+  ['jam tenang: pesan malam ditunda, lalu dijawab sekali dengan isi yang digabung', async () => {
+    const wib = (d: number, h: number, m = 0) => Date.UTC(2026, 10, d, h - 7, m);
+    // Pukul 12:00: langsung dibalas.
+    await say('halo');
+    onlyGreeting('pukul 10:00 langsung dibalas');
+    setNow(wib(10, 12));
+    next = (i) => R(`Ada, Pak. (${i.text})`);
+    await say('mau tanya exhaust');
+    assert.equal(sent.length, 2, 'pukul 12:00 langsung dibalas');
+    sent = [];
+    brainCalls = [];
+
+    // Pukul 02:00: dicatat, tapi tidak dibalas.
+    setNow(wib(11, 2));
+    await say('yang 16 inci ada?');
+    advance(3 * MINUTE);
+    await say('untuk dapur');
+    assert.equal(sent.length, 0, 'tidak ada balasan di jam tenang');
+    assert.equal(brainCalls.length, 0, 'LLM pun belum dipanggil');
+    assert.equal((await getContact(A))?.deferred_until, wib(11, 7), 'menunggu sampai 07:00 waktu setempat');
+    assert.equal(await holdReason(A, wib(11, 2, 3)), 'tenang');
+    assert.equal((await recentMessages(A, 2)).map((r) => r.text).join('|'), 'yang 16 inci ada?|untuk dapur', 'pesannya tetap tercatat');
+
+    setNow(wib(11, 6, 59));
+    assert.equal(await runDeferred(), 0, 'belum waktunya');
+    setNow(wib(11, 7, 1));
+    assert.equal(await runDeferred(), 1);
+    assert.deepEqual(sent, ['Ada, Pak. (yang 16 inci ada?\nuntuk dapur)'], 'tepat satu balasan untuk semua pesan malam itu');
+    assert.equal(brainCalls.length, 1);
+    assert.equal(brainCalls[0]?.text, 'yang 16 inci ada?\nuntuk dapur');
+    assert.ok(!brainCalls[0]!.history.some((h) => h.text === 'yang 16 inci ada?'), 'pesan malam itu isi giliran ini, bukan riwayat');
+    assert.equal((await getContact(A))?.deferred_until, null);
+    assert.equal(await holdReason(A, wib(11, 7, 1)), null);
+    assert.equal(await runDeferred(), 0, 'tidak dijawab dua kali');
+    assert.equal(sent.length, 1);
+  }],
+
+  ['jam tenang: pelanggan baru disapa pagi, balasan manusia membatalkan, pesan pagi menggabungkan, bisa dimatikan', async () => {
+    const wib = (d: number, h: number, m = 0) => Date.UTC(2026, 10, d, h - 7, m);
+    const B = '+6281211110002';
+    const C = '+6281211110003';
+    // Orang baru pukul 02:00: salamnya dikirim saat jam tenang berakhir.
+    setNow(wib(11, 2));
+    await say('halo', B);
+    assert.equal(sent.length, 0);
+    setNow(wib(11, 7, 1));
+    assert.equal(await runDeferred(), 1);
+    onlyGreeting('salam pagi');
+    assert.match(sent[0]!, /^Halo, selamat pagi, /);
+
+    // Admin membalas pukul 03:00: balasan bot yang menunggu batal.
+    sent = [];
+    setNow(wib(12, 2));
+    await say('masih ada stok?', B);
+    assert.ok((await getContact(B))?.deferred_until);
+    setNow(wib(12, 3));
+    await handleHumanReply({ address: B, text: 'Ada Pak, nanti pagi saya kabari' });
+    assert.equal((await getContact(B))?.deferred_until, null);
+    setNow(wib(12, 7, 1));
+    assert.equal(await runDeferred(), 0);
+    assert.equal(sent.length, 0, 'manusia sudah menjawab: bot diam');
+
+    // Jam tenang dimatikan: langsung dibalas.
+    cfg.quietEnabled = false;
+    setNow(wib(12, 2));
+    await say('halo', C);
+    onlyGreeting('jam tenang mati');
+    cfg.quietEnabled = true;
+
+    // Pesan pagi datang sebelum putaran jam tenang sempat jalan: digabung jadi satu giliran.
+    sent = [];
+    brainCalls = [];
+    next = (i) => R(`Baik. (${i.text})`);
+    setNow(wib(13, 6, 50));
+    await say('mau tanya jet fan', C);
+    assert.equal(sent.length, 0);
+    setNow(wib(13, 7, 0));
+    await say('untuk gudang', C);
+    assert.deepEqual(sent, ['Baik. (mau tanya jet fan\nuntuk gudang)']);
+    assert.equal((await getContact(C))?.deferred_until, null);
+    assert.equal(await runDeferred(), 0);
+
+    // Bot dijeda untuk semua chat saat jam tenang berakhir: tidak dibalas, dan tidak menunggu lagi.
+    setNow(wib(14, 2));
+    await say('halo?', C);
+    await updateProject('gfan', { paused: true });
+    await refreshBiz(true);
+    setNow(wib(14, 7, 1));
+    assert.equal(await runDeferred(), 1);
+    assert.equal(sent.length, 1);
+    assert.equal((await getContact(C))?.deferred_until, null);
+    await updateProject('gfan', { paused: false });
+    await refreshBiz(true);
+  }],
+
+  ['jam tenang: follow-up tidak pernah dijadwalkan maupun dikirim di dalamnya', async () => {
+    const wib = (d: number, h: number, m = 0) => Date.UTC(2026, 10, d, h - 7, m);
+    cfg.followupStartHour = 0;
+    cfg.followupEndHour = 24;
+    assert.equal(followupDueAt(wib(10, 3)), wib(11, 7), '+23 jam = 02:00: digeser ke akhir jam tenang');
+    assert.equal(followupDueAt(wib(10, 12)), wib(11, 11), 'di luar jam tenang: tidak digeser');
+    cfg.followupMaxHours = 24;
+    assert.equal(followupDueAt(wib(10, 3)), wib(10, 23, 55), 'Cloud API: dimajukan ke sebelum jam tenang, bukan lewat jendela');
+    cfg.followupMaxHours = 0;
+    cfg.quietEnabled = false;
+    assert.equal(followupDueAt(wib(10, 3)), wib(11, 2), 'jam tenang mati');
+    cfg.quietEnabled = true;
+
+    // Sudah waktunya tapi sekarang jam tenang (mis. jam tenang baru diubah): menunggu.
+    cfg.followupStartHour = 8;
+    cfg.followupEndHour = 20;
+    await say('halo');
+    cfg.quietStartHour = 9;
+    cfg.quietEndHour = 10;
+    advance(23 * HOUR + 15 * MINUTE); // 09:15
+    assert.equal(await follow(), 0, 'tidak dikirim di jam tenang');
+    assert.equal((await getContact(A))?.followup_state, 'pending', 'tetap menunggu');
+    advance(HOUR); // 10:15
+    assert.equal(await follow(), 1);
+  }],
+
+  ['kata berhenti: dikenali hanya untuk pesan pendek yang memang minta berhenti', async () => {
+    for (const t of [
+      'stop', 'STOP!', 'Stop 🙏', 'Berhenti.', 'unsubscribe', 'jangan hubungi', 'Jangan hubungi saya', 'jangan hubungi lagi', 'jangan chat',
+      'jangan chat saya', 'Jangan chat lagi!', 'jangan kirim', 'jangan kirim pesan', 'jangan kirim lagi', 'jangan kirim pesan lagi', 'tidak usah hubungi',
+      'tidak usah chat', 'tidak usah kirim lagi', 'Tidak usah hubungi lagi.', 'hapus nomor', 'hapus saya', '  stop  ',
+    ]) assert.ok(isOptOut(t), t);
+    for (const t of [
+      'kak, kipasnya bisa stop sendiri kalau terlalu panas? soalnya di gudang saya sering mati', 'stop kontak', 'stopkontak', 'kipasnya berhenti berputar',
+      'jangan', 'jangan mahal ya', 'halo', 'hapus', '', null, undefined, 'tidak usah', 'stop dulu ya kak',
+    ]) assert.ok(!isOptOut(t), String(t));
+  }],
+
+  ['kata berhenti: dijawab sekali, bot diam, tanpa follow-up, dan hanya pemilik yang bisa menghapusnya', async () => {
+    await say('halo');
+    assert.equal((await getContact(A))?.followup_state, 'pending');
+    const alerts = (await recentAlerts(50)).length;
+    sent = [];
+    await say('Stop!');
+    assert.deepEqual(sent, [OPT_OUT_ACK], 'jawaban tetap, tanpa LLM');
+    assert.equal(brainCalls.length, 0);
+    let c = await getContact(A);
+    assert.equal(c?.opted_out_at, T0);
+    assert.equal(c?.followup_state, 'idle');
+    assert.equal(await holdReason(A, now()), 'berhenti');
+    assert.equal((await recentAlerts(50)).length, alerts, 'tidak ada warning, hanya baris log');
+    assert.equal((await listHandoffs(false)).length, 0);
+
+    // Pesan berikutnya (termasuk "stop" lagi): diam, jawaban tidak diulang.
+    await say('halo, masih ada?');
+    await say('stop');
+    assert.equal(sent.length, 1);
+
+    // Follow-up tidak pernah dikirim, walau bot dinyalakan dengan cara lain (bukan tombol pemilik).
+    await updateContact(A, { followup_state: 'pending', last_dir: 'out' });
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    await releaseToBot(A);
+    await updateContact(A, { followup_state: 'pending', last_dir: 'out' });
+    assert.equal(await follow(), 0, 'masih minta tidak dihubungi');
+    await say('halo?');
+    assert.equal(sent.length, 1, 'tetap diam');
+
+    // Pemilik menyalakan bot lagi dari dashboard: permintaannya dihapus.
+    assert.ok(await switchBot(A, 'on', now()));
+    c = await getContact(A);
+    assert.equal(c?.opted_out_at, null);
+    assert.equal(await holdReason(A, now()), null);
+    next = () => R('Siap, ada yang bisa dibantu?');
+    await say('mau tanya lagi');
+    assert.equal(sent.at(-1), 'Siap, ada yang bisa dibantu?');
+  }],
+
+  ['kata berhenti di jam tenang: jawabannya dikirim saat jam tenang berakhir, sekali', async () => {
+    const wib = (d: number, h: number, m = 0) => Date.UTC(2026, 10, d, h - 7, m);
+    setNow(wib(11, 2));
+    await say('jangan hubungi saya');
+    assert.equal(sent.length, 0);
+    assert.ok((await getContact(A))?.opted_out_at);
+    assert.equal(await holdReason(A, now()), 'berhenti');
+    setNow(wib(11, 7, 1));
+    assert.equal(await runDeferred(), 1);
+    assert.deepEqual(sent, [OPT_OUT_ACK], 'tanpa salam, hanya jawaban berhenti');
+    assert.equal(await runDeferred(), 0);
+    assert.equal(sent.length, 1);
   }],
 
   ['follow-up diacak di antara dua batas, tetap untuk satu masa diam, dan tidak melewati jendela Cloud API', async () => {
@@ -586,7 +847,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(sent.at(-1), 'Ada.', 'dinyalakan dari dashboard sebelum ia pernah chat');
     // Orang baru tetap disambut seperti biasa.
     await say('halo', '+6281400000003');
-    assert.equal(sent.at(-1), GREETING);
+    assert.ok(greeted(sent.at(-1)));
     // Impor yang sama tidak menimpa data yang sudah ada.
     await updateContact(OLD, { lead: { name: 'Budi Santoso', city: 'Bekasi' } });
     await importContact(OLD, { name: 'Pak Budi' }, false, T0 + 2);
@@ -677,7 +938,7 @@ const tests: [string, () => Promise<void>][] = [
       setFollowupWriter(async () => 'Halo Pak — jadi yang mana?');
       advance(23 * HOUR + MINUTE);
       await follow();
-      assert.equal(sent[0], 'Halo, selamat datang di toko kami, ada yang bisa dibantu?');
+      assert.equal(sent[0], 'Halo, selamat siang, selamat datang di toko kami, ada yang bisa dibantu?');
       assert.equal(sent[1], 'Ada, Pak, ini katalognya. Ukuran 16-20 inci tersedia.');
       assert.equal(sent[2], '[pdf:Katalog Seri A.pdf] Katalog, Seri A');
       assert.equal(sent[3], 'Halo Pak, jadi yang mana?');
@@ -732,13 +993,13 @@ const tests: [string, () => Promise<void>][] = [
 
   ['bot dijeda untuk semua chat: pesan tetap dicatat, tanpa balasan dan tanpa follow-up', async () => {
     await say('halo');
-    assert.deepEqual(sent, [GREETING]);
+    onlyGreeting();
     // Dashboard menekan "Bot dijeda untuk semua chat"; bot memuatnya sebelum giliran berikutnya.
     await updateProject('gfan', { paused: true });
     assert.equal(await refreshBiz(true), true);
     await say('ada exhaust 16 inci?');
     await say('halo?', '+6281377770031');
-    assert.deepEqual(sent, [GREETING], 'tidak ada yang dibalas');
+    onlyGreeting('tidak ada yang dibalas');
     assert.equal((await recentMessages(A, 5)).at(-1)?.text, 'ada exhaust 16 inci?', 'pesannya tetap dicatat');
     assert.ok(await getContact('+6281377770031'), 'kontak baru tetap dicatat');
     assert.equal(brainCalls.length, 0);
@@ -769,7 +1030,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(sent.length, 0);
     assert.equal((await getContact('+6281377770002')), undefined);
     await say('halo');
-    assert.deepEqual(sent, [GREETING]);
+    onlyGreeting();
   }],
 
   ['foto: dikirim setelah teks, hanya yang ada, dan tidak diulang', async () => {
@@ -967,6 +1228,25 @@ const tests: [string, () => Promise<void>][] = [
     assert.ok(checkReply('Sekitar Rp750.000'));
     assert.ok(checkReply('kisaran 2 juta'));
     assert.ok(checkReply('Model GAI-400 tersedia'));
+  }],
+
+  ['tanpa tautan: balasan dan follow-up berisi tautan atau domain tidak dikirim', async () => {
+    for (const r of [
+      'Katalognya ada di https://gfan.co.id/katalog ya Pak.', 'Cek http://contoh.net', 'Kunjungi www.gfan.co.id', 'Silakan ke gfan.co.id',
+      'Ada di tokopedia.com/gfan', 'Chat sales kami di wa.me/6281234567890', 'Info lengkap: GFAN.ID', 'Lihat toko-kipas.shop', 'shopee.store/abc',
+    ]) assert.equal(checkReply(r), 'menyertakan tautan', r);
+    for (const r of [
+      'GFAF-40A berukuran 16 inci, kabel 1.5 m.', 'Tegangan 220/380 V, berat 8.5 kg.', 'Baik Pak. Id produknya GFAF-40A.', 'Debit 2880 m³/h, 62 dB.',
+      'Kami kirim ke Jakarta, Bandung, dan kota lain.', 'Ukuran 30 x 30 cm cocok untuk kamar mandi.',
+    ]) assert.equal(checkReply(r), null, r);
+    assert.match(systemPrompt(), /Jangan pernah menyertakan tautan/);
+
+    // Balasan LLM dengan tautan dibuang: jalur "balasan dibuang" yang biasa.
+    await say('halo');
+    next = () => R('Silakan lihat di www.gfan.co.id ya Pak.');
+    await say('ada katalog online?');
+    assert.ok(!sent.some((t) => /gfan\.co\.id/.test(t)), 'tautan tidak terkirim');
+    assert.equal(sent.length, 2, 'diganti kalimat cadangan');
   }],
 ];
 

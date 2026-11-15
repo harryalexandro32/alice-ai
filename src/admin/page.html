@@ -71,7 +71,7 @@
     </div>
     <label class="f"><span data-en="Starting profile">Bibit profil</span><select id="npTemplate"></select><small data-en="“generic” starts empty; “gfan” copies the GFAN product data.">“generic” mulai kosong; “gfan” menyalin data produk GFAN.</small></label>
     <div class="row">
-      <label class="f"><span data-en="Bot WhatsApp number">Nomor WA bot</span><input type="text" id="npWa" placeholder="0812…"></label>
+      <label class="f"><span data-en="Bot WhatsApp number (for the pairing code)">Nomor WA bot (untuk kode pairing)</span><input type="text" id="npWa" placeholder="0812…"><small data-en="Only used when requesting a pairing code. Once linked, the connected number is shown on the WhatsApp card.">Hanya dipakai saat meminta kode pairing. Setelah tertaut, nomor yang tersambung ditampilkan di kartu WhatsApp.</small></label>
       <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="npSales" placeholder="0812… / self"></label>
     </div>
     <p class="err" id="npErr"></p>
@@ -325,7 +325,7 @@
               <label class="f"><span data-en="WhatsApp channel">Jalur WhatsApp</span><select id="projTransport"><option value="baileys">Baileys (QR / kode pairing)</option><option value="cloud">Cloud API (Meta)</option></select></label>
             </div>
             <div class="row">
-              <label class="f"><span data-en="Bot WhatsApp number">Nomor WA bot</span><input type="text" id="projWa" placeholder="0812…"></label>
+              <label class="f"><span data-en="Bot WhatsApp number (for the pairing code)">Nomor WA bot (untuk kode pairing)</span><input type="text" id="projWa" placeholder="0812…"><small data-en="Only used when requesting a pairing code. Once linked, the connected number is shown on the WhatsApp card.">Hanya dipakai saat meminta kode pairing. Setelah tertaut, nomor yang tersambung ditampilkan di kartu WhatsApp.</small></label>
               <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="projSales" placeholder="0812… / self"><small data-en="Gets lead summaries on WhatsApp while the recipient list under Notifications is empty. “self” = the bot's own number.">Menerima ringkasan lead lewat WhatsApp selama daftar penerima di Notifikasi masih kosong. “self” = nomor bot sendiri.</small></label>
             </div>
             <label class="check" style="margin:0"><input type="checkbox" id="projEnabled"><span class="ck"><span class="t" data-en="Project active">Proyek aktif</span><small class="help" data-en="Off: the server stops this project's bot.">Mati: server menghentikan bot proyek ini.</small></span></label>
@@ -482,6 +482,7 @@
               <label class="f"><span data-en="Messages per customer per day">Pesan per pelanggan per hari</span><input type="number" min="5" max="500" data-set="maxInboundPerNumber"></label>
               <label class="f"><span data-en="Wait to merge rapid messages (ms)">Tunggu pesan beruntun digabung (ms)</span><input type="number" min="500" max="20000" step="100" data-set="debounceMs"></label>
             </div>
+            <label class="check" style="margin:28px 0 0"><input type="checkbox" data-set-bool="waWarmup"><span class="ck"><span class="t" data-en="New number: 7-day warm-up">Nomor baru: pemanasan 7 hari</span><small class="help" data-en="Switch this off if this number has long been in normal use.">Matikan kalau nomor ini sudah lama dipakai secara normal.</small></span></label>
           </div>
         </div>
         <div class="card">
@@ -491,7 +492,10 @@
               <label class="f"><span data-en="Fastest (seconds)">Paling cepat (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMin"></label>
               <label class="f"><span data-en="Slowest (seconds)">Paling lama (detik)</span><input type="number" min="0" max="180" data-key="replyDelayMax"></label>
             </div>
-            <label class="check"><input type="checkbox" data-set-bool="llmVision"><span class="ck"><span class="t" data-en="Analyse photos customers send">Analisis foto kiriman pelanggan</span><small class="help" data-en="The photo is sent to the LLM so the bot can describe what it sees and recommend a product from it. Off: the bot only acknowledges the photo and notifies staff.">Fotonya dikirim ke LLM supaya bot bisa menyebut apa yang terlihat dan menyarankan produk dari situ. Mati: bot hanya menerima fotonya dan mengabari staf.</small></span></label>
+            <label class="check" style="margin-bottom:4px"><input type="checkbox" data-set-bool="quietEnabled"><span class="ck"><span class="t" data-en="Quiet hours">Jam tenang</span><small class="help" data-en="At night the bot does not reply straight away, like a person who is asleep. Messages are still recorded, and human replies still work.">Di malam hari bot tidak langsung membalas, seperti orang yang sedang tidur. Pesan tetap dicatat, dan balasan manusia tetap jalan.</small></span></label>
+            <!-- Teks di antara kotak dipecah per span: applyLang mengganti innerHTML tiap [data-en]. -->
+            <p class="fu-line quiet-line"><span data-en="From">Dari pukul</span> <input type="number" class="fu-num" min="0" max="23" data-set="quietStartHour" aria-label="Jam tenang mulai pukul (jam 0 sampai 23)" data-en-title="Quiet hours start at (hour, 0 to 23)"> <span class="fu-pair"><span data-en="until">sampai</span> <input type="number" class="fu-num" min="1" max="24" data-set="quietEndHour" aria-label="Jam tenang selesai pukul (jam 1 sampai 24)" data-en-title="Quiet hours end at (hour, 1 to 24)"></span> <span data-en="o'clock the bot does not reply; messages that arrive are answered as soon as quiet hours end.">bot tidak membalas; pesan yang masuk dibalas begitu jam tenang berakhir.</span></p>
+            <label class="check" style="margin-top:12px"><input type="checkbox" data-set-bool="llmVision"><span class="ck"><span class="t" data-en="Analyse photos customers send">Analisis foto kiriman pelanggan</span><small class="help" data-en="The photo is sent to the LLM so the bot can describe what it sees and recommend a product from it. Off: the bot only acknowledges the photo and notifies staff.">Fotonya dikirim ke LLM supaya bot bisa menyebut apa yang terlihat dan menyarankan produk dari situ. Mati: bot hanya menerima fotonya dan mengabari staf.</small></span></label>
             <label class="check" style="margin:0"><input type="checkbox" data-set-bool="transcribeVoice"><span class="ck"><span class="t" data-en="Transcribe voice notes">Transkripsi pesan suara</span><small class="help" data-en="Voice notes are turned into text and answered like typed messages (needs <code>STT_API_KEY</code> in the bot's <code>.env</code>). Off: the bot acknowledges the voice note and notifies staff.">Pesan suara diubah jadi teks dan dijawab seperti ketikan (butuh <code>STT_API_KEY</code> di <code>.env</code> bot). Mati: bot menerima pesan suaranya dan mengabari staf.</small></span></label>
           </div>
         </div>

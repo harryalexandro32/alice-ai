@@ -15,6 +15,13 @@
       "when": 1794660007744,
       "tag": "0001_dashboard_ronde2",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794716824448,
+      "tag": "0002_risiko_blokir",
+      "breakpoints": true
     }
   ]
 }

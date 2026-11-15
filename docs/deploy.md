@@ -147,7 +147,13 @@ Tiap push ke `master`, `.github/workflows/deploy.yml`:
 1. `npm ci`, `npm run typecheck`, `npm test` di GitHub;
 2. kalau lulus, SSH ke server sebagai `alice` dan menjalankan `deploy/deploy.sh`:
    `git reset --hard origin/master` → `npm ci` → `npm run db:migrate` → `npm run db:seed` →
-   `systemctl restart alice-admin` dan `'alice-bot@*'` → cek semuanya aktif.
+   `systemctl restart alice-admin` → `'alice-bot@*'` hanya kalau kode bot berubah → cek semuanya aktif.
+
+Bot hanya dinyalakan ulang kalau commit baru mengubah berkas di luar daftar ini: `src/admin/`,
+`docs/`, `README.md`, `.github/`, `public/`, `vercel.json`, `deploy/alice.caddy`, `.vercelignore`,
+dan berkas `*.md`. Setiap restart berarti WhatsApp tersambung ulang, dan sambungan ulang yang
+sering membuat nomor lebih dicurigai. `package.json`, `src/db/`, `drizzle/`, dan `deploy/*.service`
+dihitung perubahan bot. Log deploy menyebut keputusannya dan 5 berkas pertama yang berubah.
 
 Rahasia di repo (Settings → Secrets and variables → Actions): `DEPLOY_HOST` (IP server) dan
 `DEPLOY_SSH_KEY` (kunci privat pasangan `DEPLOY_PUBKEY`). Vercel mendeploy sendiri dari GitHub.

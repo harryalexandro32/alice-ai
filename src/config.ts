@@ -97,6 +97,12 @@ const base = {
 
   humanPauseHours: num('HUMAN_PAUSE_HOURS', 12),
 
+  // Jam tenang: pesan yang masuk di antara dua jam ini tidak langsung dibalas,
+  // tapi dibalas begitu jam tenang berakhir (lihat quiet.ts). Diatur per proyek.
+  quietEnabled: true,
+  quietStartHour: 0,
+  quietEndHour: 7,
+
   // Warning untuk pemilik lewat Telegram (opsional; lihat src/alerts.ts).
   telegramToken: str('TELEGRAM_BOT_TOKEN'),
   telegramChat: str('TELEGRAM_CHAT_ID'),
@@ -118,8 +124,11 @@ const base = {
   // Pengaman nomor di jalur Baileys (lihat transport/sendguard.ts). Per menit
   // hanya mengantre; per jam dan per 24 jam menolak kiriman berikutnya.
   waMaxPerMinute: num('WA_MAX_PER_MINUTE', 5),
-  waMaxPerHour: num('WA_MAX_PER_HOUR', 100),
-  waMaxPerDay: num('WA_MAX_PER_DAY', 800),
+  waMaxPerHour: num('WA_MAX_PER_HOUR', 60),
+  waMaxPerDay: num('WA_MAX_PER_DAY', 300),
+  // Pemanasan antiban untuk nomor baru (7 hari, mulai 20 kiriman di hari
+  // pertama). Matikan per proyek kalau nomornya sudah lama dipakai normal.
+  waWarmup: true,
 
   // --- Per proyek (baris projects di database); nilai di sini hanya cadangan ---
   transport: 'baileys' as 'baileys' | 'cloud',
@@ -148,7 +157,7 @@ const base = {
  */
 export const TUNABLE = {
   followupAfterHours: [1, 72], followupAfterHoursMax: [1, 96], followupStartHour: [0, 23], followupEndHour: [1, 24], followupMaxTotal: [0, 5],
-  humanPauseHours: [1, 168], llmDailyLimit: [10, 100_000], maxInboundPerNumber: [5, 500],
+  humanPauseHours: [1, 168], quietStartHour: [0, 23], quietEndHour: [1, 24], llmDailyLimit: [10, 100_000], maxInboundPerNumber: [5, 500],
   waMaxPerMinute: [1, 30], waMaxPerHour: [10, 1000], waMaxPerDay: [50, 10_000], debounceMs: [500, 20_000],
   llmPriceIn: [0, 100], llmPriceCached: [0, 100], llmPriceOut: [0, 100], usdIdr: [1000, 100_000],
 } as const satisfies Partial<Record<keyof typeof base, readonly [number, number]>>;
@@ -163,12 +172,16 @@ export interface Settings extends Partial<Record<TunableKey, number>> {
   transcribeVoice?: boolean;
   /** Mode uji: hanya nomor-nomor ini yang dilayani. Kosong = semua nomor. */
   onlyNumbers?: string[];
+  /** Jam tenang dinyalakan (jamnya: quietStartHour sampai quietEndHour). */
+  quietEnabled?: boolean;
+  /** Pemanasan antiban 7 hari untuk nomor baru. */
+  waWarmup?: boolean;
 }
 
 /** Kunci `cfg` yang nilainya milik proyek yang sedang dilayani, bukan .env. */
 export const PROJECT_KEYS: ReadonlySet<string> = new Set([
   'transport', 'salesNumber', 'waAuthDir', 'waPairingNumber', 'followupMaxHours',
-  'llmVision', 'followupSmart', 'transcribeVoice', 'onlyNumbers', ...Object.keys(TUNABLE),
+  'llmVision', 'followupSmart', 'transcribeVoice', 'onlyNumbers', 'quietEnabled', 'waWarmup', ...Object.keys(TUNABLE),
 ]);
 
 /**
@@ -191,13 +204,14 @@ export const cfg: typeof base = new Proxy(base, {
 
 const envDefaults = { ...base, onlyNumbers: [...base.onlyNumbers] };
 
+/** Pengaturan ya/tidak di Settings. */
+const BOOL_KEYS = ['llmVision', 'followupSmart', 'transcribeVoice', 'quietEnabled', 'waWarmup'] as const;
+
 /** Nilai dari Pengaturan di dashboard di atas bawaan .env. Kunci yang tidak diisi kembali ke bawaan. */
 export function settingsCfg(s: Settings): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = typeof s[k] === 'number' ? s[k] : envDefaults[k];
-  out.llmVision = typeof s.llmVision === 'boolean' ? s.llmVision : envDefaults.llmVision;
-  out.followupSmart = typeof s.followupSmart === 'boolean' ? s.followupSmart : envDefaults.followupSmart;
-  out.transcribeVoice = typeof s.transcribeVoice === 'boolean' ? s.transcribeVoice : envDefaults.transcribeVoice;
+  for (const k of BOOL_KEYS) out[k] = typeof s[k] === 'boolean' ? s[k] : envDefaults[k];
   out.onlyNumbers = Array.isArray(s.onlyNumbers) ? s.onlyNumbers : envDefaults.onlyNumbers;
   return out;
 }
@@ -222,7 +236,8 @@ export function applySettings(s: Settings): void {
 
 /** Nilai yang sedang berlaku, untuk ditampilkan dashboard. */
 export function effectiveSettings(): Required<Settings> {
-  const out = { llmVision: cfg.llmVision, followupSmart: cfg.followupSmart, transcribeVoice: cfg.transcribeVoice, onlyNumbers: cfg.onlyNumbers } as Record<string, unknown>;
+  const out: Record<string, unknown> = { onlyNumbers: cfg.onlyNumbers };
+  for (const k of BOOL_KEYS) out[k] = cfg[k];
   for (const k of Object.keys(TUNABLE) as TunableKey[]) out[k] = cfg[k];
   return out as unknown as Required<Settings>;
 }

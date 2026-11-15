@@ -106,8 +106,9 @@ Dipilih per proyek di dashboard (Pengaturan > Umum > Proyek):
 
 Di jalur `baileys`, tiap kiriman lewat dua pengaman: `src/transport/sendguard.ts` (batas per
 menit/jam/hari dari Pengaturan > Lanjutan, jeda setelah tanda bahaya) dan kelas `AntiBan` dari
-pustaka `baileys-antiban` (pemanasan nomor baru 7 hari mulai 20 kiriman/hari, deteksi pesan kembar,
-jeda otomatis saat risikonya tinggi). Batasnya sama dengan angka di dashboard, dan jedanya tidak
+pustaka `baileys-antiban` (pemanasan nomor baru 7 hari mulai 20 kiriman/hari, bisa dimatikan per
+proyek untuk nomor lama; pesan yang persis sama paling banyak 40 kali sejam; jeda otomatis saat
+risikonya tinggi). Batasnya sama dengan angka di dashboard, dan jedanya tidak
 dijumlahkan: bot menunggu sekali, selama jeda yang terbesar. Keadaannya disimpan di
 `auth/<proyek>/antiban-state.json`.
 
@@ -116,6 +117,36 @@ di Pengaturan (diacak di antara dua angkanya; follow-up dan balasan dari dashboa
 "sedang mengetik…" selama panjang pesannya (3,5–5,5 huruf per detik, 1,5–40 detik). Bot melayani
 satu lawan bicara pada satu waktu: selama mengetik ke satu chat, kiriman ke chat lain (termasuk
 notifikasi ke sales) menunggu giliran. Jalur `cloud` tidak punya "sedang mengetik…"; jedanya sama.
+
+### Mengurangi risiko blokir
+
+Jalur `baileys` tidak resmi, jadi selalu ada risiko nomor dibatasi atau diblokir WhatsApp. Yang
+dilakukan bot untuk menekannya:
+
+- **Variasi salam**: pembuka salam mengikuti jam ("Selamat pagi/siang/sore/malam"), dalam dua bentuk
+  acak, dan kadang menyebut nama profil pelanggan. Isi salam dari dashboard tetap utuh.
+- **Satu chat sekaligus**: bot "mikir", lalu "sedang mengetik…" selama panjang pesannya, dan melayani
+  satu lawan bicara pada satu waktu (lihat irama kiriman di atas).
+- **Jam tenang** (bawaan 00.00 sampai 07.00, Pengaturan > Lanjutan > Balasan): pesan malam tetap
+  dicatat, lalu dijawab sekaligus begitu jam tenang berakhir. Follow-up tidak pernah dikirim di jam itu.
+- **Kata berhenti**: pesan pendek seperti "stop", "berhenti", atau "jangan hubungi saya" dijawab
+  sekali, lalu bot diam dan tidak mengirim follow-up lagi ke nomor itu. Hanya pemilik yang bisa
+  mengaktifkan bot lagi di percakapannya.
+- **Batas kiriman** yang rendah (bawaan 60 per jam, 300 per 24 jam) dan pemanasan 7 hari untuk
+  nomor baru (matikan di Pengaturan > Lanjutan untuk nomor yang sudah lama dipakai normal).
+- **Tanpa tautan**: balasan LLM yang memuat tautan atau alamat situs tidak dikirim; tim yang
+  membagikan tautan secara langsung.
+- **Restart jarang**: deploy hanya menyalakan ulang bot kalau kode bot berubah.
+
+Yang perlu dilakukan pemilik:
+
+- Lengkapi profil WhatsApp Business (nama, foto, alamat, jam buka, keterangan).
+- Biarkan HP nomor itu tetap menyala dan tersambung internet.
+- Pakai nomor itu juga untuk chat manusia biasa, bukan hanya untuk bot.
+- Jangan sering memutus dan menautkan ulang perangkat.
+
+Jalan tanpa risiko blokir adalah WhatsApp Cloud API resmi (jalur `cloud`, lihat
+[docs/cloud-api-setup.md](docs/cloud-api-setup.md)).
 
 ## Menambah bisnis baru
 
@@ -166,7 +197,7 @@ bot per proyek (`alice-bot@<proyek>`, dinyalakan otomatis begitu proyeknya ada d
   (`vercel.json`). Alamat ini didaftarkan di `ADMIN_ORIGINS` pada `.env` server. Contoh:
   `https://alice.lukicenturi.com/gfan` (Beranda proyek gfan).
 - Push ke `master` → GitHub Actions menguji, lalu memasang ke server lewat SSH (`deploy/`):
-  migrasi database, lalu dashboard dan semua bot dinyalakan ulang.
+  migrasi database, lalu dashboard dinyalakan ulang; bot hanya kalau kode bot ikut berubah.
 - Cadangan harian database (`pg_dump`), berkas unggahan, dan sesi WhatsApp ke `backups/`.
 
 Panduan lengkap: [docs/deploy.md](docs/deploy.md).

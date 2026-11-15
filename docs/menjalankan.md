@@ -46,6 +46,21 @@ sudo systemctl enable --now alice-admin alice-reconcile.timer
 journalctl -u alice-bot@gfan -f
 ```
 
+## Mengurangi risiko blokir
+
+Bot sudah menjaga dirinya sendiri: salam yang bervariasi, satu chat sekaligus, jam tenang
+(bawaan 00.00 sampai 07.00), kata berhenti, batas kiriman yang rendah, dan tanpa tautan di
+balasan. Rinciannya ada di [README](../README.md#mengurangi-risiko-blokir).
+
+Yang perlu dijaga pemilik:
+
+- Profil WhatsApp Business lengkap (nama, foto, alamat, jam buka, keterangan).
+- HP nomor itu tetap menyala dan tersambung internet.
+- Nomor itu juga dipakai manusia untuk chat biasa, bukan hanya oleh bot.
+- Jangan sering memutus dan menautkan ulang perangkat, dan jangan sering menyalakan ulang bot.
+
+Jalan tanpa risiko blokir: WhatsApp Cloud API resmi ([cloud-api-setup.md](cloud-api-setup.md)).
+
 ## Melihat apa yang terjadi
 
 - Dashboard → **Beranda** (`/<proyek>`): pelanggan yang menunggu staf dan masalah bot 24 jam

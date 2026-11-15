@@ -18,8 +18,8 @@ export interface LeadRow {
   lastDir: string;
   /** Ringkasan percakapan sejauh ini (ditulis LLM). */
   summary?: string;
-  /** Kenapa bot diam di chat ini; null/kosong = bot aktif. */
-  hold?: 'tombol' | 'admin' | null;
+  /** Kenapa bot diam di chat ini (lihat flow.holdReason); null/kosong = bot aktif. */
+  hold?: 'berhenti' | 'tombol' | 'admin' | 'tenang' | null;
   /** Tahap pipeline: baru | dihubungi | closing | batal. */
   stage: string;
   /** Catatan staf ('' = belum ada). */

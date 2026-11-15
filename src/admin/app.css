@@ -177,7 +177,7 @@ div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
    jadi baris yang terbungkus di HP tetap rata dan kotaknya sejajar dengan teks. */
 .fu .sub.fu-first { margin-top: 0; }
 .fu-line { margin: 0 0 4px; line-height: calc(var(--control-h) + 8px); }
-.fu .fu-num { width: 64px; padding: 0 8px; vertical-align: middle; }
+.fu .fu-num, .quiet-line .fu-num { width: 64px; padding: 0 8px; vertical-align: middle; }
 /* Kata sambung pendek tetap satu baris dengan kotaknya (kalimat pembuka terlalu panjang untuk itu). */
 .fu-pair { white-space: nowrap; }
 .fu-mode { margin-bottom: 14px; }

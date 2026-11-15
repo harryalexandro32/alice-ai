@@ -13,6 +13,7 @@ import { llmEnabled } from './llm/provider';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
 import { contactName, humanHolds, missingFields, projectPaused, type Sender } from './flow';
+import { inQuiet, quietEndAfter, quietStartBefore } from './quiet';
 import { addMessage, followupCandidates, recentMessages, updateContact, type Contact } from './store';
 import { followupText, noDash } from './texts';
 
@@ -56,8 +57,23 @@ function fraction(key: string): number {
  * kecuali geseran itu melewati FOLLOWUP_MAX_HOURS (jendela Cloud API), maka
  * dimajukan ke sesaat sebelum jam tutup. Lebih awal masih sopan; lewat jendela
  * 24 jam tidak terkirim.
+ *
+ * Jadwal tidak pernah jatuh di jam tenang (quiet.ts): kalau jatuh di sana,
+ * digeser ke akhir jam tenang, atau (kalau itu melewati jendela) dimajukan ke
+ * sesaat sebelum jam tenang mulai.
  */
 export function followupDueAt(lastInbound: number, key = ''): number {
+  const due = windowDueAt(lastInbound, key);
+  if (!inQuiet(due)) return due;
+  const later = quietEndAfter(due);
+  const limit = cfg.followupMaxHours ? lastInbound + cfg.followupMaxHours * HOUR - 10 * MINUTE : Infinity;
+  if (later <= limit) return later;
+  const earlier = quietStartBefore(due) - 5 * MINUTE;
+  return earlier > lastInbound ? earlier : later;
+}
+
+/** Jadwal follow-up menurut jeda acak dan jam kirim (tanpa jam tenang). */
+function windowDueAt(lastInbound: number, key: string): number {
   const spread = Math.max(0, cfg.followupAfterHoursMax - cfg.followupAfterHours);
   const wait = Math.round((cfg.followupAfterHours + fraction(`${key}:${lastInbound}`) * spread) * 60) * MINUTE;
   const cap = cfg.followupMaxHours ? lastInbound + cfg.followupMaxHours * HOUR - 10 * MINUTE : Infinity;
@@ -84,6 +100,8 @@ export async function runFollowups(send: Sender): Promise<number> {
   // Bot dijeda untuk semua chat: tidak ada follow-up sama sekali.
   if (projectPaused()) return 0;
   const t = now();
+  // Jam tenang: tidak ada yang dikirim; yang sudah waktunya tetap menunggu putaran berikutnya.
+  if (inQuiet(t)) return 0;
   let sent = 0;
 
   for (const c of await followupCandidates()) {
@@ -91,15 +109,17 @@ export async function runFollowups(send: Sender): Promise<number> {
     if (t < due) continue;
 
     const skip =
-      (await humanHolds(c.address, t))
-        ? 'sedang ditangani manusia'
-        : t > due + GRACE_MS
-          ? 'sudah terlalu lama lewat'
-          : cfg.followupMaxHours && t > c.last_inbound_at + cfg.followupMaxHours * HOUR
-            ? 'di luar jendela 24 jam'
-            : c.followup_total >= cfg.followupMaxTotal
-              ? 'batas follow-up nomor ini tercapai'
-              : null;
+      c.opted_out_at
+        ? 'pelanggan minta tidak dihubungi'
+        : (await humanHolds(c.address, t))
+          ? 'sedang ditangani manusia'
+          : t > due + GRACE_MS
+            ? 'sudah terlalu lama lewat'
+            : cfg.followupMaxHours && t > c.last_inbound_at + cfg.followupMaxHours * HOUR
+              ? 'di luar jendela 24 jam'
+              : c.followup_total >= cfg.followupMaxTotal
+                ? 'batas follow-up nomor ini tercapai'
+                : null;
     if (skip) {
       console.log(`[follow-up] ${c.phone}: dilewat (${skip})`);
       await updateContact(c.phone, { followup_state: 'idle' });

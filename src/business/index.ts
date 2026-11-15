@@ -308,9 +308,12 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
     if (out.followupStartHour !== undefined && out.followupEndHour !== undefined && out.followupEndHour <= out.followupStartHour) {
       throw new Error('Jam follow-up: jam selesai harus setelah jam mulai');
     }
-    if (typeof raw.llmVision === 'boolean') out.llmVision = raw.llmVision;
-    if (typeof raw.followupSmart === 'boolean') out.followupSmart = raw.followupSmart;
-    if (typeof raw.transcribeVoice === 'boolean') out.transcribeVoice = raw.transcribeVoice;
+    if (out.quietStartHour !== undefined && out.quietEndHour !== undefined && out.quietEndHour <= out.quietStartHour) {
+      throw new Error('Jam tenang: jam selesai harus setelah jam mulai');
+    }
+    for (const k of ['llmVision', 'followupSmart', 'transcribeVoice', 'quietEnabled', 'waWarmup'] as const) {
+      if (typeof raw[k] === 'boolean') out[k] = raw[k];
+    }
     if (Array.isArray(raw.onlyNumbers)) {
       const list = raw.onlyNumbers.map((x) => String(x).trim()).filter(Boolean);
       const bad = list.find((x) => !normPhone(x));

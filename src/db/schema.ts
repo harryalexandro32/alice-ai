@@ -115,6 +115,10 @@ export const contacts = pgTable(
     stage: text('stage').notNull().default('baru'),
     /** Catatan staf tentang pelanggan ini. */
     note: text('note'),
+    /** Balasan ditunda sampai jam tenang berakhir (ms); null = tidak ada balasan yang ditunda. */
+    deferred_until: ms('deferred_until'),
+    /** Pelanggan minta tidak dihubungi lagi (ms); null = tidak. Dihapus hanya oleh pemilik. */
+    opted_out_at: ms('opted_out_at'),
   },
   (t) => [
     primaryKey({ columns: [t.project, t.phone] }),

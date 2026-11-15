@@ -8,13 +8,18 @@
  *     inci ada?" sebagai tiga pesan; dibalas tiga kali itu spam.
  *   - Satu nomor diproses berurutan, supaya dua pesan yang hampir bersamaan
  *     tidak menghasilkan dua salam.
+ *
+ * Balasan yang ditunda jam tenang (quiet.ts) juga dijalankan dari sini, lewat
+ * antrean per nomor yang sama: putaran 5 menit, ditambah satu timer tepat
+ * untuk waktu jatuh tempo berikutnya.
  */
 
 import { refreshBiz } from './business';
-import { cfg, MINUTE } from './config';
+import { cfg, HOUR, MINUTE } from './config';
+import { now } from './clock';
 import { sendPaced, type TypingHooks } from './pace';
 import { waTargets } from './notify';
-import { handleHumanReply, handleInbound, setBeforeTurn, setSender } from './flow';
+import { handleHumanReply, handleInbound, runDeferredTurn, setBeforeTurn, setSender } from './flow';
 import { startHeartbeat, transportConnected } from './heartbeat';
 import { runFollowups } from './followup';
 import { deliverOutbox, setReplySender, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
@@ -22,7 +27,7 @@ import { raiseAlert, setAlertWhatsApp } from './alerts';
 import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
 import { setGuardListener } from './transport/sendguard';
-import { addUsage } from './store';
+import { addUsage, dueDeferred, nextDeferredAt } from './store';
 import { noDash } from './texts';
 import type { Transport, TransportInbound } from './transport/types';
 
@@ -113,16 +118,57 @@ function flush(phone: string): void {
   const p = pending.get(phone);
   if (!p) return;
   pending.delete(phone);
-  enqueue(phone, () =>
-    handleInbound({
+  enqueue(phone, async () => {
+    await handleInbound({
       phone,
       address: p.first.address,
       text: p.texts.length ? p.texts.join('\n') : null,
       waId: p.first.waId,
       ...(p.first.profileName ? { profileName: p.first.profileName } : {}),
       ...(p.media?.media ? { media: p.media.media, fetchMedia: p.media.fetchMedia } : {}),
-    })
-  );
+    });
+    // Pesan ini mungkin baru ditunda jam tenang: timernya disesuaikan.
+    void scheduleDeferred().catch((e) => console.error('[jam tenang] jadwal gagal:', e instanceof Error ? e.message : e));
+  });
+}
+
+/** Nomor yang balasan tertundanya sedang diantre atau dijalankan. */
+const deferring = new Set<string>();
+let deferTimer: NodeJS.Timeout | null = null;
+/** Selama belum tersambung (atau masih ada yang diantre), dicoba lagi sesudah selang ini. */
+const DEFER_RETRY_MS = MINUTE;
+
+/**
+ * Jalankan balasan tertunda yang sudah jatuh tempo, lewat antrean per nomor
+ * (berurutan dengan pesan baru dari nomor yang sama), lalu pasang timer untuk
+ * yang berikutnya. Selama WhatsApp belum tersambung tidak ada yang dijalankan:
+ * balasan yang gagal terkirim tidak dicoba lagi, jadi lebih baik menunggu.
+ */
+async function runDueDeferred(): Promise<void> {
+  if (deferConnected()) {
+    for (const c of await dueDeferred(now())) {
+      if (deferring.has(c.phone)) continue;
+      deferring.add(c.phone);
+      enqueue(c.phone, () => runDeferredTurn(c.phone).finally(() => deferring.delete(c.phone)));
+    }
+  }
+  await scheduleDeferred();
+}
+
+/** WhatsApp sedang tersambung (dipasang startApp). */
+let deferConnected: () => boolean = () => true;
+/** Pasang (ulang) satu timer untuk balasan tertunda yang paling dekat. */
+async function scheduleDeferred(): Promise<void> {
+  const next = await nextDeferredAt();
+  if (deferTimer) clearTimeout(deferTimer);
+  deferTimer = null;
+  if (next === null) return;
+  // Satu detik lewat dari jatuh temponya, supaya timer yang sedikit terlalu cepat tidak meleset.
+  const wait = next > now() && deferConnected() ? Math.min(next - now() + 1000, 6 * HOUR) : DEFER_RETRY_MS;
+  deferTimer = setTimeout(() => {
+    void runDueDeferred().catch((e) => console.error('[jam tenang] putaran gagal:', e instanceof Error ? e.message : e));
+  }, wait);
+  deferTimer.unref();
 }
 
 /** "sedang mengetik…" ke satu lawan bicara, kalau jalurnya bisa (Cloud API tidak). */
@@ -148,6 +194,7 @@ function withoutDashes(transport: Transport): Transport {
  */
 export async function startApp(raw: Transport): Promise<void> {
   const transport = withoutDashes(raw);
+  deferConnected = transportConnected;
   // Mulai sekarang semua error juga tersimpan untuk dashboard.
   installErrorLog();
   // Tiap panggilan LLM dicatat per hari, supaya biayanya terlihat di dashboard.
@@ -257,9 +304,12 @@ export async function startApp(raw: Transport): Promise<void> {
         }).then(() => {})
       );
       await deliverOutbox();
+      await runDueDeferred();
     } catch (e) {
       console.error('[app] putaran berkala gagal:', e instanceof Error ? e.message : e);
     }
   };
   setInterval(() => void tick(), 5 * MINUTE);
+  // Balasan yang tertunda sebelum bot dinyalakan ulang juga dijadwalkan.
+  void scheduleDeferred().catch((e) => console.error('[jam tenang] jadwal gagal:', e instanceof Error ? e.message : e));
 }

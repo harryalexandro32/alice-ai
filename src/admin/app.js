@@ -1327,9 +1327,14 @@ function renderLeads() {
     el('th', { textContent: T('Terakhir chat', 'Last message') }));
   const list = visibleLeads();
   const rows = list.map((c) => {
-    const box = el('input', { type: 'checkbox', checked: !c.hold });
+    // Menunggu jam tenang = bot tetap aktif di chat ini, hanya balasannya tertunda.
+    const box = el('input', { type: 'checkbox', checked: !c.hold || c.hold === 'tenang' });
     box.setAttribute('aria-label', T('Bot aktif di chat ini', 'Bot active in this chat'));
     box.addEventListener('change', async () => {
+      if (box.checked && c.hold === 'berhenti' && !confirmOptOutResume()) {
+        box.checked = false;
+        return;
+      }
       box.disabled = true;
       try {
         await api('leads/' + encodeURIComponent(c.phone) + '/bot', { method: 'POST', body: JSON.stringify({ mode: box.checked ? 'on' : 'off' }) });
@@ -1337,7 +1342,7 @@ function renderLeads() {
       } catch (e) { toast(e.message, true); }
       await loadLeads();
     });
-    const why = c.hold === 'admin' ? T('admin membalas', 'an admin replied') : c.hold === 'tombol' ? T('dijeda', 'paused') : '';
+    const why = holdLabel(c.hold);
     const stage = stageSelect(c.stage, async (v, sel) => {
       sel.disabled = true;
       try { await putStage(c.phone, v); renderFilters(); } catch (e) { toast(e.message, true); sel.value = c.stage; }
@@ -1351,7 +1356,7 @@ function renderLeads() {
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }) : null);
     const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
       el('td', { className: 'sum', textContent: c.summary || '-' }), status,
-      el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip warn', textContent: why }) : null)),
+      el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: why }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
     // Klik di mana saja pada baris (selain kontrolnya) membuka percakapannya.
     tr.addEventListener('click', (e) => {
@@ -1379,7 +1384,7 @@ $('leadExport').addEventListener('click', () => {
     T('Perlu staf', 'Needs staff'), 'Bot', T('Terakhir chat', 'Last message')]];
   for (const c of visibleLeads()) {
     lines.push([c.phone, ...r.fields.map((f) => c.lead[f.key] || ''), stageLabel(c.stage || 'baru'), c.note || '', c.summary || '', c.complete ? T('ya', 'yes') : T('tidak', 'no'),
-      c.needsSales ? T('ya', 'yes') : '', c.hold ? T('diam', 'off') : T('aktif', 'on'), c.lastAt ? new Date(c.lastAt).toLocaleString(locale()) : '']);
+      c.needsSales ? T('ya', 'yes') : '', botHeld(c.hold) ? T('diam', 'off') : T('aktif', 'on'), c.lastAt ? new Date(c.lastAt).toLocaleString(locale()) : '']);
   }
   // BOM di depan supaya Excel membaca huruf dan emoji dengan benar.
   const csv = '﻿' + lines.map((l) => l.map(cell).join(',')).join('\r\n');
@@ -1451,6 +1456,21 @@ async function pollConv() {
   convTimer = setTimeout(pollConv, 5000);
 }
 
+/** Bot benar-benar diam di chat ini (menunggu jam tenang tidak dihitung: bot tetap aktif). */
+function botHeld(hold) { return Boolean(hold) && hold !== 'tenang'; }
+/** Keterangan singkat penahan bot untuk daftar lead; '' = bot aktif. */
+function holdLabel(hold) {
+  return hold === 'berhenti' ? T('minta tidak dihubungi', 'asked not to be contacted')
+    : hold === 'admin' ? T('admin membalas', 'an admin replied')
+    : hold === 'tombol' ? T('dijeda', 'paused')
+    : hold === 'tenang' ? T('menunggu jam tenang berakhir', 'waiting for quiet hours to end') : '';
+}
+/** Pelanggan ini minta tidak dihubungi: menyalakan bot lagi berarti mengabaikan permintaannya. */
+function confirmOptOutResume() {
+  return confirm(T('Pelanggan ini minta tidak dihubungi lagi. Aktifkan bot lagi dan abaikan permintaannya?',
+    'This customer asked not to be contacted again. Turn the bot back on and ignore the request?'));
+}
+
 function renderConvHead() {
   const c = conv.contact;
   const name = nameOf(c);
@@ -1458,11 +1478,16 @@ function renderConvHead() {
   $('convPhone').textContent = [name ? c.phone : '', c.waName && c.waName !== name ? 'WA: ' + c.waName : ''].filter(Boolean).join(' · ');
   $('title').textContent = name || c.phone;
   document.title = (name || c.phone) + ' · Alice AI';
-  const [holdText, holdCls] = c.hold === 'admin' ? [T('Bot diam: admin membalas', 'Bot quiet: an admin replied'), 'warn']
-    : c.hold === 'tombol' ? [T('Bot dijeda di chat ini', 'Bot paused in this chat'), 'warn'] : [T('Bot aktif', 'Bot active'), 'ok'];
+  const [holdText, holdCls] = c.hold === 'berhenti' ? [T('Minta tidak dihubungi', 'Asked not to be contacted'), 'danger']
+    : c.hold === 'admin' ? [T('Bot diam: admin membalas', 'Bot quiet: an admin replied'), 'warn']
+    : c.hold === 'tombol' ? [T('Bot dijeda di chat ini', 'Bot paused in this chat'), 'warn']
+    : c.hold === 'tenang' ? [T('Bot aktif: menunggu jam tenang berakhir', 'Bot active: waiting for quiet hours to end'), 'warn']
+    : [T('Bot aktif', 'Bot active'), 'ok'];
   $('convHold').textContent = holdText + (c.needsSales ? T(' · perlu staf', ' · needs staff') : '');
   $('convHold').className = 'chip ' + (c.needsSales ? 'danger' : holdCls);
-  withIcon($('convBot'), c.hold ? 'play' : 'pause', c.hold ? T('Aktifkan bot lagi', 'Turn the bot back on') : T('Jeda bot di chat ini', 'Pause the bot in this chat'));
+  const off = botHeld(c.hold);
+  withIcon($('convBot'), off ? 'play' : 'pause', c.hold === 'berhenti' ? T('Aktifkan bot lagi (abaikan permintaan berhenti)', 'Turn the bot back on (ignore the stop request)')
+    : off ? T('Aktifkan bot lagi', 'Turn the bot back on') : T('Jeda bot di chat ini', 'Pause the bot in this chat'));
   $('convHandled').hidden = !c.needsSales;
   if ($('convStage').options.length !== STAGES.length || $('convStage').dataset.lang !== lang) {
     $('convStage').replaceChildren(...STAGES.map((s) => el('option', { value: s, textContent: stageLabel(s) })));
@@ -1566,7 +1591,8 @@ $('replyText').addEventListener('keydown', (e) => {
 
 $('convBot').addEventListener('click', async () => {
   if (!conv || !conv.contact) return;
-  const on = Boolean(conv.contact.hold);
+  const on = botHeld(conv.contact.hold);
+  if (conv.contact.hold === 'berhenti' && !confirmOptOutResume()) return;
   $('convBot').disabled = true;
   try {
     await api('leads/' + encodeURIComponent(conv.phone) + '/bot', { method: 'POST', body: JSON.stringify({ mode: on ? 'on' : 'off' }) });
