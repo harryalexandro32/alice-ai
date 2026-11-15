@@ -101,6 +101,9 @@ let dirty = false;
 // Hanya kunci yang benar-benar diubah yang dikirim: yang tidak disentuh tetap
 // mengikuti bawaan, jadi perbaikan bawaan di kemudian hari tetap sampai.
 const changed = new Set();
+// Isian kartu Proyek (nama, jalur, nomor, aktif) ikut bilah simpan yang sama,
+// tapi disimpan ke PUT /api/:proyek/project, bukan ke profil.
+let projectDirty = false;
 let chat = [];
 let known = {};
 
@@ -202,8 +205,9 @@ async function api(path, opts = {}) {
 /** Tandai ada (atau tidak ada) perubahan; bilah simpan di bawah layar muncul selama ada perubahan. */
 function setDirty(v, key) {
   dirty = v;
-  if (v && key) changed.add(key);
-  if (!v) changed.clear();
+  if (v && key === 'project') projectDirty = true;
+  else if (v && key) changed.add(key);
+  if (!v) { changed.clear(); projectDirty = false; }
   $('save').disabled = !v;
   withIcon($('save'), 'check', T('Simpan & terapkan', 'Save & apply'));
   $('savebar').classList.toggle('on', v);
@@ -2127,15 +2131,19 @@ setInterval(async () => {
 function renderProject() {
   const p = state && state.project;
   if (!p) return;
-  $('projName').value = p.name || '';
-  $('projTransport').value = p.transport || 'baileys';
-  $('projWa').value = p.wa_number || '';
-  $('projSales').value = p.sales_number || '';
-  $('projEnabled').checked = Boolean(p.enabled);
+  // Suntingan yang belum disimpan tidak ditimpa (mis. saat tombol jeda diubah).
+  if (!projectDirty) {
+    $('projName').value = p.name || '';
+    $('projTransport').value = p.transport || 'baileys';
+    $('projWa').value = p.wa_number || '';
+    $('projSales').value = p.sales_number || '';
+    $('projEnabled').checked = Boolean(p.enabled);
+  }
   $('projPaused').checked = Boolean(p.paused);
   $('pauseBar').classList.toggle('on', Boolean(p.paused));
 }
 
+/** Kirim perubahan baris proyek; tanpa pesan, tidak ada toast (save() memberi toast sendiri). */
 async function putProject(patch, message) {
   const r = await api('project', { method: 'PUT', body: JSON.stringify(patch) });
   state.project = r.project;
@@ -2144,15 +2152,14 @@ async function putProject(patch, message) {
   renderProjects();
   renderProject();
   renderStrip();
-  toast(message);
+  if (message) toast(message);
 }
 
-$('projSave').addEventListener('click', async () => {
-  try {
-    await putProject({ name: $('projName').value, transport: $('projTransport').value, wa_number: $('projWa').value, sales_number: $('projSales').value, enabled: $('projEnabled').checked },
-      T('Proyek disimpan.', 'Project saved.'));
-  } catch (e) { toast(e.message, true); renderProject(); }
-});
+// Isian kartu Proyek: perubahan memunculkan bilah simpan di bawah, seperti isian lain.
+for (const id of ['projName', 'projTransport', 'projWa', 'projSales', 'projEnabled']) {
+  const input = $(id);
+  input.addEventListener(input.tagName === 'INPUT' && input.type === 'text' ? 'input' : 'change', () => setDirty(true, 'project'));
+}
 
 $('projPaused').addEventListener('change', async () => {
   const paused = $('projPaused').checked;
@@ -2197,6 +2204,7 @@ $('newProjectForm').addEventListener('submit', async (e) => {
     toast(T('Proyek dibuat. Tautkan WhatsApp-nya di sini.', 'Project created. Link its WhatsApp here.'));
     dirty = false;
     changed.clear();
+    projectDirty = false;
     await go(pathOf('whatsapp', r.project.id));
   } catch (err) { $('npErr').textContent = err.message; }
 });
@@ -2334,6 +2342,7 @@ async function openProject(id) {
   profile = state.profile;
   dirty = false;
   changed.clear();
+  projectDirty = false;
   $('app').hidden = false;
   $('strip').hidden = false;
   renderAll();
@@ -2412,17 +2421,29 @@ $('lang').addEventListener('click', (e) => {
   if (page === 'lanjutan') { void loadUsage(); void loadAlerts(); }
 });
 
+/** Simpan semua perubahan: baris proyek dulu (kalau diubah), lalu profil (kalau diubah). */
 async function save(quiet = false) {
   $('save').disabled = true;
   try {
-    const body = {};
-    for (const k of changed) if (k !== 'files') body[k] = profile[k];
-    const r = await api('profile', { method: 'PUT', body: JSON.stringify(body) });
-    profile = r.profile;
+    let moved = false;
+    if (projectDirty) {
+      moved = $('projTransport').value !== (state.project && state.project.transport);
+      await putProject({ name: $('projName').value, transport: $('projTransport').value, wa_number: $('projWa').value, sales_number: $('projSales').value, enabled: $('projEnabled').checked });
+      // Baris proyek sudah tersimpan: kalau profil gagal, yang dikirim ulang hanya profil.
+      projectDirty = false;
+    }
+    let r = {};
+    if (changed.size) {
+      const body = {};
+      for (const k of changed) if (k !== 'files') body[k] = profile[k];
+      r = await api('profile', { method: 'PUT', body: JSON.stringify(body) });
+      profile = r.profile;
+    }
     setDirty(false);
     renderAll();
     if (!quiet) toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.') +
-      (r.autoPdf ? ' ' + r.autoPdf + T(' produk baru otomatis dipasangi PDF.', ' new products were given a PDF automatically.') : ''));
+      (r.autoPdf ? ' ' + r.autoPdf + T(' produk baru otomatis dipasangi PDF.', ' new products were given a PDF automatically.') : '') +
+      (moved ? T(' Jalur WhatsApp diganti: bot menyala ulang di jalur baru.', ' WhatsApp channel changed: the bot restarts on the new channel.') : ''));
   } catch (e) {
     toast(e.message, true);
     setDirty(true);
@@ -2430,7 +2451,7 @@ async function save(quiet = false) {
 }
 $('save').addEventListener('click', () => void save());
 
-// Batalkan: muat ulang profil dari server, jadi semua isian kembali ke yang tersimpan.
+// Batalkan: muat ulang profil dan baris proyek dari server, jadi semua isian kembali ke yang tersimpan.
 $('discard').addEventListener('click', async () => {
   $('discard').disabled = true;
   try {
