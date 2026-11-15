@@ -115,11 +115,9 @@
       <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span></a>
       <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span><span class="badge" id="convBadge"></span></a>
       <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span data-en="Bot knowledge">Pengetahuan bot</span></div>
-      <a data-nav="identitas" class="sub"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg><span data-en="Identity">Identitas</span></a>
+      <a data-nav="behavior" class="sub"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="How the bot talks">Cara bot bicara</span></a>
       <a data-nav="produk" class="sub"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
-      <a data-nav="rekomendasi" class="sub"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="Recommendations">Rekomendasi</span></a>
       <a data-nav="brosur" class="sub"><svg class="i" aria-hidden="true"><use href="#i-file-text"/></svg><span data-en="Brochures">Brosur</span></a>
-      <a data-nav="lainnya" class="sub"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg><span data-en="Other">Lainnya</span></a>
       <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg><span data-en="Settings">Pengaturan</span></div>
       <a data-nav="pengaturan" class="sub"><svg class="i" aria-hidden="true"><use href="#i-toggle"/></svg><span data-en="General">Umum</span></a>
       <a data-nav="whatsapp" class="sub"><svg class="i" aria-hidden="true"><use href="#i-smartphone"/></svg><span>WhatsApp</span></a>
@@ -211,9 +209,13 @@
         </div>
       </section>
 
-      <!-- ================= Pengetahuan: Identitas ================= -->
-      <section data-page="identitas">
-        <div class="card">
+      <!-- ================= Pengetahuan: Cara bot bicara ================= -->
+      <!-- Satu halaman panjang. Di layar >= 1100 px daftar "Di halaman ini" tampil di kanan (app.js menandai
+           bagian yang sedang terlihat). Dua bagian terakhir dilipat; keadaan bukanya diingat per bagian. -->
+      <section data-page="behavior">
+        <div class="withtoc">
+        <div class="withtoc-main">
+        <div class="card" id="who">
           <div class="ch"><h2 data-en="Who answers">Siapa yang menjawab</h2></div>
           <div class="cb">
             <div class="row">
@@ -225,11 +227,8 @@
               <label class="f"><span data-en="How customers are addressed">Sapaan ke pelanggan</span><input type="text" data-key="honorific"><small data-en="E.g. “Bapak/Ibu” or “Kak”.">Mis. “Bapak/Ibu” atau “Kak”.</small></label>
             </div>
             <label class="f" style="margin:0"><span data-en="About the business">Tentang bisnis</span><textarea rows="3" data-key="about"></textarea><small data-en="One or two sentences: what the business is and what it sells.">Satu-dua kalimat: bisnis ini apa dan menjual apa.</small></label>
-          </div>
-        </div>
-        <div class="card">
-          <div class="ch"><h2>Logo</h2><p class="help" data-en="Shown on the project switcher at the top of this dashboard. JPG, PNG or WebP, up to 4 MB. Applied after you save.">Tampil di pemilih proyek di bagian atas dashboard ini. JPG, PNG, atau WebP, maksimal 4 MB. Berlaku setelah disimpan.</p></div>
-          <div class="cb">
+            <div class="sub">Logo</div>
+            <p class="help" style="margin-bottom:8px" data-en="Shown on the project switcher at the top of this dashboard. JPG, PNG or WebP, up to 4 MB. Applied after you save.">Tampil di pemilih proyek di bagian atas dashboard ini. JPG, PNG, atau WebP, maksimal 4 MB. Berlaku setelah disimpan.</p>
             <div class="logo-row">
               <div class="logo-box" id="logoBox"></div>
               <button class="btn ghost" type="button" id="logoPick"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload logo">Unggah logo</span></button>
@@ -237,7 +236,7 @@
             </div>
           </div>
         </div>
-        <div class="card">
+        <div class="card" id="opening">
           <div class="ch"><h2 data-en="Opening">Pembukaan</h2><p class="help" data-en="What the bot sends when someone messages for the first time, and the data it collects from every prospective customer.">Yang dikirim bot saat seseorang chat untuk pertama kali, dan data yang dikumpulkannya dari tiap calon pelanggan.</p></div>
           <div class="cb">
             <label class="f"><span data-en="Greeting">Salam pembuka</span><textarea rows="6" data-key="greeting"></textarea><small data-en="Sent once, on the first message. It should already ask for everything in “Data collected” below.">Dikirim sekali, pada pesan pertama. Sebaiknya sudah meminta semua isian di “Data yang dikumpulkan” di bawah.</small></label>
@@ -247,6 +246,47 @@
             <div class="scroll"><table class="grid" id="fields"></table></div>
           </div>
           <div class="cardfoot"><button class="btn ghost" id="addField" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Row">Baris</span></button><span data-en="“Key” = the column name in the system: lowercase, no spaces. Tick “Name” on the row that holds the person's name.">“Kunci” = nama kolom di sistem: huruf kecil tanpa spasi. Centang “Nama” pada baris yang berisi nama orangnya.</span></div>
+        </div>
+        <div class="card" id="questions-asked">
+          <div class="ch"><h2 data-en="Questions and recommendations">Pertanyaan dan rekomendasi</h2><p class="help" data-en="What the bot asks the customer, and how it picks a product.">Apa yang ditanyakan bot ke pelanggan, dan cara ia memilih produk.</p></div>
+          <div class="cb">
+            <div class="sub sub-first" data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</div>
+            <p class="help" style="margin-bottom:8px" data-en="Before recommending a product, the bot asks these questions: only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini: hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p>
+            <div class="scroll"><table class="grid" id="questionTable"></table></div>
+            <p class="cb-acts"><button class="btn ghost" id="addQuestion" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Question">Pertanyaan</span></button></p>
+            <div class="sub" data-en="How the bot analyses and recommends">Cara bot menganalisis dan menyarankan</div>
+            <p class="help" style="margin-bottom:8px" data-en="Write it the way you would teach a new employee: the formula, the reference numbers, and which product fits which situation.">Tulis seperti Anda mengajari karyawan baru: rumusnya, angka acuannya, dan produk mana untuk keadaan apa.</p>
+            <textarea rows="18" data-key="advice"></textarea>
+          </div>
+        </div>
+        <details class="fold" id="style" data-remember>
+          <summary><span data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</span></summary>
+          <div class="fold-body">
+            <p class="help" style="margin-bottom:12px" data-en="How you want the bot to write and behave, one rule per row. Say it the way you would brief a new admin: the tone you like, what to avoid, an example sentence, what to do right away without asking. Use “Try chat” to see the effect.">Cara Anda ingin bot menulis dan bersikap, satu aturan per baris. Tulis seperti memberi arahan ke admin baru: nada yang disukai, yang harus dihindari, contoh kalimat, hal yang langsung dikerjakan tanpa bertanya. Pakai “Coba chat” untuk melihat hasilnya.</p>
+            <div class="scroll"><table class="grid" id="rules"></table></div>
+            <p class="cb-acts fold-acts"><button class="btn ghost" id="addRule" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Rule">Aturan</span></button></p>
+          </div>
+        </details>
+        <details class="fold" id="handoff" data-remember>
+          <summary><span data-en="What a human must answer">Yang harus dijawab manusia</span></summary>
+          <div class="fold-body">
+            <p class="help" style="margin-bottom:12px" data-en="For these topics the bot says “our team will get back to you” and notifies sales.">Untuk topik-topik ini bot bilang “tim kami yang akan menginfokan” dan mengabari sales.</p>
+            <label class="f"><span data-en="Topics">Topik</span><input type="text" data-key="handoffTopics"></label>
+            <div class="row">
+              <label class="f"><span data-en="Label in the notification">Sebutan di notifikasi</span><input type="text" data-key="handoffLabel"></label>
+              <label class="check check-cell"><input type="checkbox" data-key="forbidPrices"><span class="ck"><span class="t" data-en="The bot may only quote prices written in the product list">Bot hanya boleh menyebut harga yang tertulis di daftar produk</span><small class="help" data-en="Replies with any other amount are not sent.">Balasan dengan nominal lain tidak dikirim.</small></span></label>
+            </div>
+          </div>
+        </details>
+        </div>
+        <div class="toc" id="behaviorToc" role="navigation" aria-labelledby="behaviorTocTitle">
+          <p class="toc-h" id="behaviorTocTitle" data-en="On this page">Di halaman ini</p>
+          <a href="#who" data-en="Who answers">Siapa yang menjawab</a>
+          <a href="#opening" data-en="Opening">Pembukaan</a>
+          <a href="#questions-asked" data-en="Questions and recommendations">Pertanyaan dan rekomendasi</a>
+          <a href="#style" data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</a>
+          <a href="#handoff" data-en="What a human must answer">Yang harus dijawab manusia</a>
+        </div>
         </div>
       </section>
 
@@ -266,18 +306,16 @@
             <p style="margin:0 0 12px"><button class="btn ghost" id="addSeries" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Group">Kelompok</span></button></p>
           </div>
         </details>
-      </section>
-
-      <!-- ================= Pengetahuan: Rekomendasi ================= -->
-      <section data-page="rekomendasi">
-        <div class="card">
-          <div class="ch"><h2 data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</h2><p class="help" data-en="Before recommending a product, the bot asks these questions: only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini: hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p></div>
-          <div class="cb"><div class="scroll"><table class="grid" id="questionTable"></table></div></div>
-          <div class="cardfoot"><button class="btn ghost" id="addQuestion" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Question">Pertanyaan</span></button></div>
+        <div class="card" id="questions">
+          <div class="ch"><h2 data-en="Unanswered questions">Pertanyaan yang belum terjawab</h2><p class="help" data-en="Each question the bot handed to staff, grouped when customers asked the same thing. “Add to knowledge” appends the question and your answer to “Other knowledge” below, so the bot can answer it from the next message.">Tiap pertanyaan yang dioper bot ke staf, dikelompokkan kalau pelanggan menanyakan hal yang sama. “Tambahkan ke pengetahuan” menambahkan pertanyaan dan jawaban Anda ke “Pengetahuan lain” di bawah, jadi bot bisa menjawabnya mulai pesan berikutnya.</p></div>
+          <div class="cb" id="questionList"></div>
         </div>
-        <div class="card">
-          <div class="ch"><h2 data-en="How the bot analyses and recommends">Cara bot menganalisis dan menyarankan</h2><p class="help" data-en="Write it the way you would teach a new employee: the formula, the reference numbers, and which product fits which situation.">Tulis seperti Anda mengajari karyawan baru: rumusnya, angka acuannya, dan produk mana untuk keadaan apa.</p></div>
-          <div class="cb"><textarea rows="18" data-key="advice"></textarea></div>
+        <div class="card" id="other">
+          <div class="ch"><h2 data-en="Other knowledge">Pengetahuan lain</h2><p class="help" data-en="Anything that is not a table: common questions, opening hours, how to order. Written in the bot's language.">Yang tidak berbentuk tabel: tanya-jawab umum, jam buka, cara pesan, dan sebagainya. Tulis apa adanya.</p></div>
+          <div class="cb">
+            <textarea rows="8" data-key="notes" placeholder="mis. Jam buka: Senin–Sabtu 08.00–17.00."></textarea>
+            <label class="check" style="margin:14px 0 0"><input type="checkbox" data-key="guardCodes"><span class="ck"><span class="t" data-en="Reject product codes that are not in this data">Tolak kode produk yang tidak ada di data ini</span><small class="help" data-en="Replies that mention a made-up product code are not sent.">Balasan yang menyebut kode produk karangan tidak dikirim.</small></span></label>
+          </div>
         </div>
       </section>
 
@@ -287,36 +325,6 @@
           <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. Up to 4 MB per file. Turn on <b>Read by bot</b> to let the bot answer from that PDF's contents.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. Maksimal 4 MB per berkas. Nyalakan <b>Dibaca bot</b> kalau bot boleh menjawab dari isi PDF itu.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="pdfs"></table></div></div>
           <div class="cardfoot"><button class="btn" id="pdfUpload" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload PDF">Unggah PDF</span></button><button class="btn ghost" id="pdfRematch" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Re-match all">Cocokkan ulang semua</span></button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read. Attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try chat” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca. Pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba chat”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
-        </div>
-      </section>
-
-      <!-- ================= Pengetahuan: Lainnya ================= -->
-      <section data-page="lainnya">
-        <div class="card" id="questions">
-          <div class="ch"><h2 data-en="Unanswered questions">Pertanyaan yang belum terjawab</h2><p class="help" data-en="Each question the bot handed to staff, grouped when customers asked the same thing. “Add to knowledge” appends the question and your answer to “Other knowledge” below, so the bot can answer it from the next message.">Tiap pertanyaan yang dioper bot ke staf, dikelompokkan kalau pelanggan menanyakan hal yang sama. “Tambahkan ke pengetahuan” menambahkan pertanyaan dan jawaban Anda ke “Pengetahuan lain” di bawah, jadi bot bisa menjawabnya mulai pesan berikutnya.</p></div>
-          <div class="cb" id="questionList"></div>
-        </div>
-        <div class="card">
-          <div class="ch"><h2 data-en="Other knowledge">Pengetahuan lain</h2><p class="help" data-en="Anything that is not a table: common questions, opening hours, how to order. Written in the bot's language.">Yang tidak berbentuk tabel: tanya-jawab umum, jam buka, cara pesan, dan sebagainya. Tulis apa adanya.</p></div>
-          <div class="cb">
-            <textarea rows="8" data-key="notes" placeholder="mis. Jam buka: Senin–Sabtu 08.00–17.00."></textarea>
-            <label class="check" style="margin:14px 0 0"><input type="checkbox" data-key="guardCodes"><span class="ck"><span class="t" data-en="Reject product codes that are not in this data">Tolak kode produk yang tidak ada di data ini</span><small class="help" data-en="Replies that mention a made-up product code are not sent.">Balasan yang menyebut kode produk karangan tidak dikirim.</small></span></label>
-          </div>
-        </div>
-        <div class="card">
-          <div class="ch"><h2 data-en="What a human must answer">Yang harus dijawab manusia</h2><p class="help" data-en="For these topics the bot says “our team will get back to you” and notifies sales.">Untuk topik-topik ini bot bilang “tim kami yang akan menginfokan” dan mengabari sales.</p></div>
-          <div class="cb">
-            <div class="row">
-              <label class="f"><span data-en="Topics">Topik</span><input type="text" data-key="handoffTopics"></label>
-              <label class="f"><span data-en="Label in the notification">Sebutan di notifikasi</span><input type="text" data-key="handoffLabel"></label>
-            </div>
-            <label class="check" style="margin:0"><input type="checkbox" data-key="forbidPrices"><span class="ck"><span class="t" data-en="The bot may only quote prices written in the product list">Bot hanya boleh menyebut harga yang tertulis di daftar produk</span><small class="help" data-en="Replies with any other amount are not sent.">Balasan dengan nominal lain tidak dikirim.</small></span></label>
-          </div>
-        </div>
-        <div class="card">
-          <div class="ch"><h2 data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</h2><p class="help" data-en="How you want the bot to write and behave, one rule per row. Say it the way you would brief a new admin: the tone you like, what to avoid, an example sentence, what to do right away without asking. Use “Try chat” to see the effect.">Cara Anda ingin bot menulis dan bersikap, satu aturan per baris. Tulis seperti memberi arahan ke admin baru: nada yang disukai, yang harus dihindari, contoh kalimat, hal yang langsung dikerjakan tanpa bertanya. Pakai “Coba chat” untuk melihat hasilnya.</p></div>
-          <div class="cb"><div class="scroll"><table class="grid" id="rules"></table></div></div>
-          <div class="cardfoot"><button class="btn ghost" id="addRule" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Rule">Aturan</span></button></div>
         </div>
       </section>
 

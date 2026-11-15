@@ -120,13 +120,14 @@ Satu alamat per menu, dengan id proyek di depan (semuanya dilayani `page.html` y
 - `https://alice.lukicenturi.com/` → proyek yang terakhir dibuka (cookie `last_project`), atau
   `/login` kalau belum masuk.
 - `/gfan` (Beranda), `/gfan/conversations`, `/gfan/conversations/+62812…`,
-  `/gfan/knowledge/{identity,products,recommendations,brochures,other}`,
+  `/gfan/knowledge/{behavior,products,brochures}` (`/gfan/knowledge` → `knowledge/behavior`),
   `/gfan/settings`, `/gfan/settings/{whatsapp,notifications,advanced}`.
 - `/assets/app.js`, `/assets/app.css`, `/assets/qrcode.js`; data lewat `/api/login`,
   `/api/projects`, `/api/<proyek>/…`.
 - Alamat lama `/admin` dan `/admin/*` dialihkan (301) ke `/`. Alamat lama berbahasa Indonesia
-  (`/gfan/percakapan…`, `/gfan/pengetahuan/…`, `/gfan/pengaturan/…`) dialihkan (301) ke alamat
-  barunya, dengan query yang sama.
+  (`/gfan/percakapan…`, `/gfan/pengaturan/…`) dialihkan (301) ke alamat barunya, dengan query
+  yang sama. Halaman Pengetahuan lama (`knowledge/identity`, `knowledge/recommendations`,
+  `knowledge/other`, `/gfan/pengetahuan/…`) sengaja tidak dialihkan: alamatnya 404.
 
 Cookie sesi `admin_session` berlaku untuk `Path=/`. Caddy tetap meneruskan `/webhook*` dan
 `/health` ke port 3000 (jalur Cloud API) dan sisanya ke dashboard; karena itu `health` dan

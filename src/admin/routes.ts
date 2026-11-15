@@ -8,17 +8,17 @@
  */
 export const ROUTES: Readonly<Record<string, string>> = {
   beranda: '', percakapan: 'conversations',
-  identitas: 'knowledge/identity', produk: 'knowledge/products', rekomendasi: 'knowledge/recommendations',
-  brosur: 'knowledge/brochures', lainnya: 'knowledge/other',
+  behavior: 'knowledge/behavior', produk: 'knowledge/products', brosur: 'knowledge/brochures',
   pengaturan: 'settings', whatsapp: 'settings/whatsapp', notifikasi: 'settings/notifications', lanjutan: 'settings/advanced',
 };
 
-/** Alamat lama (bahasa Indonesia) -> alamat baru. Server mengalihkannya dengan 301. */
+/**
+ * Alamat lama (bahasa Indonesia) -> alamat baru. Server mengalihkannya dengan 301.
+ * Halaman Pengetahuan lama (identity, recommendations, other, pengetahuan/*) sengaja
+ * tidak dialihkan: alamatnya 404 seperti alamat lain yang tidak ada.
+ */
 export const OLD_ROUTES: Readonly<Record<string, string>> = {
   percakapan: 'conversations', pengetahuan: 'knowledge', pengaturan: 'settings',
-  'pengetahuan/identitas': 'knowledge/identity', 'pengetahuan/produk': 'knowledge/products',
-  'pengetahuan/rekomendasi': 'knowledge/recommendations', 'pengetahuan/brosur': 'knowledge/brochures',
-  'pengetahuan/lainnya': 'knowledge/other',
   'pengaturan/whatsapp': 'settings/whatsapp', 'pengaturan/notifikasi': 'settings/notifications',
   'pengaturan/lanjutan': 'settings/advanced',
 };
