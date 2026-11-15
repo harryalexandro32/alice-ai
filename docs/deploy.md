@@ -23,7 +23,7 @@ pemilik ──▶ Vercel  https://alice.lukicenturi.com  (hanya meneruskan, tanp
   sendiri; keadaan bot (WhatsApp, QR, kode pairing, jatah LLM) dibaca dari tabel `project_status`
   yang ditulis tiap bot tiap 30 detik.
 - **`.env`** hanya berisi yang dipakai bersama: `DATABASE_URL`, `LLM_*`, `ADMIN_PASSWORD`,
-  `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_ORIGINS`, `DATA_DIR`, `BOT_TZ`, Telegram/SMTP/STT, `LOG_*`.
+  `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_ORIGINS`, `DATA_DIR`, `BOT_TZ`, SMTP/STT, `LOG_*`.
   Jalur WhatsApp, nomor bot, nomor sales, mode uji, dan follow-up diatur per proyek di dashboard.
 - **Vercel** hanya memberi alamat `alice.lukicenturi.com`: `vercel.json` meneruskan semua
   permintaan ke server. Karena itu `.env` berisi `ADMIN_ORIGINS=https://alice.lukicenturi.com`, dan
@@ -61,7 +61,7 @@ Lalu:
 
 1. DNS: `alice-api` → A record ke IP server (`vercel dns add lukicenturi.com alice-api A <IP>`).
    Caddy mengurus sertifikat HTTPS sendiri begitu DNS-nya mengarah.
-2. Isi `LLM_API_KEY` (dan Telegram/SMTP/STT kalau dipakai) di `/opt/alice-ai/.env`, lalu
+2. Isi `LLM_API_KEY` (dan SMTP/STT kalau dipakai) di `/opt/alice-ai/.env`, lalu
    `systemctl restart alice-admin 'alice-bot@*'`.
 3. Buka `https://alice.lukicenturi.com/gfan/settings/whatsapp` dan tautkan nomornya (lihat di bawah).
 

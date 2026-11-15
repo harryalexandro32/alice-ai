@@ -143,17 +143,22 @@
 
       <!-- ================= Beranda ================= -->
       <section data-page="beranda">
+        <!-- Saat halaman dibuka, app.js langsung menggambar kerangka (skeleton) seukuran isi akhirnya di tiap
+             wadah di bawah, lalu menukarnya sekali saja setelah semua data Beranda dimuat. -->
         <div class="tiles four" id="tiles"></div>
-        <!-- Grafik digambar app.js (columnChart / stackedBar100) setelah angkanya dimuat. -->
+        <!-- Grafik digambar app.js (columnChart). -->
         <div class="charts"><div id="chartConv"></div><div id="chartMsgs"></div></div>
-        <div id="chartStages"></div>
+        <div class="card" id="chartStages">
+          <div class="ch"><h2 data-en="Lead stages">Tahap lead</h2><p class="help" data-en="All contacts by stage. Click a stage to open its list.">Semua kontak menurut tahapnya. Klik satu tahap untuk membuka daftarnya.</p></div>
+          <div class="cb"><div class="stagechips" id="stageChips"></div></div>
+        </div>
         <div class="card">
           <div class="ch"><h2 data-en="Needs attention">Perlu perhatian</h2><p class="help" data-en="Customers waiting for a person, and problems with the bot in the last 24 hours. Open a conversation to reply from here.">Pelanggan yang menunggu orang, dan masalah bot dalam 24 jam terakhir. Buka percakapannya untuk membalas dari sini.</p></div>
-          <div class="cb"><p class="help" id="attentionHelp" hidden></p><div class="scroll"><table class="list" id="attention"></table></div></div>
+          <div class="cb"><div class="hold-rows attention-body"><p class="help" id="attentionHelp" hidden></p><div class="scroll"><table class="list" id="attention"></table></div></div></div>
         </div>
         <div class="card">
           <div class="ch"><h2 data-en="Unanswered questions">Pertanyaan yang belum terjawab</h2><p class="help" data-en="Questions the bot handed to your staff because it did not know the answer. Answer one once and the bot can answer it next time.">Pertanyaan yang dioper bot ke staf karena ia tidak tahu jawabannya. Jawab sekali, lain kali bot bisa menjawabnya sendiri.</p></div>
-          <div class="cb" id="homeQuestions"></div>
+          <div class="cb"><div class="hold-qrows" id="homeQuestions"></div></div>
           <div class="cardfoot"><a class="link" id="allQuestions" data-en="See all →">Lihat semua →</a></div>
         </div>
       </section>
@@ -169,7 +174,7 @@
             </div>
             <div class="filters" id="leadFilters" role="group" aria-label="Saring"></div>
             <p class="help" id="leadCount" style="margin:8px 0 10px"></p>
-            <div class="scroll"><table class="list leads" id="leads"></table></div>
+            <div class="scroll hold-rows"><table class="list leads" id="leads"></table></div>
           </div>
         </div>
       </section>
@@ -415,7 +420,7 @@
       <!-- ================= Pengaturan: Notifikasi ================= -->
       <section data-page="notifikasi">
         <div class="card">
-          <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot contacts, the owner and staff, and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email, Telegram chat id. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot, yaitu pemilik dan staf, dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email, id chat Telegram. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
+          <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot contacts, the owner and staff, and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot, yaitu pemilik dan staf, dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
           <div class="cb">
             <div class="scroll"><table class="grid" id="recipients"></table></div>
             <div class="tblfoot"><button class="btn ghost" id="addRecipient" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Person">Orang</span></button></div>
@@ -425,18 +430,11 @@
           <div class="cardfoot" id="channels"></div>
         </div>
         <details class="fold">
-          <summary><span data-en="How to set up Telegram and email">Cara menyiapkan Telegram dan email</span></summary>
+          <summary><span data-en="How to set up WhatsApp and email">Cara menyiapkan WhatsApp dan email</span></summary>
           <div class="fold-body guide" style="padding-bottom:12px">
             <div data-only="id">
-              <b>WhatsApp</b>: tidak perlu disiapkan. Isi nomornya di tabel (mis. 0812…); tulis <code>self</code> untuk nomor bot sendiri. Kabar soal WhatsApp-nya sendiri (terputus, dijeda) tidak bisa lewat WhatsApp, jadi pemilik sebaiknya juga punya Telegram atau email.
-              <br><br><b>Telegram</b>
-              <ol>
-                <li>Di Telegram, buka <b>@BotFather</b>, kirim <code>/newbot</code>, ikuti langkahnya. Anda mendapat <b>token</b> seperti <code>123456:ABC…</code>.</li>
-                <li>Di mesin bot, buka berkas <code>.env</code>, isi <code>TELEGRAM_BOT_TOKEN=</code> dengan token itu, lalu nyalakan ulang bot.</li>
-                <li>Tiap penerima membuka bot baru itu di Telegram dan menekan <b>Start</b> (bot tidak bisa mengirimi orang yang belum pernah memulai).</li>
-                <li>Untuk tahu <b>id chat</b>-nya, penerima membuka <b>@userinfobot</b> dan menekan Start; angka “Id” itulah yang diisi di kolom Telegram. Untuk grup: tambahkan bot ke grup, id grup berupa angka negatif.</li>
-              </ol>
-              <b>Email (contoh Gmail)</b>
+              <b>WhatsApp</b>: tidak perlu disiapkan. Isi nomornya di tabel (mis. 0812…); tulis <code>self</code> untuk nomor bot sendiri. Kabar soal WhatsApp-nya sendiri (terputus, dijeda) tidak bisa lewat WhatsApp, jadi pemilik sebaiknya juga mengisi alamat email.
+              <br><br><b>Email (contoh Gmail)</b>
               <ol>
                 <li>Pakai satu akun Gmail sebagai pengirim. Nyalakan <b>Verifikasi 2 Langkah</b> di akun itu (myaccount.google.com → Keamanan).</li>
                 <li>Buka <b>myaccount.google.com/apppasswords</b>, buat “sandi aplikasi”. Anda mendapat 16 huruf.</li>
@@ -446,15 +444,8 @@
               Baris di bawah tabel menunjukkan jalur mana yang sudah siap menurut bot.
             </div>
             <div data-only="en">
-              <b>WhatsApp</b>: nothing to set up. Enter the number in the table (e.g. 0812…); write <code>self</code> for the bot's own number. News about WhatsApp itself (disconnected, paused) cannot travel over WhatsApp, so the owner should also have Telegram or email.
-              <br><br><b>Telegram</b>
-              <ol>
-                <li>In Telegram open <b>@BotFather</b>, send <code>/newbot</code> and follow the steps. You get a <b>token</b> like <code>123456:ABC…</code>.</li>
-                <li>On the bot's machine open the <code>.env</code> file, set <code>TELEGRAM_BOT_TOKEN=</code> to that token, then restart the bot.</li>
-                <li>Each recipient opens the new bot in Telegram and presses <b>Start</b> (a bot cannot message someone who never started it).</li>
-                <li>To find the <b>chat id</b>, the recipient opens <b>@userinfobot</b> and presses Start; the “Id” number goes in the Telegram column. For a group: add the bot to the group; the group id is a negative number.</li>
-              </ol>
-              <b>Email (Gmail example)</b>
+              <b>WhatsApp</b>: nothing to set up. Enter the number in the table (e.g. 0812…); write <code>self</code> for the bot's own number. News about WhatsApp itself (disconnected, paused) cannot travel over WhatsApp, so the owner should also fill in an email address.
+              <br><br><b>Email (Gmail example)</b>
               <ol>
                 <li>Use one Gmail account as the sender. Turn on <b>2-Step Verification</b> for it (myaccount.google.com → Security).</li>
                 <li>Open <b>myaccount.google.com/apppasswords</b> and create an “app password”. You get 16 letters.</li>

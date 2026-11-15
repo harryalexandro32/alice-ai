@@ -9,8 +9,8 @@
  *
  * Tiap warning dicatat (tampil di dashboard: Beranda dan Pengaturan > Lanjutan)
  * dan dikirim ke penerima yang diatur di dashboard (lihat notify.ts): lewat
- * WhatsApp selama WhatsApp-nya masih jalan, plus Telegram dan email — dua
- * jalur yang tetap sampai saat WhatsApp-nya sendiri yang bermasalah.
+ * WhatsApp selama WhatsApp-nya masih jalan, plus email: jalur yang tetap
+ * sampai saat WhatsApp-nya sendiri yang bermasalah.
  */
 
 import { biz } from './business';

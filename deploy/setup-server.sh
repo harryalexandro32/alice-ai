@@ -132,7 +132,7 @@ if [ -n "$NEW_ADMIN_PW" ]; then
   echo "Kata sandi dashboard (ADMIN_PASSWORD di $APP_DIR/.env): $NEW_ADMIN_PW"
 fi
 echo
-echo "Berikutnya: isi LLM_API_KEY (dan Telegram/SMTP kalau perlu) di $APP_DIR/.env, lalu:"
+echo "Berikutnya: isi LLM_API_KEY (dan SMTP kalau perlu) di $APP_DIR/.env, lalu:"
 echo "  systemctl restart alice-admin 'alice-bot@*'"
 echo "  journalctl -u alice-admin -u 'alice-bot@*' -f"
 echo "Buka https://$DOMAIN/gfan/settings/whatsapp (atau https://alice.lukicenturi.com/gfan/settings/whatsapp) untuk menautkan nomor."

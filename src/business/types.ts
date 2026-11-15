@@ -45,8 +45,6 @@ export interface Recipient {
   /** Nomor WhatsApp "+62…", "self" (nomor bot sendiri), atau ''. */
   phone: string;
   email: string;
-  /** Id chat Telegram, atau ''. */
-  telegram: string;
 }
 
 /** Satu baris daftar produk. Yang rinci cukup ada di PDF-nya. */

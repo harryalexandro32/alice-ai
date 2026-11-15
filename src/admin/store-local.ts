@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { mediaDir, saveBiz } from '../business';
 import { cfg, effectiveSettings } from '../config';
 import { sttEnabled } from '../llm/stt';
-import { emailReady, telegramReady, waTargets } from '../notify';
+import { emailReady, waTargets } from '../notify';
 import { llmEnabled } from '../llm/provider';
 import { now } from '../clock';
 import { holdFrom } from '../flow';
@@ -59,7 +59,7 @@ export async function botStatus(): Promise<BotStatus> {
     sales: waTargets('lead').map((p) => (p === 'self' ? 'nomor bot sendiri' : p)).join(', ') || null,
     onlyNumbers: cfg.onlyNumbers.length,
     effective: effectiveSettings() as unknown as Record<string, number | boolean | string[]>,
-    channels: { email: emailReady(), telegram: telegramReady(), stt: sttEnabled() },
+    channels: { email: emailReady(), stt: sttEnabled() },
     ...(st?.guard ? { guard: st.guard } : {}),
     ...(st ? { wa: st.state } : {}),
     reportedAt: st?.last_seen_at ?? null,

@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { cfg, effectiveSettings } from './config';
 import { sttEnabled } from './llm/stt';
 import { llmUsageToday } from './llm/provider';
-import { emailReady, telegramReady } from './notify';
+import { emailReady } from './notify';
 import { currentProject } from './project';
 import { getProject, setPairingRequest, updateProject, writeStatus, type StatusPatch } from './store';
 import { guardSummary } from './transport/sendguard';
@@ -61,7 +61,7 @@ function snapshot(): StatusPatch {
     guard: cfg.transport === 'baileys' ? guardSummary() : null,
     transport: cfg.transport,
     effective: effectiveSettings() as unknown as Record<string, unknown>,
-    channels: { email: emailReady(), telegram: telegramReady(), stt: sttEnabled() },
+    channels: { email: emailReady(), stt: sttEnabled() },
     version: version(),
     pid: process.pid,
     started_at: startedAt,
