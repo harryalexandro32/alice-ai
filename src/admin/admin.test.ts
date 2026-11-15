@@ -542,8 +542,8 @@ const PNG = Buffer.from(
       assert.deepEqual([r0.status, r0.headers.get('location')], [302, '/login'], 'tanpa sesi: ke halaman masuk');
       const r1 = await page('/');
       assert.deepEqual([r1.status, r1.headers.get('location')], [302, '/gfan'], 'proyek aktif yang pertama');
-      for (const path of ['/gfan', '/gfan/conversations', '/gfan/conversations/%2B6281211110001', '/gfan/knowledge/identity', '/gfan/knowledge/products',
-        '/gfan/knowledge/recommendations', '/gfan/knowledge/brochures', '/gfan/knowledge/other', '/gfan/settings', '/gfan/settings/whatsapp',
+      for (const path of ['/gfan', '/gfan/conversations', '/gfan/conversations/%2B6281211110001', '/gfan/knowledge/behavior', '/gfan/knowledge/products',
+        '/gfan/knowledge/brochures', '/gfan/settings', '/gfan/settings/whatsapp',
         '/gfan/settings/notifications', '/gfan/settings/advanced', '/gfan/conversations/']) {
         const r = await page(path, false);
         assert.equal(r.status, 200, path);
@@ -557,7 +557,7 @@ const PNG = Buffer.from(
       const r3 = await page('/', false, { cookie: `${cookie}; last_project=tidak-ada` });
       assert.equal(r3.headers.get('location'), '/gfan');
       const kn = await page('/gfan/knowledge');
-      assert.deepEqual([kn.status, kn.headers.get('location')], [302, '/gfan/knowledge/identity']);
+      assert.deepEqual([kn.status, kn.headers.get('location')], [302, '/gfan/knowledge/behavior']);
       // Alamat lama berbahasa Indonesia: 301 ke alamat baru, sisa alamat dan query ikut.
       for (const [old, now] of [
         ['/gfan/percakapan', '/gfan/conversations'],
@@ -566,11 +566,6 @@ const PNG = Buffer.from(
         ['/gfan/percakapan/%2B6281211110001', '/gfan/conversations/%2B6281211110001'],
         ['/gfan/percakapan/lid%3A1234567890', '/gfan/conversations/lid%3A1234567890'],
         ['/gfan/pengetahuan', '/gfan/knowledge'],
-        ['/gfan/pengetahuan/identitas', '/gfan/knowledge/identity'],
-        ['/gfan/pengetahuan/produk', '/gfan/knowledge/products'],
-        ['/gfan/pengetahuan/rekomendasi', '/gfan/knowledge/recommendations'],
-        ['/gfan/pengetahuan/brosur', '/gfan/knowledge/brochures'],
-        ['/gfan/pengetahuan/lainnya', '/gfan/knowledge/other'],
         ['/gfan/pengaturan', '/gfan/settings'],
         ['/gfan/pengaturan/whatsapp', '/gfan/settings/whatsapp'],
         ['/gfan/pengaturan/notifikasi', '/gfan/settings/notifications'],
@@ -579,6 +574,13 @@ const PNG = Buffer.from(
       ] as const) {
         const r = await page(old, false);
         assert.deepEqual([r.status, r.headers.get('location')], [301, now], `alamat lama ${old}`);
+      }
+      // Halaman Pengetahuan yang dihapus (dan alamat lama berbahasa Indonesia-nya) sengaja tidak dialihkan.
+      for (const path of ['/gfan/knowledge/identity', '/gfan/knowledge/recommendations', '/gfan/knowledge/other',
+        '/gfan/pengetahuan/identitas', '/gfan/pengetahuan/produk', '/gfan/pengetahuan/rekomendasi', '/gfan/pengetahuan/brosur',
+        '/gfan/pengetahuan/lainnya']) {
+        const r = await page(path);
+        assert.deepEqual([r.status, r.headers.get('location')], [404, null], `halaman lama ${path}`);
       }
       for (const path of ['/gfan/entah', '/gfan/knowledge/entah', '/gfan/conversations/bukan-nomor', '/tidak-ada', '/tidak-ada/conversations',
         '/gfan/pengetahuan/entah', '/gfan/percakapan/bukan-nomor', '/tidak-ada/percakapan', '/gfan/pengaturan/umum',
@@ -620,8 +622,27 @@ const PNG = Buffer.from(
         };
         assert.deepEqual(js.ROUTES, ROUTES, 'ROUTES di app.js sama dengan routes.ts');
         assert.deepEqual(js.OLD_ROUTES, OLD_ROUTES, 'OLD_ROUTES di app.js sama dengan routes.ts');
-        for (const rest of ['percakapan/%2B628121', 'pengaturan/lanjutan', 'pengetahuan', 'pengetahuan/entah', 'constructor']) {
+        for (const rest of ['percakapan/%2B628121', 'pengaturan/lanjutan', 'pengetahuan', 'pengetahuan/entah', 'pengetahuan/produk', 'constructor']) {
           assert.equal(js.renamedPath(rest), renamedPath(rest), rest);
+        }
+      }
+      // Tiap halaman di ROUTES punya satu bagian dan satu tautan menu di page.html; halaman yang dihapus hilang.
+      {
+        const html = readFileSync(join(__dirname, 'page.html'), 'utf8');
+        const all = (re: RegExp) => [...html.matchAll(re)].map((m) => m[1]);
+        const pages = all(/<section data-page="([^"]+)"/g);
+        const navs = all(/<a data-nav="([^"]+)"/g);
+        for (const pg of Object.keys(ROUTES)) {
+          assert.equal(pages.filter((x) => x === pg).length, 1, `bagian data-page="${pg}"`);
+          assert.equal(navs.filter((x) => x === pg).length, 1, `menu data-nav="${pg}"`);
+        }
+        for (const pg of ['identitas', 'rekomendasi', 'lainnya']) {
+          assert.ok(!pages.includes(pg) && !navs.includes(pg), `halaman ${pg} sudah dihapus`);
+        }
+        // Isian yang dipindah tetap terikat ke kunci profil yang sama (penyimpanan tidak berubah).
+        for (const key of ['brand', 'alias', 'persona', 'honorific', 'about', 'greeting', 'greetingKnown', 'advice', 'notes',
+          'guardCodes', 'handoffTopics', 'handoffLabel', 'forbidPrices']) {
+          assert.equal(all(/data-key="([^"]+)"/g).filter((x) => x === key).length, 1, `data-key="${key}"`);
         }
       }
       // Teks dashboard tanpa tanda pisah panjang (em dash): pakai koma, titik dua, atau titik.

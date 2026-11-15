@@ -122,16 +122,12 @@ let known = {};
 /** Halaman -> alamat di bawah /<proyek>/. */
 const ROUTES = {
   beranda: '', percakapan: 'conversations',
-  identitas: 'knowledge/identity', produk: 'knowledge/products', rekomendasi: 'knowledge/recommendations',
-  brosur: 'knowledge/brochures', lainnya: 'knowledge/other',
+  behavior: 'knowledge/behavior', produk: 'knowledge/products', brosur: 'knowledge/brochures',
   pengaturan: 'settings', whatsapp: 'settings/whatsapp', notifikasi: 'settings/notifications', lanjutan: 'settings/advanced',
 };
 /** Alamat lama (bahasa Indonesia) -> alamat baru. */
 const OLD_ROUTES = {
   percakapan: 'conversations', pengetahuan: 'knowledge', pengaturan: 'settings',
-  'pengetahuan/identitas': 'knowledge/identity', 'pengetahuan/produk': 'knowledge/products',
-  'pengetahuan/rekomendasi': 'knowledge/recommendations', 'pengetahuan/brosur': 'knowledge/brochures',
-  'pengetahuan/lainnya': 'knowledge/other',
   'pengaturan/whatsapp': 'settings/whatsapp', 'pengaturan/notifikasi': 'settings/notifications',
   'pengaturan/lanjutan': 'settings/advanced',
 };
@@ -142,7 +138,7 @@ function renamedPath(rest) {
   return m ? 'conversations/' + m[1] : null;
 }
 /** Halaman Pengetahuan: di sini tombol "Coba chat" tersedia. */
-const KNOWLEDGE = ['identitas', 'produk', 'rekomendasi', 'brosur', 'lainnya'];
+const KNOWLEDGE = ['behavior', 'produk', 'brosur'];
 
 const pathOf = (pg, pid = project) => '/' + pid + (ROUTES[pg] ? '/' + ROUTES[pg] : '');
 const convPath = (phone, pid = project) => '/' + pid + '/conversations/' + encodeURIComponent(phone);
@@ -156,7 +152,7 @@ function parseRoute(pathname) {
   const rest = parts.slice(1).join('/');
   if (!rest) return { project: pid, page: 'beranda' };
   for (const [pg, p] of Object.entries(ROUTES)) if (p && p === rest) return { project: pid, page: pg };
-  if (rest === 'knowledge') return { project: pid, page: 'identitas', redirect: true };
+  if (rest === 'knowledge') return { project: pid, page: 'behavior', redirect: true };
   // Alamat lama berbahasa Indonesia (mis. tautan yang tersimpan): baca alamat barunya.
   const moved = renamedPath(rest);
   if (moved !== null) return { ...parseRoute('/' + pid + '/' + moved), redirect: true };
@@ -171,11 +167,9 @@ const PAGES = {
   beranda: () => ['', T('Beranda', 'Home'), T('Ringkasan 7 hari terakhir, pelanggan yang menunggu orang, dan pertanyaan yang belum bisa dijawab bot.', 'The last 7 days at a glance, customers waiting for a person, and questions the bot could not answer.')],
   percakapan: () => ['', T('Percakapan', 'Conversations'), T('Semua calon pelanggan yang chat dengan bot. Klik satu baris untuk membuka percakapannya dan membalas dari sini.', 'Every prospective customer who chatted with the bot. Click a row to open the conversation and reply from here.')],
   chat: () => [T('Percakapan', 'Conversations'), T('Percakapan', 'Conversation'), ''],
-  identitas: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Identitas', 'Identity'), T('Siapa yang membalas chat, logonya, dan pembukaannya. Perubahan berlaku pada pesan berikutnya setelah disimpan.', 'Who replies to chats, the logo, and the opening. Changes apply to the next message after you save.')],
-  produk: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Produk', 'Products'), T('Satu-satunya sumber jawaban bot. Yang tidak tertulis di sini tidak akan dijawabnya.', 'The bot\'s only source of answers. Anything not written here, it will not answer.')],
-  rekomendasi: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Rekomendasi', 'Recommendations'), T('Apa yang ditanyakan bot ke pelanggan, dan cara ia memilih produk.', 'What the bot asks the customer, and how it picks a product.')],
+  behavior: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Cara bot bicara', 'How the bot talks'), T('Siapa yang menjawab, pembukaan, pertanyaan dan rekomendasi, gaya, dan yang harus dijawab manusia. Perubahan berlaku pada pesan berikutnya setelah disimpan.', 'Who answers, the opening, questions and recommendations, the style, and what a human must answer. Changes apply to the next message after you save.')],
+  produk: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Produk', 'Products'), T('Daftar produk, pengetahuan lain, dan pertanyaan yang belum terjawab. Yang tidak tertulis di sini tidak akan dijawab bot.', 'The product list, other knowledge, and unanswered questions. Anything not written here, the bot will not answer.')],
   brosur: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Brosur', 'Brochures'), T('Brosur dan katalog PDF yang bisa dikirim bot ke pelanggan.', 'PDF brochures and catalogues the bot can send to customers.')],
-  lainnya: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Lainnya', 'Other'), T('Pertanyaan yang belum terjawab, pengetahuan lain, topik yang harus dijawab manusia, dan gaya balasan.', 'Unanswered questions, other knowledge, topics a human must answer, and the reply style.')],
   pengaturan: () => [T('Pengaturan', 'Settings'), T('Umum', 'General'), T('Proyek, saat admin ikut membalas, dan follow-up.', 'Project, when a human admin steps in, and follow-up.')],
   whatsapp: () => [T('Pengaturan', 'Settings'), 'WhatsApp', T('Tautkan nomor bot, lihat keadaan bot, dan pengaman nomornya.', 'Link the bot\'s number, see the bot\'s status and the number safeguard.')],
   notifikasi: () => [T('Pengaturan', 'Settings'), T('Notifikasi', 'Notifications'), T('Siapa yang dikabari bot, dan kabar mana ke siapa.', 'Who the bot notifies, and which news goes to whom.')],
@@ -1858,11 +1852,11 @@ function renderHome() {
   $('homeQuestions').replaceChildren(...(loading ? skeleton('qrow', 3)
     : errors.handoffs ? [errorNote(errors.handoffs)]
     : qs.length ? qs.map((g) => el('div', { className: 'qrow' },
-      el('a', { className: 'q link', href: pathOf('lainnya') + '#questions', textContent: g.question, title: g.question }),
+      el('a', { className: 'q link', href: pathOf('produk') + '#questions', textContent: g.question, title: g.question }),
       el('small', { textContent: g.count + '× · ' + when(g.last_at) })))
     : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang dioper ke staf.', 'No questions handed to staff yet.') })]));
   $('allQuestions').textContent = !loading && (handoffData || []).length > 5
-    ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan > Lainnya →', 'Open in Knowledge > Other →');
+    ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan bot > Produk →', 'Open in Bot knowledge > Products →');
 }
 
 /** Isi kartu "Perlu perhatian" dari daftar pelanggan dan warning bot. */
@@ -2349,6 +2343,89 @@ $('newProjectForm').addEventListener('submit', async (e) => {
   } catch (err) { $('npErr').textContent = err.message; }
 });
 
+// ---------- lipatan yang diingat, daftar "Di halaman ini" ----------
+/**
+ * Lipatan bertanda data-remember (mis. Gaya & aturan balasan): tertutup sampai pernah dibuka.
+ * Keadaan buka/tutupnya diingat per bagian di peramban ini.
+ */
+function rememberFolds() {
+  for (const d of document.querySelectorAll('details[data-remember][id]')) {
+    const key = 'fold:' + d.id;
+    try { if (localStorage.getItem(key) === '1') d.open = true; } catch { /* penyimpanan diblokir: tetap tertutup */ }
+    d.addEventListener('toggle', () => {
+      try { localStorage.setItem(key, d.open ? '1' : '0'); } catch { /* berlaku untuk kunjungan ini saja */ }
+    });
+  }
+}
+
+/**
+ * Daftar "Di halaman ini" di kanan halaman Cara bot bicara (hanya tampil di layar >= 1100 px).
+ * Bagian yang ditandai = bagian pertama yang terlihat di bawah kepala tetap (IntersectionObserver);
+ * di ujung bawah halaman, bagian terakhir.
+ */
+const tocLinks = () => [...$('behaviorToc').querySelectorAll('a[href^="#"]')];
+const tocTargets = () => tocLinks().map((a) => document.getElementById(a.hash.slice(1))).filter(Boolean);
+/** Bagian yang sedang memotong pita baca (dari bawah kepala sampai 45% tinggi layar). */
+const tocSeen = new Map();
+let tocObserver = null;
+/** Timer selagi hasil klik digulung: selama ini tanda tidak diubah oleh guliran. */
+let tocHold = 0;
+
+function markToc(id) {
+  for (const a of tocLinks()) {
+    const on = a.hash === '#' + id;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current');
+  }
+}
+
+function updateToc() {
+  if (page !== 'behavior' || tocHold) return;
+  const targets = tocTargets();
+  const root = document.documentElement;
+  const atBottom = window.innerHeight + window.scrollY >= root.scrollHeight - 4;
+  const at = atBottom ? targets[targets.length - 1] : targets.find((t) => tocSeen.get(t.id));
+  if (at) markToc(at.id);
+}
+
+/** Pasang ulang pengamat: pita bacanya bergantung pada tinggi kepala, yang bisa berubah. */
+function watchToc() {
+  if (tocObserver) tocObserver.disconnect();
+  tocSeen.clear();
+  if (typeof IntersectionObserver !== 'function') return;
+  const top = Math.ceil($('chrome').getBoundingClientRect().height) + 16;
+  tocObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) tocSeen.set(e.target.id, e.isIntersecting);
+    updateToc();
+  }, { rootMargin: '-' + top + 'px 0px -55% 0px' });
+  for (const t of tocTargets()) tocObserver.observe(t);
+}
+
+function holdToc(ms) {
+  clearTimeout(tocHold);
+  tocHold = setTimeout(() => { tocHold = 0; }, ms);
+}
+
+$('behaviorToc').addEventListener('click', (e) => {
+  const a = e.target.closest('a[href^="#"]');
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const target = document.getElementById(a.hash.slice(1));
+  if (!target) return;
+  e.preventDefault();
+  if (target.tagName === 'DETAILS') target.open = true;
+  markToc(target.id);
+  // Tanda tetap pada yang diklik sampai guliran halus selesai (bagian terakhir bisa tidak sampai atas).
+  holdToc(300);
+  history.replaceState(null, '', location.pathname + location.search + a.hash);
+  const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+});
+window.addEventListener('scroll', () => {
+  if (page !== 'behavior') return;
+  if (tocHold) holdToc(150); else updateToc();
+}, { passive: true });
+window.addEventListener('resize', () => { if (page === 'behavior') watchToc(); });
+
 // ---------- navigasi ----------
 /** Pasang alamat di semua tautan menu untuk proyek yang sedang dibuka. */
 function renderNav() {
@@ -2356,7 +2433,7 @@ function renderNav() {
   for (const a of document.querySelectorAll('a[data-to]')) a.href = pathOf(a.dataset.to);
   $('homeLink').href = pathOf('beranda');
   $('convBack').href = pathOf('percakapan');
-  $('allQuestions').href = pathOf('lainnya') + '#questions';
+  $('allQuestions').href = pathOf('produk') + '#questions';
 }
 
 /** Judul, keterangan, dan tanda menu untuk halaman yang sedang tampil. */
@@ -2407,7 +2484,13 @@ function show(next, r = {}) {
     void loadLeads();
   }
   if (page === 'chat') void openConv(r.phone);
-  if (page === 'lainnya') void loadHandoffs();
+  if (page === 'produk') {
+    // Daftar yang sudah dimuat Beranda langsung digambar: kartu ini dekat bawah halaman, jadi tanpa isinya
+    // halaman terlalu pendek dan guliran ke #questions (dari "Lihat semua") berhenti di tempat yang salah.
+    if (handoffData) renderHandoffs();
+    void loadHandoffs();
+  }
+  if (page === 'behavior') watchToc();
   if (page === 'whatsapp') {
     renderStatus();
     waPending = true;
@@ -2675,6 +2758,7 @@ function watchHeight(node, name) {
 
 applyLang();
 decorateSummaries();
+rememberFolds();
 watchHeight($('chrome'), '--chrome-h');
 watchHeight($('savebar'), '--savebar-h');
 if (location.pathname === '/login') showLogin();

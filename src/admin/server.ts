@@ -379,7 +379,7 @@ export function createAdminHandler(store: AdminStore) {
       if (!ok || !(await getProject(id))) return file('page.html', 'html', 404);
       return redirect(301, `/${id}/${moved}${url.search}`);
     }
-    if (rest === 'knowledge') return redirect(302, `/${id}/knowledge/identity`);
+    if (rest === 'knowledge') return redirect(302, `/${id}/knowledge/behavior`);
     const known = PAGE_PATHS.has(rest) || validContactPath(rest);
     if (!known || !(await getProject(id))) return file('page.html', 'html', 404);
     // Proyek terakhir yang dibuka: "/" kembali ke sini.
@@ -650,7 +650,7 @@ export function createAdminHandler(store: AdminStore) {
       try {
         changes = validate({ notes });
       } catch {
-        return json(400, { error: 'Pengetahuan lain sudah terlalu panjang untuk ditambah jawaban ini (maksimal 30.000 karakter). Rapikan dulu di Pengetahuan > Lainnya.' });
+        return json(400, { error: 'Pengetahuan lain sudah terlalu panjang untuk ditambah jawaban ini (maksimal 30.000 karakter). Rapikan dulu di Pengetahuan bot > Produk.' });
       }
       await store.save(changes);
       await resolveHandoffs(ids, 'ditambahkan', answer, at);

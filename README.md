@@ -59,12 +59,14 @@ dibagikan, atau dibuka di tab baru:
 | `/gfan` | **Beranda**: 4 angka 7 hari terakhir, *Perlu perhatian*, pertanyaan yang belum terjawab |
 | `/gfan/conversations` | daftar pelanggan dengan saringan tahap, cari, unduh CSV, impor pelanggan lama |
 | `/gfan/conversations/+62812…` | satu percakapan: riwayat lengkap, balas dari web, tahap, catatan |
-| `/gfan/knowledge/identity` | juga `products`, `recommendations`, `brochures`, `other` (panel **Coba bicara** di tiap halaman) |
+| `/gfan/knowledge/behavior` | **Cara bot bicara**: siapa yang menjawab, logo, pembukaan, pertanyaan dan rekomendasi, gaya & aturan balasan, yang harus dijawab manusia. Juga `products` (daftar produk, pertanyaan yang belum terjawab, pengetahuan lain) dan `brochures`. Panel **Coba chat** ada di tiap halaman |
 | `/gfan/settings` | proyek, saat admin ikut membalas, follow-up |
 | `/gfan/settings/whatsapp` | juga `notifications`, `advanced` (mode uji, batas, biaya LLM, riwayat warning, error) |
 
 Alamat lama `/admin` dialihkan ke `/`. Alamat lama berbahasa Indonesia (`/gfan/percakapan…`,
-`/gfan/pengetahuan/…`, `/gfan/pengaturan/…`) dialihkan (301) ke alamat barunya; daftar alamat
+`/gfan/pengaturan/…`) dialihkan (301) ke alamat barunya. Halaman Pengetahuan lama
+(`knowledge/identity`, `knowledge/recommendations`, `knowledge/other`, `/gfan/pengetahuan/…`) tidak
+dialihkan dan menjadi 404; `/gfan/knowledge` dialihkan ke `knowledge/behavior`. Daftar alamat
 ada di `src/admin/routes.ts`. Data lewat `/api/<proyek>/…`; id proyek tidak boleh memakai kata
 yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `webhook`,
 `conversations`, `knowledge`, `settings`, …).
@@ -81,7 +83,7 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi warning
   `kiriman-gagal`.
 - **Pertanyaan yang belum terjawab**: tiap pertanyaan yang dioper bot ke staf dicatat (tabel
-  `handoffs`) dan dikelompokkan. Tulis jawabannya sekali di Pengetahuan > Lainnya, lalu
+  `handoffs`) dan dikelompokkan. Tulis jawabannya sekali di Pengetahuan bot > Produk, lalu
   **Tambahkan ke pengetahuan**: tanya-jawabnya masuk ke "Pengetahuan lain" dan bot memakainya
   mulai pesan berikutnya.
 - **Pengaturan > WhatsApp**: tautkan nomor proyek itu dari dashboard — pindai QR yang tampil, atau
