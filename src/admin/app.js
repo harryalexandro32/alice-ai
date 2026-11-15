@@ -2,7 +2,7 @@
 // pernah innerHTML: data produk dan nama pelanggan diketik orang.
 //
 // Tiap menu punya alamatnya sendiri dengan id proyek di depan (/gfan,
-// /gfan/percakapan, /gfan/pengetahuan/produk, …). Server melayani page.html
+// /gfan/conversations, /gfan/knowledge/products, …). Server melayani page.html
 // yang sama untuk semuanya; router di bawah membaca location.pathname, dan
 // pindah menu memakai History API (pushState) tanpa memuat ulang halaman.
 // Semua tautan menu adalah <a href> sungguhan, jadi klik tengah / tab baru jalan.
@@ -105,18 +105,35 @@ let chat = [];
 let known = {};
 
 // ---------- alamat ----------
+// ROUTES, OLD_ROUTES, dan renamedPath disalin dari src/admin/routes.ts (server
+// memakai yang sama untuk memeriksa dan mengalihkan alamat): ubah keduanya bersama.
 /** Halaman -> alamat di bawah /<proyek>/. */
 const ROUTES = {
-  beranda: '', percakapan: 'percakapan',
-  identitas: 'pengetahuan/identitas', produk: 'pengetahuan/produk', rekomendasi: 'pengetahuan/rekomendasi',
-  brosur: 'pengetahuan/brosur', lainnya: 'pengetahuan/lainnya',
-  pengaturan: 'pengaturan', whatsapp: 'pengaturan/whatsapp', notifikasi: 'pengaturan/notifikasi', lanjutan: 'pengaturan/lanjutan',
+  beranda: '', percakapan: 'conversations',
+  identitas: 'knowledge/identity', produk: 'knowledge/products', rekomendasi: 'knowledge/recommendations',
+  brosur: 'knowledge/brochures', lainnya: 'knowledge/other',
+  pengaturan: 'settings', whatsapp: 'settings/whatsapp', notifikasi: 'settings/notifications', lanjutan: 'settings/advanced',
 };
+/** Alamat lama (bahasa Indonesia) -> alamat baru. */
+const OLD_ROUTES = {
+  percakapan: 'conversations', pengetahuan: 'knowledge', pengaturan: 'settings',
+  'pengetahuan/identitas': 'knowledge/identity', 'pengetahuan/produk': 'knowledge/products',
+  'pengetahuan/rekomendasi': 'knowledge/recommendations', 'pengetahuan/brosur': 'knowledge/brochures',
+  'pengetahuan/lainnya': 'knowledge/other',
+  'pengaturan/whatsapp': 'settings/whatsapp', 'pengaturan/notifikasi': 'settings/notifications',
+  'pengaturan/lanjutan': 'settings/advanced',
+};
+/** Alamat baru untuk alamat lama, atau null. Nomor di percakapan/<nomor> dibawa apa adanya. */
+function renamedPath(rest) {
+  if (Object.hasOwn(OLD_ROUTES, rest)) return OLD_ROUTES[rest];
+  const m = rest.match(/^percakapan\/([^/]+)$/);
+  return m ? 'conversations/' + m[1] : null;
+}
 /** Halaman Pengetahuan: di sini tombol "Coba chat" tersedia. */
 const KNOWLEDGE = ['identitas', 'produk', 'rekomendasi', 'brosur', 'lainnya'];
 
 const pathOf = (pg, pid = project) => '/' + pid + (ROUTES[pg] ? '/' + ROUTES[pg] : '');
-const convPath = (phone, pid = project) => '/' + pid + '/percakapan/' + encodeURIComponent(phone);
+const convPath = (phone, pid = project) => '/' + pid + '/conversations/' + encodeURIComponent(phone);
 
 /** Baca alamat: { login } | { root } | { project, page, phone?, redirect? }. */
 function parseRoute(pathname) {
@@ -127,8 +144,11 @@ function parseRoute(pathname) {
   const rest = parts.slice(1).join('/');
   if (!rest) return { project: pid, page: 'beranda' };
   for (const [pg, p] of Object.entries(ROUTES)) if (p && p === rest) return { project: pid, page: pg };
-  if (rest === 'pengetahuan') return { project: pid, page: 'identitas', redirect: true };
-  const m = rest.match(/^percakapan\/([^/]+)$/);
+  if (rest === 'knowledge') return { project: pid, page: 'identitas', redirect: true };
+  // Alamat lama berbahasa Indonesia (mis. tautan yang tersimpan): baca alamat barunya.
+  const moved = renamedPath(rest);
+  if (moved !== null) return { ...parseRoute('/' + pid + '/' + moved), redirect: true };
+  const m = rest.match(/^conversations\/([^/]+)$/);
   if (m) {
     try { return { project: pid, page: 'chat', phone: decodeURIComponent(m[1]) }; } catch { /* alamat rusak: tidak ada */ }
   }
@@ -586,14 +606,14 @@ function renderQuestions() {
     el('td', {}, cellInput(q, (v) => { profile.questions[i] = v; setDirty(true, 'questions'); }, T('mis. Ukuran ruangannya berapa × berapa meter?', 'e.g. Ukuran ruangannya berapa × berapa meter?'))),
     el('td', { className: 'act' }, xBtn(T('Hapus pertanyaan', 'Delete question'), () => { profile.questions.splice(i, 1); setDirty(true, 'questions'); renderQuestions(); })))));
   if (!profile.questions.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada pertanyaan. Bot akan bertanya seperlunya saja.', 'No questions yet. The bot will only ask when it has to.') })));
-  $('questions').replaceChildren(headRow([T('Pertanyaan', 'Question')]), body);
+  $('questionTable').replaceChildren(headRow([T('Pertanyaan', 'Question')]), body);
 }
 $('addQuestion').addEventListener('click', () => {
   if (profile.questions.length >= 12) return toast(T('Maksimal 12 pertanyaan.', '12 questions max.'), true);
   profile.questions.push('');
   setDirty(true, 'questions');
   renderQuestions();
-  const inputs = $('questions').querySelectorAll('input');
+  const inputs = $('questionTable').querySelectorAll('input');
   inputs[inputs.length - 1].focus();
 });
 
@@ -1794,7 +1814,7 @@ function renderHome() {
 
   const qs = (handoffData || []).slice(0, 5);
   $('homeQuestions').replaceChildren(...(qs.length ? qs.map((g) => el('div', { className: 'qrow' },
-    el('a', { className: 'q link', href: pathOf('lainnya') + '#pertanyaan', textContent: g.question, title: g.question }),
+    el('a', { className: 'q link', href: pathOf('lainnya') + '#questions', textContent: g.question, title: g.question }),
     el('small', { textContent: g.count + '× · ' + when(g.last_at) }))) : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang dioper ke staf.', 'No questions handed to staff yet.') })]));
   $('allQuestions').textContent = (handoffData || []).length > 5
     ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan > Lainnya →', 'Open in Knowledge > Other →');
@@ -2088,7 +2108,7 @@ function renderStrip() {
   if (!state.testReady) out.push(chip('warn', T('LLM belum diatur', 'LLM not configured'), waHref, 'alert'));
   const month = state.month || { idr: 0 };
   // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
-  out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#biaya', 'coins'));
+  out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#cost', 'coins'));
   // Tombol Coba chat ikut di strip, di ujung kanan, di semua halaman (node yang sama dipindahkan lagi).
   out.push($('tryBtn'));
   $('strip').replaceChildren(...out);
@@ -2188,7 +2208,7 @@ function renderNav() {
   for (const a of document.querySelectorAll('a[data-to]')) a.href = pathOf(a.dataset.to);
   $('homeLink').href = pathOf('beranda');
   $('convBack').href = pathOf('percakapan');
-  $('allQuestions').href = pathOf('lainnya') + '#pertanyaan';
+  $('allQuestions').href = pathOf('lainnya') + '#questions';
 }
 
 /** Judul, keterangan, dan tanda menu untuk halaman yang sedang tampil. */
@@ -2236,7 +2256,7 @@ function show(next, r = {}) {
   if (page === 'notifikasi') renderRecipients();
   if (page === 'lanjutan') { void loadUsage(); void loadAlerts(); }
   if (page === 'notfound') $('notFoundText').textContent = r.text || T('Alamat ini tidak ada di dashboard.', 'This address does not exist in the dashboard.');
-  // Tautan ke bagian tertentu (#biaya, #pertanyaan): buka lipatannya dan gulung ke sana.
+  // Tautan ke bagian tertentu (#cost, #questions): buka lipatannya dan gulung ke sana.
   const target = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
   if (target && target.closest('section[data-page].on')) {
     if (target.tagName === 'DETAILS') target.open = true;
@@ -2333,7 +2353,9 @@ async function route() {
     const safe = next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') && next !== '/login';
     return go(safe ? next : pathOf('beranda', defaultProject()), { replace: true });
   }
-  if (r.redirect) history.replaceState(null, '', pathOf(r.page, r.project) + location.hash);
+  if (r.redirect && r.page !== 'notfound') {
+    history.replaceState(null, '', (r.page === 'chat' ? convPath(r.phone, r.project) : pathOf(r.page, r.project)) + location.search + location.hash);
+  }
   const exists = projects.some((p) => p.id === r.project);
   const want = exists ? r.project : project || defaultProject();
   if (want !== project || !state) {

@@ -7,8 +7,9 @@
  *
  * Satu dashboard untuk semua proyek (satu proyek = satu bisnis = satu nomor
  * WhatsApp). Tiap menu punya alamatnya sendiri dengan id proyek di depan:
- * /gfan, /gfan/percakapan, /gfan/pengetahuan/produk, /gfan/pengaturan/whatsapp,
- * …; semuanya page.html, dan router di app.js membaca alamatnya. Data lewat
+ * /gfan, /gfan/conversations, /gfan/knowledge/products, /gfan/settings/whatsapp,
+ * … (daftarnya di routes.ts; alamat lama berbahasa Indonesia dialihkan 301);
+ * semuanya page.html, dan router di app.js membaca alamatnya. Data lewat
  * /api/<proyek>/…: tiap permintaan dijalankan di dalam proyeknya
  * (withProject), jadi `biz`, `cfg`, dan penyimpanan otomatis memakai proyek
  * itu. Dashboard berjalan di proses sendiri; keadaan bot (WhatsApp, QR, kode
@@ -46,6 +47,7 @@ import {
   type HandoffRow, type Project, type ProjectPatch, type Stage,
 } from '../store';
 import { matchProducts, pdfPlain, squash } from './pdftext';
+import { renamedPath, ROUTES } from './routes';
 import type { AdminStore, UsageReport } from './stores';
 
 const SESSION_MS = 12 * 3_600_000;
@@ -144,21 +146,19 @@ const ASSETS: Record<string, [string, string]> = {
  * dashboard (atau dialihkan Caddy ke bot) dan tidak pernah sah sebagai id.
  */
 const PROJECT_ID = /^[a-z0-9-]{2,32}$/;
-export const RESERVED = new Set(['api', 'login', 'logout', 'assets', 'admin', 'health', 'webhook', 'robots.txt', 'favicon.ico']);
+export const RESERVED = new Set([
+  'api', 'login', 'logout', 'assets', 'admin', 'health', 'webhook', 'robots.txt', 'favicon.ico',
+  // Nama bagian halaman, yang baru dan yang lama: tidak boleh tertukar dengan id proyek.
+  'conversations', 'knowledge', 'settings', 'percakapan', 'pengetahuan', 'pengaturan',
+]);
 /** Nomor pelanggan di alamat: "+62…" atau "lid:…". */
 const CONTACT = /^(\+\d{8,15}|lid:\d{5,20})$/;
 
 /** Halaman di bawah /<proyek>/ (tanpa garis miring di depan); percakapan per nomor diperiksa terpisah. */
-const PAGE_PATHS = [
-  /^$/,
-  /^percakapan$/,
-  /^pengetahuan\/(identitas|produk|rekomendasi|brosur|lainnya)$/,
-  /^pengaturan$/,
-  /^pengaturan\/(whatsapp|notifikasi|lanjutan)$/,
-];
+const PAGE_PATHS = new Set(Object.values(ROUTES));
 
 function validContactPath(rest: string): boolean {
-  const m = rest.match(/^percakapan\/([^/]+)$/);
+  const m = rest.match(/^conversations\/([^/]+)$/);
   if (!m) return false;
   try {
     return CONTACT.test(decodeURIComponent(m[1] as string));
@@ -353,8 +353,15 @@ export function createAdminHandler(store: AdminStore) {
     if (!m || RESERVED.has(m[1] as string)) return file('page.html', 'html', 404);
     const id = m[1] as string;
     const rest = m[2] ?? '';
-    if (rest === 'pengetahuan') return redirect(302, `/${id}/pengetahuan/identitas`);
-    const known = PAGE_PATHS.some((re) => re.test(rest)) || validContactPath(rest);
+    // Alamat lama berbahasa Indonesia -> alamat baru (301), hanya untuk halaman yang memang ada.
+    const moved = renamedPath(rest);
+    if (moved !== null) {
+      const ok = moved === 'knowledge' || PAGE_PATHS.has(moved) || validContactPath(moved);
+      if (!ok || !(await getProject(id))) return file('page.html', 'html', 404);
+      return redirect(301, `/${id}/${moved}${url.search}`);
+    }
+    if (rest === 'knowledge') return redirect(302, `/${id}/knowledge/identity`);
+    const known = PAGE_PATHS.has(rest) || validContactPath(rest);
     if (!known || !(await getProject(id))) return file('page.html', 'html', 404);
     // Proyek terakhir yang dibuka: "/" kembali ke sini.
     return file('page.html', 'html', 200, {

@@ -65,11 +65,11 @@ Jalan tanpa risiko blokir: WhatsApp Cloud API resmi ([cloud-api-setup.md](cloud-
 
 - Dashboard → **Beranda** (`/<proyek>`): pelanggan yang menunggu staf dan masalah bot 24 jam
   terakhir (*Perlu perhatian*), plus pertanyaan yang belum bisa dijawab bot.
-- Dashboard → Pengaturan → **Lanjutan** (`/<proyek>/pengaturan/lanjutan`): **Riwayat warning**
+- Dashboard → Pengaturan → **Lanjutan** (`/<proyek>/settings/advanced`): **Riwayat warning**
   dan **Catatan error**, tanpa perlu akses ke mesin bot.
 - `logs/bot-TANGGAL.log` (lewat `npm start`) atau `journalctl -u alice-bot@<proyek>` (server):
   semuanya, baris demi baris, dengan jam.
-- Dashboard → Pengaturan → **WhatsApp** (`/<proyek>/pengaturan/whatsapp`) dan **Keadaan bot**:
+- Dashboard → Pengaturan → **WhatsApp** (`/<proyek>/settings/whatsapp`) dan **Keadaan bot**:
   laporan terakhir bot (dikirim tiap 30 detik), termasuk keadaan WhatsApp, pemakaian jatah LLM hari
   itu, pengaman nomor, dan antiban (risiko, hari pemanasan, kiriman yang ditahan).
 - Bilah keadaan di atas tiap halaman dashboard: WhatsApp tersambung atau belum, bot dijeda, mode
