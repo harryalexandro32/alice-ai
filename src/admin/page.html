@@ -263,7 +263,7 @@
       <section data-page="rekomendasi">
         <div class="card">
           <div class="ch"><h2 data-en="Questions the bot asks">Pertanyaan yang ditanyakan bot</h2><p class="help" data-en="Before recommending a product, the bot asks these questions: only the ones the customer has not answered yet, at most two per message, in its own words. Written in the bot's language.">Sebelum menyarankan produk, bot menanyakan ini: hanya yang belum dijawab pelanggan, paling banyak dua per pesan, dengan kalimatnya sendiri.</p></div>
-          <div class="cb"><div class="scroll"><table class="grid" id="questions"></table></div></div>
+          <div class="cb"><div class="scroll"><table class="grid" id="questionTable"></table></div></div>
           <div class="cardfoot"><button class="btn ghost" id="addQuestion" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Question">Pertanyaan</span></button></div>
         </div>
         <div class="card">
@@ -283,7 +283,7 @@
 
       <!-- ================= Pengetahuan: Lainnya ================= -->
       <section data-page="lainnya">
-        <div class="card" id="pertanyaan">
+        <div class="card" id="questions">
           <div class="ch"><h2 data-en="Unanswered questions">Pertanyaan yang belum terjawab</h2><p class="help" data-en="Each question the bot handed to staff, grouped when customers asked the same thing. “Add to knowledge” appends the question and your answer to “Other knowledge” below, so the bot can answer it from the next message.">Tiap pertanyaan yang dioper bot ke staf, dikelompokkan kalau pelanggan menanyakan hal yang sama. “Tambahkan ke pengetahuan” menambahkan pertanyaan dan jawaban Anda ke “Pengetahuan lain” di bawah, jadi bot bisa menjawabnya mulai pesan berikutnya.</p></div>
           <div class="cb" id="questionList"></div>
         </div>
@@ -499,7 +499,7 @@
             <label class="check" style="margin:0"><input type="checkbox" data-set-bool="transcribeVoice"><span class="ck"><span class="t" data-en="Transcribe voice notes">Transkripsi pesan suara</span><small class="help" data-en="Voice notes are turned into text and answered like typed messages (needs <code>STT_API_KEY</code> in the bot's <code>.env</code>). Off: the bot acknowledges the voice note and notifies staff.">Pesan suara diubah jadi teks dan dijawab seperti ketikan (butuh <code>STT_API_KEY</code> di <code>.env</code> bot). Mati: bot menerima pesan suaranya dan mengabari staf.</small></span></label>
           </div>
         </div>
-        <div class="card" id="biaya">
+        <div class="card" id="cost">
           <div class="ch"><h2 data-en="LLM usage &amp; cost">Pemakaian &amp; biaya LLM</h2><p class="help" data-en="LLM cost and calls per day. The numbers, the charts and the table follow the range you pick.">Biaya dan panggilan LLM per hari. Angka, grafik, dan tabel mengikuti rentang yang dipilih.</p></div>
           <div class="cb">
             <div class="filters usage-range" id="usageRange" role="group" aria-label="Rentang waktu"></div>

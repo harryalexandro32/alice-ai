@@ -63,7 +63,7 @@ Lalu:
    Caddy mengurus sertifikat HTTPS sendiri begitu DNS-nya mengarah.
 2. Isi `LLM_API_KEY` (dan Telegram/SMTP/STT kalau dipakai) di `/opt/alice-ai/.env`, lalu
    `systemctl restart alice-admin 'alice-bot@*'`.
-3. Buka `https://alice.lukicenturi.com/gfan/pengaturan/whatsapp` dan tautkan nomornya (lihat di bawah).
+3. Buka `https://alice.lukicenturi.com/gfan/settings/whatsapp` dan tautkan nomornya (lihat di bawah).
 
 ## Proyek baru
 
@@ -73,16 +73,17 @@ Di dashboard: pemilih proyek di bilah atas → **＋ Proyek baru…**. Isi:
   dashboard (`https://alice.lukicenturi.com/toko-budi`), nama layanan (`alice-bot@toko-budi`), dan
   folder `data/toko-budi/`, `auth/toko-budi/`. Kata yang dipakai alamat dashboard atau dialihkan
   Caddy ke bot (`api`, `login`, `logout`, `assets`, `admin`, `health`, `webhook`, `robots.txt`,
-  `favicon.ico`) ditolak.
+  `favicon.ico`, `conversations`, `knowledge`, `settings`, `percakapan`, `pengetahuan`,
+  `pengaturan`) ditolak.
 - **Nama**, **bibit profil** (`generic` = mulai kosong; `gfan` = menyalin data produk GFAN),
   **nomor WA bot**, **nomor sales** (`self` = nomor bot sendiri).
 
 Dalam ±1 menit `alice-reconcile.timer` menyalakan `alice-bot@<id>`, dan dashboard membuka
-`/<id>/pengaturan/whatsapp` untuk menautkan nomornya. Lead proyek baru mulai kosong.
+`/<id>/settings/whatsapp` untuk menautkan nomornya. Lead proyek baru mulai kosong.
 
 ## Menautkan WhatsApp dari dashboard
 
-Pengaturan → **WhatsApp** (`/<proyek>/pengaturan/whatsapp`; halaman ini memeriksa keadaan bot tiap
+Pengaturan → **WhatsApp** (`/<proyek>/settings/whatsapp`; halaman ini memeriksa keadaan bot tiap
 3 detik selama belum tersambung):
 
 - **QR**: begitu bot jalan dan belum tertaut, QR-nya tampil. Di HP: WhatsApp → Perangkat tertaut →
@@ -118,12 +119,14 @@ Satu alamat per menu, dengan id proyek di depan (semuanya dilayani `page.html` y
 
 - `https://alice.lukicenturi.com/` → proyek yang terakhir dibuka (cookie `last_project`), atau
   `/login` kalau belum masuk.
-- `/gfan` (Beranda), `/gfan/percakapan`, `/gfan/percakapan/+62812…`,
-  `/gfan/pengetahuan/{identitas,produk,rekomendasi,brosur,lainnya}`,
-  `/gfan/pengaturan`, `/gfan/pengaturan/{whatsapp,notifikasi,lanjutan}`.
+- `/gfan` (Beranda), `/gfan/conversations`, `/gfan/conversations/+62812…`,
+  `/gfan/knowledge/{identity,products,recommendations,brochures,other}`,
+  `/gfan/settings`, `/gfan/settings/{whatsapp,notifications,advanced}`.
 - `/assets/app.js`, `/assets/app.css`, `/assets/qrcode.js`; data lewat `/api/login`,
   `/api/projects`, `/api/<proyek>/…`.
-- Alamat lama `/admin` dan `/admin/*` dialihkan (301) ke `/`.
+- Alamat lama `/admin` dan `/admin/*` dialihkan (301) ke `/`. Alamat lama berbahasa Indonesia
+  (`/gfan/percakapan…`, `/gfan/pengetahuan/…`, `/gfan/pengaturan/…`) dialihkan (301) ke alamat
+  barunya, dengan query yang sama.
 
 Cookie sesi `admin_session` berlaku untuk `Path=/`. Caddy tetap meneruskan `/webhook*` dan
 `/health` ke port 3000 (jalur Cloud API) dan sisanya ke dashboard; karena itu `health` dan

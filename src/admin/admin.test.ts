@@ -29,6 +29,7 @@ import {
 import type { Transport, TransportState } from '../transport/types';
 import { setAdminBrain, startAdmin, stopAdmin } from './server';
 import { localStore } from './store-local';
+import { OLD_ROUTES, renamedPath, ROUTES } from './routes';
 
 const PASSWORD = 'kata-sandi-uji-123';
 const PNG = Buffer.from(
@@ -415,6 +416,9 @@ const PNG = Buffer.from(
       const make = (body: unknown) => post('/api/projects', body);
       assert.match((await make({ id: 'API', name: 'X', template: 'generic' })).body.error, /Id proyek/);
       assert.equal((await make({ id: 'api', name: 'X', template: 'generic' })).status, 400, 'id yang dipakai alamat dashboard');
+      for (const id of ['conversations', 'knowledge', 'settings', 'percakapan', 'pengetahuan', 'pengaturan']) {
+        assert.equal((await make({ id, name: 'X', template: 'generic' })).status, 400, `id "${id}" dipakai alamat dashboard`);
+      }
       assert.match((await make({ id: 'toko-b', name: 'X', template: 'entah' })).body.error, /Bibit/);
       assert.match((await make({ id: 'toko-b', name: '', template: 'generic' })).body.error, /Nama/);
       assert.match((await make({ id: 'toko-b', name: 'Toko B', template: 'generic', wa_number: '12' })).body.error, /WA bot/);
@@ -519,23 +523,47 @@ const PNG = Buffer.from(
       assert.deepEqual([r0.status, r0.headers.get('location')], [302, '/login'], 'tanpa sesi: ke halaman masuk');
       const r1 = await page('/');
       assert.deepEqual([r1.status, r1.headers.get('location')], [302, '/gfan'], 'proyek aktif yang pertama');
-      for (const path of ['/gfan', '/gfan/percakapan', '/gfan/percakapan/%2B6281211110001', '/gfan/pengetahuan/identitas', '/gfan/pengetahuan/produk',
-        '/gfan/pengetahuan/rekomendasi', '/gfan/pengetahuan/brosur', '/gfan/pengetahuan/lainnya', '/gfan/pengaturan', '/gfan/pengaturan/whatsapp',
-        '/gfan/pengaturan/notifikasi', '/gfan/pengaturan/lanjutan', '/gfan/percakapan/']) {
+      for (const path of ['/gfan', '/gfan/conversations', '/gfan/conversations/%2B6281211110001', '/gfan/knowledge/identity', '/gfan/knowledge/products',
+        '/gfan/knowledge/recommendations', '/gfan/knowledge/brochures', '/gfan/knowledge/other', '/gfan/settings', '/gfan/settings/whatsapp',
+        '/gfan/settings/notifications', '/gfan/settings/advanced', '/gfan/conversations/']) {
         const r = await page(path, false);
         assert.equal(r.status, 200, path);
         assert.match(r.headers.get('content-type') ?? '', /text\/html/);
         assert.match(await r.text(), /<script src="\/assets\/app\.js"><\/script>/, `${path}: halaman yang sama untuk semua menu`);
       }
-      const last = await page('/toko-b/pengaturan');
+      const last = await page('/toko-b/settings');
       assert.match(last.headers.get('set-cookie') ?? '', /^last_project=toko-b; SameSite=Strict; Path=\/; Max-Age=31536000/);
       const r2 = await page('/', false, { cookie: `${cookie}; last_project=toko-b` });
       assert.equal(r2.headers.get('location'), '/toko-b', '"/" kembali ke proyek yang terakhir dibuka');
       const r3 = await page('/', false, { cookie: `${cookie}; last_project=tidak-ada` });
       assert.equal(r3.headers.get('location'), '/gfan');
-      const kn = await page('/gfan/pengetahuan');
-      assert.deepEqual([kn.status, kn.headers.get('location')], [302, '/gfan/pengetahuan/identitas']);
-      for (const path of ['/gfan/entah', '/gfan/pengetahuan/entah', '/gfan/percakapan/bukan-nomor', '/tidak-ada', '/tidak-ada/percakapan', '/assets', '/api']) {
+      const kn = await page('/gfan/knowledge');
+      assert.deepEqual([kn.status, kn.headers.get('location')], [302, '/gfan/knowledge/identity']);
+      // Alamat lama berbahasa Indonesia: 301 ke alamat baru, sisa alamat dan query ikut.
+      for (const [old, now] of [
+        ['/gfan/percakapan', '/gfan/conversations'],
+        ['/gfan/percakapan/', '/gfan/conversations'],
+        ['/gfan/percakapan?stage=baru', '/gfan/conversations?stage=baru'],
+        ['/gfan/percakapan/%2B6281211110001', '/gfan/conversations/%2B6281211110001'],
+        ['/gfan/percakapan/lid%3A1234567890', '/gfan/conversations/lid%3A1234567890'],
+        ['/gfan/pengetahuan', '/gfan/knowledge'],
+        ['/gfan/pengetahuan/identitas', '/gfan/knowledge/identity'],
+        ['/gfan/pengetahuan/produk', '/gfan/knowledge/products'],
+        ['/gfan/pengetahuan/rekomendasi', '/gfan/knowledge/recommendations'],
+        ['/gfan/pengetahuan/brosur', '/gfan/knowledge/brochures'],
+        ['/gfan/pengetahuan/lainnya', '/gfan/knowledge/other'],
+        ['/gfan/pengaturan', '/gfan/settings'],
+        ['/gfan/pengaturan/whatsapp', '/gfan/settings/whatsapp'],
+        ['/gfan/pengaturan/notifikasi', '/gfan/settings/notifications'],
+        ['/gfan/pengaturan/lanjutan', '/gfan/settings/advanced'],
+        ['/toko-b/pengaturan/lanjutan', '/toko-b/settings/advanced'],
+      ] as const) {
+        const r = await page(old, false);
+        assert.deepEqual([r.status, r.headers.get('location')], [301, now], `alamat lama ${old}`);
+      }
+      for (const path of ['/gfan/entah', '/gfan/knowledge/entah', '/gfan/conversations/bukan-nomor', '/tidak-ada', '/tidak-ada/conversations',
+        '/gfan/pengetahuan/entah', '/gfan/percakapan/bukan-nomor', '/tidak-ada/percakapan', '/gfan/pengaturan/umum',
+        '/conversations', '/knowledge', '/settings', '/percakapan', '/assets', '/api']) {
         assert.equal((await page(path)).status, 404, path);
       }
       for (const path of ['/admin', '/admin/', '/admin/gfan/api/state']) {
@@ -544,13 +572,26 @@ const PNG = Buffer.from(
       }
       const li = await page('/login');
       assert.deepEqual([li.status, li.headers.get('location')], [302, '/'], 'sudah masuk: tidak perlu halaman masuk');
-      assert.equal((await page('/login?next=%2Fgfan%2Fpengaturan')).headers.get('location'), '/gfan/pengaturan');
+      assert.equal((await page('/login?next=%2Fgfan%2Fsettings')).headers.get('location'), '/gfan/settings');
       assert.equal((await page('/login?next=%2F%2Fsitus-lain.example')).headers.get('location'), '/', 'hanya alamat di situs ini');
       for (const [path, type] of [['/assets/app.js', /javascript/], ['/assets/app.css', /text\/css/], ['/assets/qrcode.js', /javascript/]] as const) {
         const r = await page(path, false);
         assert.equal(r.status, 200, path);
         assert.match(r.headers.get('content-type') ?? '', type);
         assert.equal(r.headers.get('cache-control'), 'no-cache');
+      }
+      // Salinan alamat di app.js harus sama dengan routes.ts (app.js tidak bisa mengimpornya).
+      {
+        const src = readFileSync(join(__dirname, 'app.js'), 'utf8');
+        const block = src.slice(src.indexOf('const ROUTES = {'), src.indexOf('const KNOWLEDGE'));
+        const js = new Function(`${block}; return { ROUTES, OLD_ROUTES, renamedPath };`)() as {
+          ROUTES: unknown; OLD_ROUTES: unknown; renamedPath: (rest: string) => string | null;
+        };
+        assert.deepEqual(js.ROUTES, ROUTES, 'ROUTES di app.js sama dengan routes.ts');
+        assert.deepEqual(js.OLD_ROUTES, OLD_ROUTES, 'OLD_ROUTES di app.js sama dengan routes.ts');
+        for (const rest of ['percakapan/%2B628121', 'pengaturan/lanjutan', 'pengetahuan', 'pengetahuan/entah', 'constructor']) {
+          assert.equal(js.renamedPath(rest), renamedPath(rest), rest);
+        }
       }
       // Teks dashboard tanpa tanda pisah panjang (em dash): pakai koma, titik dua, atau titik.
       for (const name of ['page.html', 'app.js', 'app.css']) {

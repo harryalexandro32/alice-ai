@@ -55,17 +55,19 @@ dibagikan, atau dibuka di tab baru:
 | Alamat | Isi |
 |---|---|
 | `/` | ke proyek yang terakhir dibuka (cookie `last_project`), atau ke halaman masuk |
-| `/login` | halaman masuk (`?next=/gfan/percakapan` = tujuan setelah masuk) |
+| `/login` | halaman masuk (`?next=/gfan/conversations` = tujuan setelah masuk) |
 | `/gfan` | **Beranda**: 4 angka 7 hari terakhir, *Perlu perhatian*, pertanyaan yang belum terjawab |
-| `/gfan/percakapan` | daftar pelanggan dengan saringan tahap, cari, unduh CSV, impor pelanggan lama |
-| `/gfan/percakapan/+62812…` | satu percakapan: riwayat lengkap, balas dari web, tahap, catatan |
-| `/gfan/pengetahuan/identitas` | juga `produk`, `rekomendasi`, `brosur`, `lainnya` (panel **Coba bicara** di tiap halaman) |
-| `/gfan/pengaturan` | proyek, saat admin ikut membalas, follow-up |
-| `/gfan/pengaturan/whatsapp` | juga `notifikasi`, `lanjutan` (mode uji, batas, biaya LLM, riwayat warning, error) |
+| `/gfan/conversations` | daftar pelanggan dengan saringan tahap, cari, unduh CSV, impor pelanggan lama |
+| `/gfan/conversations/+62812…` | satu percakapan: riwayat lengkap, balas dari web, tahap, catatan |
+| `/gfan/knowledge/identity` | juga `products`, `recommendations`, `brochures`, `other` (panel **Coba bicara** di tiap halaman) |
+| `/gfan/settings` | proyek, saat admin ikut membalas, follow-up |
+| `/gfan/settings/whatsapp` | juga `notifications`, `advanced` (mode uji, batas, biaya LLM, riwayat warning, error) |
 
-Alamat lama `/admin` dialihkan ke `/`. Data lewat `/api/<proyek>/…`; id proyek tidak boleh
-memakai kata yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`,
-`webhook`, …).
+Alamat lama `/admin` dialihkan ke `/`. Alamat lama berbahasa Indonesia (`/gfan/percakapan…`,
+`/gfan/pengetahuan/…`, `/gfan/pengaturan/…`) dialihkan (301) ke alamat barunya; daftar alamat
+ada di `src/admin/routes.ts`. Data lewat `/api/<proyek>/…`; id proyek tidak boleh memakai kata
+yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `webhook`,
+`conversations`, `knowledge`, `settings`, …).
 
 - **Pemilih proyek** di bilah atas: pindah proyek (tetap di menu yang sama), atau
   **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`, nomor WA bot, nomor sales).
