@@ -110,6 +110,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 /* Bilah keadaan: tampil di semua halaman proyek. */
 .strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 7px 20px; min-height: 37px; background: var(--surface2); border-bottom: 1px solid var(--line); }
 .strip a { text-decoration: none; }
+.strip .try { margin-left: auto; }
 
 .app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100vh; padding-top: var(--chrome-h); }
 aside { background: var(--field); border-right: 1px solid var(--line); padding: 12px 10px 20px; position: sticky; top: var(--chrome-h); height: calc(100vh - var(--chrome-h)); overflow-y: auto; }

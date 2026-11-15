@@ -102,7 +102,7 @@
   <button class="btn ghost" id="logout" type="button" title="Keluar" aria-label="Keluar" data-en-title="Sign out"><svg class="i" aria-hidden="true"><use href="#i-log-out"/></svg><span class="lbl" data-en="Sign out">Keluar</span></button>
 </div>
 
-<div class="strip" id="strip" hidden></div>
+<div class="strip" id="strip" hidden><button class="btn ghost sm try" id="tryBtn" type="button"><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try chat">Coba chat</span></button></div>
 </header>
 
 <div class="app" id="app" hidden>
@@ -132,7 +132,6 @@
         <p id="desc"></p>
       </div>
       <div class="head-actions">
-        <button class="btn ghost" id="tryBtn" type="button" hidden><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try talking">Coba bicara</span></button>
       </div>
     </div>
 
@@ -277,7 +276,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="Brochures &amp; catalogues">Brosur &amp; katalog</h2><p class="help" data-en="Upload a PDF and the dashboard reads it, finds the product names written inside, and attaches the PDF to those products. One PDF can cover many products. Up to 4 MB per file. Turn on <b>Read by bot</b> to let the bot answer from that PDF's contents.">Unggah PDF, lalu dashboard membacanya, mencari nama produk yang tertulis di dalamnya, dan memasangkan PDF itu ke produk-produk tersebut. Satu PDF bisa untuk banyak produk. Maksimal 4 MB per berkas. Nyalakan <b>Dibaca bot</b> kalau bot boleh menjawab dari isi PDF itu.</p></div>
           <div class="cb"><div class="scroll"><table class="list" id="pdfs"></table></div></div>
-          <div class="cardfoot"><button class="btn" id="pdfUpload" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload PDF">Unggah PDF</span></button><button class="btn ghost" id="pdfRematch" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Re-match all">Cocokkan ulang semua</span></button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read. Attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try talking” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca. Pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba bicara”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
+          <div class="cardfoot"><button class="btn" id="pdfUpload" type="button"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg><span data-en="Upload PDF">Unggah PDF</span></button><button class="btn ghost" id="pdfRematch" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Re-match all">Cocokkan ulang semua</span></button><span data-en="Matching only fills products that have no PDF yet. Scanned PDFs (pictures of pages) cannot be read. Attach those by hand. “Read by bot”: tables inside a PDF can come out misaligned, so try it with “Try chat” first; the more PDFs are read, the more each reply costs.">Pencocokan hanya mengisi produk yang belum punya PDF. PDF hasil pindai (gambar halaman) tidak bisa dibaca. Pasangkan sendiri. “Dibaca bot”: tabel di PDF bisa terbaca bergeser, jadi uji dulu lewat “Coba chat”; makin banyak PDF yang dibaca, makin mahal tiap balasan.</span></div>
         </div>
       </section>
 
@@ -305,7 +304,7 @@
           </div>
         </div>
         <div class="card">
-          <div class="ch"><h2 data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</h2><p class="help" data-en="How you want the bot to write and behave, one rule per row. Say it the way you would brief a new admin: the tone you like, what to avoid, an example sentence, what to do right away without asking. Use “Try talking” to see the effect.">Cara Anda ingin bot menulis dan bersikap, satu aturan per baris. Tulis seperti memberi arahan ke admin baru: nada yang disukai, yang harus dihindari, contoh kalimat, hal yang langsung dikerjakan tanpa bertanya. Pakai “Coba bicara” untuk melihat hasilnya.</p></div>
+          <div class="ch"><h2 data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</h2><p class="help" data-en="How you want the bot to write and behave, one rule per row. Say it the way you would brief a new admin: the tone you like, what to avoid, an example sentence, what to do right away without asking. Use “Try chat” to see the effect.">Cara Anda ingin bot menulis dan bersikap, satu aturan per baris. Tulis seperti memberi arahan ke admin baru: nada yang disukai, yang harus dihindari, contoh kalimat, hal yang langsung dikerjakan tanpa bertanya. Pakai “Coba chat” untuk melihat hasilnya.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="rules"></table></div></div>
           <div class="cardfoot"><button class="btn ghost" id="addRule" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Rule">Aturan</span></button></div>
         </div>
@@ -536,11 +535,11 @@
   </main>
 </div>
 
-<!-- Coba bicara: panel samping di halaman Pengetahuan -->
+<!-- Coba chat: panel samping di halaman Pengetahuan -->
 <div class="drawer-bg" id="ujiBg"></div>
-<aside class="drawer" id="uji" aria-label="Coba bicara" aria-hidden="true">
+<aside class="drawer" id="uji" aria-label="Coba chat" aria-hidden="true">
   <div class="drawer-head">
-    <div><h2 data-en="Talk to the bot">Coba bicara dengan bot</h2><p class="help" data-en="Uses the profile that is <b>already saved</b>, without sending anything to WhatsApp. The bot itself always answers in Indonesian.">Memakai profil yang <b>sudah disimpan</b>, tanpa mengirim apa pun ke WhatsApp.</p></div>
+    <div><h2 data-en="Talk to the bot">Coba chat dengan bot</h2><p class="help" data-en="Uses the profile that is <b>already saved</b>, without sending anything to WhatsApp. The bot itself always answers in Indonesian.">Memakai profil yang <b>sudah disimpan</b>, tanpa mengirim apa pun ke WhatsApp.</p></div>
     <button class="btn ghost icon" type="button" id="ujiClose" aria-label="Tutup" title="Tutup" data-en-title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
   </div>
   <div class="chat" id="chat"></div>
