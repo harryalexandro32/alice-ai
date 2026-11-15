@@ -4,7 +4,7 @@
  *   - menyimpan SEMUA keluarannya (termasuk log Baileys) ke logs/bot-TANGGAL.log,
  *     jadi jejaknya tidak hilang saat jendela terminal ditutup;
  *   - menyalakannya lagi kalau ia mati, dengan jeda yang makin panjang;
- *   - mengabari pemilik lewat Telegram / email (kalau diatur) saat bot mati.
+ *   - mengabari pemilik lewat email (kalau diatur) saat bot mati.
  *
  * Bot tanpa pengawas: `npm run bot`.
  */
@@ -52,7 +52,7 @@ function record(chunk: Buffer | string): void {
 }
 
 /**
- * Kabari penerima "bot mati" lewat Telegram dan email (WhatsApp tidak mungkin:
+ * Kabari penerima "bot mati" lewat email (WhatsApp tidak mungkin:
  * botnya sedang mati). Profil dibaca dari database tiap kali, jadi penerima
  * yang baru diatur di dashboard langsung berlaku. Tidak pernah melempar.
  */

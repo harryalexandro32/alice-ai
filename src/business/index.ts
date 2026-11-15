@@ -95,6 +95,11 @@ function apply(ctx: ProjectCtx, overrides: Partial<Editable>): void {
     b.catalog = [];
     b.notes = legacy;
   }
+  // Profil lama bisa menyimpan penerima dengan jalur yang sudah dihapus: hanya
+  // WhatsApp dan email yang dipakai, dan penerima tanpa keduanya dibuang diam-diam.
+  b.recipients = (b.recipients ?? [])
+    .filter((r) => r && (r.phone || r.email))
+    .map((r) => ({ name: r.name, role: r.role, phone: r.phone, email: r.email }));
   ctx.biz = b;
   syncPdfTexts(ctx);
   // Pengaturan dari dashboard menimpa bawaan .env untuk proyek ini.
@@ -266,6 +271,8 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('recipients' in input) {
     if (!Array.isArray(input.recipients) || input.recipients.length > 20) throw new Error('Penerima notifikasi: maksimal 20 baris');
     const rows = input.recipients
+      // Penerima dari profil lama yang jalurnya hanya jalur yang sudah dihapus: dibuang tanpa pesan.
+      .filter((raw: Record<string, unknown>) => !(raw?.telegram && !String(raw?.phone ?? '').trim() && !String(raw?.email ?? '').trim()))
       .map((raw: Record<string, unknown>, i: number): Recipient => {
         const name = text(raw?.name ?? '', 40, `Nama penerima baris ${i + 1}`);
         const who = name || `baris ${i + 1}`;
@@ -274,12 +281,10 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
         if (phone === null) throw new Error(`Penerima ${who}: nomor WhatsApp "${phoneRaw}" tidak sah`);
         const email = String(raw?.email ?? '').trim();
         if (email && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email)) throw new Error(`Penerima ${who}: alamat email tidak sah`);
-        const telegram = String(raw?.telegram ?? '').trim();
-        if (telegram && !/^-?\d{4,20}$/.test(telegram)) throw new Error(`Penerima ${who}: id chat Telegram harus berupa angka`);
-        return { name, role: raw?.role === 'owner' ? 'owner' : 'staff', phone, email: email.slice(0, 120), telegram };
+        return { name, role: raw?.role === 'owner' ? 'owner' : 'staff', phone, email: email.slice(0, 120) };
       })
-      .filter((r) => r.name || r.phone || r.email || r.telegram);
-    for (const r of rows) if (!r.phone && !r.email && !r.telegram) throw new Error(`Penerima ${r.name}: isi minimal satu jalur (WhatsApp, email, atau Telegram)`);
+      .filter((r) => r.name || r.phone || r.email);
+    for (const r of rows) if (!r.phone && !r.email) throw new Error(`Penerima ${r.name}: isi minimal satu jalur (WhatsApp atau email)`);
     set('recipients', rows);
   }
   if ('notifyRoutes' in input) {

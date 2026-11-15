@@ -16,10 +16,16 @@
   --inverse: #1d1f20; --off: #c5c8cc; --ink2: #36393a; --field-line: #b6b9bd; --dash: #a9adb2; --warn-line: #efd9a8; --focus: #9cc0f5;
   --bubble-in: #ffffff; --bubble-out: #e8f0fc; --bubble-human: #e6f4ea;
   /* Warna grafik: seri 1 selalu --viz-1, seri 2 selalu --viz-2, dst. (urutan tetap, tidak diputar).
-     --viz-on-N: warna teks di atas segmen berwarna N. --viz-track: jalur meter (biru lebih muda). */
+     --viz-track: jalur meter (biru lebih muda). */
   --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-4: #eda100;
   --viz-grid: var(--line-soft); --viz-surface: var(--card); --viz-track: #cde2fb;
-  --viz-on-1: #ffffff; --viz-on-2: #1d1f20; --viz-on-3: #1d1f20; --viz-on-4: #1d1f20;
+  /* Kerangka muat (skeleton): balok abu-abu dan kilau tipis yang lewat di atasnya. */
+  --skel: #e9eaec; --skel-hi: #f5f6f7;
+  /* Warna tahap lead (app.js: STAGE_COLOR). Kontras teks di atas latarnya >= 4,5:1 di kedua tema. */
+  --stage-baru-bg: var(--blue-soft); --stage-baru-fg: var(--blue);
+  --stage-dihubungi-bg: #fdebdd; --stage-dihubungi-fg: #b4480c;
+  --stage-closing-bg: var(--ok-soft); --stage-closing-fg: var(--ok);
+  --stage-batal-bg: var(--chip); --stage-batal-fg: var(--muted);
 }
 :root[data-theme=dark] {
   color-scheme: dark;
@@ -31,7 +37,9 @@
   --bubble-in: #202427; --bubble-out: #1a2c47; --bubble-human: #17301f;
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a2a8ae' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500; --viz-track: #184f95;
-  --viz-on-1: #121416; --viz-on-2: #121416; --viz-on-3: #121416; --viz-on-4: #121416;
+  --skel: #2a2f33; --skel-hi: #343a3f;
+  --stage-baru-fg: var(--blue-dark);
+  --stage-dihubungi-bg: #3d2a1a; --stage-dihubungi-fg: #f0a06b;
 }
 :root[data-theme=dark] .topbar, :root[data-theme=dark] aside, :root[data-theme=dark] .strip { background: var(--card); }
 :root[data-theme=dark] .btn.ghost, :root[data-theme=dark] .btn.danger { background: var(--card); }
@@ -198,6 +206,12 @@ div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
 .tilelink b { display: block; margin-bottom: 2px; }
 .tilelink span { color: var(--muted); font-size: 13px; }
 
+/* Tautan berkas PDF (fileLink di app.js): ikon 16px abu-abu, jarak 6px, sejajar tengah dengan namanya;
+   nama yang terlalu panjang dipotong dengan elipsis. */
+.filelink { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; vertical-align: middle; }
+.filelink .fico { width: 16px; height: 16px; color: var(--muted); vertical-align: 0; }
+.filelink > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---- tabel ---- */
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
@@ -254,7 +268,7 @@ table.grid td.center { text-align: center; padding: 0 10px; }
 .thumbs .add { width: 30px; height: 30px; flex: none; border: 1px dashed var(--dash); border-radius: 4px; background: var(--field); color: var(--blue); cursor: pointer; font-size: 17px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .thumbs .add:hover { border-color: var(--blue); background: var(--blue-soft); }
 .pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 0; }
-.pdf a { color: var(--blue); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; font-size: 13px; }
+.pdf a { color: var(--blue); text-decoration: none; min-width: 0; flex: 1; font-size: 13px; }
 .pdf a:hover { text-decoration: underline; }
 .pdf select { border: 0; background-color: transparent; padding-left: 4px; color: var(--muted); font-size: 13px; min-width: 0; width: 100%; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -309,16 +323,12 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .plot text.total { fill: var(--ink); font-weight: 600; }
 .plot text.empty { fill: var(--muted); font-size: 13px; }
 .plot .gridline { stroke: var(--viz-grid); stroke-width: 1; shape-rendering: crispEdges; }
-.plot .track { fill: var(--viz-grid); }
 .plot .hit { fill: transparent; cursor: default; outline: none; }
-.plot .hit.link { cursor: pointer; }
 .plot .hit:focus-visible { stroke: var(--focus); stroke-width: 2; }
 /* Tanda yang disorot sedikit lebih terang. */
 .plot .mark.hot { opacity: .8; }
-.plot .seg-label { font-size: 12px; font-weight: 600; pointer-events: none; }
 .viz1 { fill: var(--viz-1); background: var(--viz-1); } .viz2 { fill: var(--viz-2); background: var(--viz-2); }
 .viz3 { fill: var(--viz-3); background: var(--viz-3); } .viz4 { fill: var(--viz-4); background: var(--viz-4); }
-.plot text.on1 { fill: var(--viz-on-1); } .plot text.on2 { fill: var(--viz-on-2); } .plot text.on3 { fill: var(--viz-on-3); } .plot text.on4 { fill: var(--viz-on-4); }
 .tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 8px rgba(0,0,0,.12); padding: 7px 10px; font-size: 12px; line-height: 1.5; white-space: nowrap; }
 .tip .t { color: var(--muted); font-weight: 600; margin-bottom: 2px; }
 .tip .r { display: flex; align-items: center; gap: 6px; }
@@ -330,10 +340,51 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; font-size: 12px; color: var(--muted); }
 .legend > * { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; }
 .legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
-.legend a:hover span { text-decoration: underline; }
 /* Pemakaian & biaya: pilihan rentang di atas kotak angka, keterangan tarif di bawah grafik biaya. */
 .usage-range { margin-bottom: 12px; }
 .chart-note { margin: 10px 0 0; font-size: 12px; }
+
+/* ---- kerangka muat (skeleton) ---- */
+/* Balok abu-abu seukuran isi akhirnya (app.js: skeleton, skelText); kilau tipis bergerak dari kanan ke kiri.
+   Teks kerangka (.skel-text) memakai teks contoh yang tidak terlihat, jadi lebar dan barisnya sama dengan teks asli. */
+.skel, .meter.skel, .skel-text {
+  background: linear-gradient(90deg, var(--skel) 25%, var(--skel-hi) 50%, var(--skel) 75%); background-size: 300% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+span.skel { display: block; height: 14px; border-radius: var(--radius); }
+.skel-text { color: transparent !important; border-radius: 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; user-select: none; }
+@keyframes skel-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .skel, .meter.skel, .skel-text { animation: none; background: var(--skel); }
+}
+/* Baris tabel kerangka: tepat 40 px. Baris pertanyaan kerangka: tepat 48 px. */
+table.list tr.skel-row td { height: 40px; padding: 0 12px; vertical-align: middle; border-bottom: 0; }
+.skel-qrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 48px; border-bottom: 1px solid var(--line-soft); }
+.skel-qrow:last-child { border-bottom: 0; }
+/* Isi kartu yang berisi kerangka tidak menyusut di bawah ukuran kerangkanya, juga setelah datanya datang,
+   jadi kartu di bawahnya tidak bergeser (3 baris tabel x 40 px, 3 baris pertanyaan x 48 px). */
+.hold-rows { min-height: 120px; }
+.hold-qrows { min-height: 144px; }
+/* Data satu kartu gagal dimuat: pesannya di dalam kartu itu. */
+.load-err { color: var(--danger); }
+.tile-err { grid-column: 1 / -1; }
+
+/* ---- tahap lead ---- */
+/* Satu sumber warna: tiap kelas tahap mengisi --st-bg / --st-fg dari token di :root (terang dan gelap). */
+.stage-baru { --st-bg: var(--stage-baru-bg); --st-fg: var(--stage-baru-fg); }
+.stage-dihubungi { --st-bg: var(--stage-dihubungi-bg); --st-fg: var(--stage-dihubungi-fg); }
+.stage-closing { --st-bg: var(--stage-closing-bg); --st-fg: var(--stage-closing-fg); }
+.stage-batal { --st-bg: var(--stage-batal-bg); --st-fg: var(--stage-batal-fg); }
+/* Chip tahap di Beranda: satu baris yang membungkus di HP; angkanya tebal dan lebih besar. */
+.stagechips { display: flex; flex-wrap: wrap; gap: 8px; }
+.stagechip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; border-radius: 99px; background: var(--st-bg); color: var(--st-fg);
+  border: 1px solid transparent; text-decoration: none; text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .04em; line-height: 1; white-space: nowrap; }
+.stagechip b { font-size: 15px; font-weight: 800; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.stagechip:hover { border-color: var(--st-fg); }
+.stagechip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* Pilihan tahap (tabel lead dan kepala percakapan) berwarna sesuai tahap yang terpilih. */
+select.stagesel { background-color: var(--st-bg); color: var(--st-fg); border-color: transparent; font-weight: 600; }
+select.stagesel option { background-color: var(--field); color: var(--ink); font-weight: 400; }
 
 /* ---- percakapan ---- */
 .leadbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
@@ -343,6 +394,9 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
   text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
 .filters button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .filters button small { opacity: .75; font-size: 11px; font-variant-numeric: tabular-nums; }
+/* Saringan tahap: tidak aktif tetap netral dengan titik berwarna tahapnya; aktif memakai warna tahapnya. */
+.filters button .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-fg); flex: none; }
+.filters button[data-stage].on, :root[data-theme=dark] .filters button[data-stage].on { background: var(--st-bg); border-color: var(--st-fg); color: var(--st-fg); }
 .badge { display: none; align-items: center; justify-content: center; margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; background: var(--danger); color: #fff; border-radius: 99px;
   text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .badge.on { display: inline-flex; }
@@ -407,7 +461,7 @@ tr.stale td { background: var(--danger-soft); }
 .msg.note { align-self: center; background: none; color: var(--muted); font-size: 12px; text-align: center; max-width: 100%; }
 .msg.bad { background: var(--warn-soft); border: 1px solid var(--warn-line); color: var(--warn); }
 .msg img { display: block; max-width: 180px; border-radius: 6px; margin-top: 6px; }
-.msg a.doc { display: block; margin-top: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--blue); text-decoration: none; background: var(--surface2); }
+.msg a.doc { display: flex; margin-top: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--blue); text-decoration: none; background: var(--surface2); }
 .send { display: flex; gap: 8px; flex: none; }
 .drawer-head { flex: none; }
 .send input { flex: 1; min-width: 0; }
@@ -492,6 +546,9 @@ tr.stale td { background: var(--danger-soft); }
   #attention td.sum { flex-basis: 100%; min-width: 0; max-width: none; }
   #attention td.acts { text-align: left; width: auto; }
   #attention .acts-in { flex-wrap: wrap; }
+  /* Kerangka "Perlu perhatian" di HP: 3 baris bergaya baris HP di atas (40 px + jarak 2 x 10 px + garis). */
+  .attention-body { min-height: 182px; }
+  #attention tr.skel-row td { flex: 1; }
   .savebar { left: 0; }
   .savebar-in { padding: 10px 16px; }
   .card > .ch { padding: 14px 14px 0; }

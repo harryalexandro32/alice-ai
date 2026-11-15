@@ -360,22 +360,41 @@ const PNG = Buffer.from(
       // --- Pengaturan: penerima, rute, dan setelan yang menimpa .env ---
       const rec = await put({
         recipients: [
-          { name: ' Pak Harry ', role: 'owner', phone: '0811 0000 0001', email: 'owner@contoh.com', telegram: '123456' },
-          { name: 'Rina', role: 'apa saja', phone: 'self', email: '', telegram: '' },
-          { name: '', role: 'staff', phone: '', email: '', telegram: '' },
+          { name: ' Pak Harry ', role: 'owner', phone: '0811 0000 0001', email: 'owner@contoh.com' },
+          { name: 'Rina', role: 'apa saja', phone: 'self', email: '' },
+          { name: '', role: 'staff', phone: '', email: '' },
         ],
         notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner' },
       });
       assert.equal(rec.status, 200);
       assert.deepEqual(biz.recipients, [
-        { name: 'Pak Harry', role: 'owner', phone: '+6281100000001', email: 'owner@contoh.com', telegram: '123456' },
-        { name: 'Rina', role: 'staff', phone: 'self', email: '', telegram: '' },
+        { name: 'Pak Harry', role: 'owner', phone: '+6281100000001', email: 'owner@contoh.com' },
+        { name: 'Rina', role: 'staff', phone: 'self', email: '' },
       ]);
       assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none' });
       assert.match((await put({ recipients: [{ name: 'X', phone: '12' }] })).body.error, /nomor WhatsApp/);
       assert.match((await put({ recipients: [{ name: 'X', email: 'bukan-email' }] })).body.error, /email/);
-      assert.match((await put({ recipients: [{ name: 'X', telegram: '@nama' }] })).body.error, /Telegram/);
       assert.match((await put({ recipients: [{ name: 'X' }] })).body.error, /minimal satu jalur/);
+
+      // Kompatibilitas: profil lama masih membawa jalur telegram (sudah dihapus). Penerima yang hanya
+      // punya jalur itu dibuang tanpa pesan, kolomnya tidak disimpan, dan dashboard tetap bisa memuat profilnya.
+      const legacyRows = [
+        { name: 'Lama', role: 'owner', phone: '', email: '', telegram: '123456' },
+        { name: 'Campur', role: 'staff', phone: '0811 0000 0002', email: '', telegram: '654321' },
+      ];
+      const old = await put({ recipients: legacyRows });
+      assert.equal(old.status, 200, 'penerima lama tidak membuat simpan gagal');
+      assert.deepEqual(biz.recipients, [{ name: 'Campur', role: 'staff', phone: '+6281100000002', email: '' }]);
+      const keptProfile = await getProfile('gfan');
+      await saveProfile('gfan', { ...keptProfile, recipients: legacyRows });
+      await refreshBiz(true);
+      assert.deepEqual(biz.recipients, [{ name: 'Campur', role: 'staff', phone: '0811 0000 0002', email: '' }], 'profil tersimpan: jalur lama dibuang saat dimuat');
+      const legacyState = await call('/api/gfan/state');
+      assert.equal(legacyState.status, 200);
+      assert.ok(legacyState.body.profile.recipients.every((r: Record<string, unknown>) => !('telegram' in r)), 'dashboard tidak menerima jalur lama');
+      assert.equal(legacyState.body.status.channels?.telegram, undefined);
+      await saveProfile('gfan', keptProfile);
+      await refreshBiz(true);
 
       const before = { after: cfg.followupAfterHours, vision: cfg.llmVision, only: [...cfg.onlyNumbers], perDay: cfg.waMaxPerDay };
       const set = await put({ settings: { followupAfterHours: 20, waMaxPerDay: '', llmPriceIn: 0.25, llmVision: false, onlyNumbers: ['0812 1111 0001'], adminPassword: 'x', dbPath: 'y' } });

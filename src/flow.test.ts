@@ -446,9 +446,9 @@ const tests: [string, () => Promise<void>][] = [
     const STAFF1 = '+6281100000002';
     const STAFF2 = '+6281100000003';
     biz.recipients = [
-      { name: 'Pak Harry', role: 'owner', phone: OWNER, email: 'owner@contoh.com', telegram: '111' },
-      { name: 'Rina', role: 'staff', phone: STAFF1, email: '', telegram: '' },
-      { name: 'Dedi', role: 'staff', phone: STAFF2, email: 'dedi@contoh.com', telegram: '' },
+      { name: 'Pak Harry', role: 'owner', phone: OWNER, email: 'owner@contoh.com' },
+      { name: 'Rina', role: 'staff', phone: STAFF1, email: '' },
+      { name: 'Dedi', role: 'staff', phone: STAFF2, email: 'dedi@contoh.com' },
     ];
     assert.deepEqual(waTargets('lead'), [STAFF1, STAFF2], 'lead -> staf (bawaan)');
     assert.deepEqual(waTargets('butuh-staf'), [STAFF1, STAFF2]);

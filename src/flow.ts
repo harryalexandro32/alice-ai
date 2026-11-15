@@ -259,7 +259,7 @@ async function notifyStaff(c: Contact, kind: string, lastMessage: string, at: nu
   if (c.handoff_sent_at && at - c.handoff_sent_at < STAFF_NOTIFY_GAP) return c;
   const p = leadPayload(c, kind, lastMessage);
   await outboxAdd('sales', p, at);
-  // WhatsApp-nya sudah lewat antrean di atas; di sini hanya dashboard + Telegram.
+  // WhatsApp-nya sudah lewat antrean di atas; di sini hanya dashboard + email.
   await raiseAlert('butuh-staf', `${kind}: ${contactName(c) ?? c.phone} (${c.phone}): "${lastMessage.slice(0, 200)}"`, { key: c.phone, whatsapp: false });
   return updateContact(c.phone, { handoff_sent_at: at });
 }
@@ -628,7 +628,7 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     if (complete && !c.lead_sent_at) {
       const p = leadPayload(c, 'Lead lengkap', said);
       await outboxAdd('sales', p, at);
-      // WhatsApp lewat antrean di atas; email dan Telegram langsung.
+      // WhatsApp lewat antrean di atas; email langsung.
       void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} | ${biz.brand}`, salesText(p));
       signalDashboard();
       c = await updateContact(c.phone, { lead_sent_at: at });

@@ -3,7 +3,7 @@
  * "jam 8 pagi" berarti apa pun yang BOT_TZ katakan.
  *
  * .env hanya memuat yang dipakai bersama semua proyek (database, LLM,
- * dashboard, Telegram/SMTP). Yang khas satu bot (jalur WhatsApp, nomor
+ * dashboard, SMTP). Yang khas satu bot (jalur WhatsApp, nomor
  * sales, nomor bot, mode uji, follow-up) ada di database, per proyek.
  */
 
@@ -103,10 +103,8 @@ const base = {
   quietStartHour: 0,
   quietEndHour: 7,
 
-  // Warning untuk pemilik lewat Telegram (opsional; lihat src/alerts.ts).
-  telegramToken: str('TELEGRAM_BOT_TOKEN'),
-  telegramChat: str('TELEGRAM_CHAT_ID'),
-  // Email lewat SMTP (opsional). Rahasia: hanya di .env, tidak pernah di dashboard.
+  // Warning untuk pemilik lewat email SMTP (opsional; lihat src/alerts.ts).
+  // Rahasia: hanya di .env, tidak pernah di dashboard.
   smtpHost: str('SMTP_HOST'),
   smtpPort: num('SMTP_PORT', 465),
   smtpUser: str('SMTP_USER'),

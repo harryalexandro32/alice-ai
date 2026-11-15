@@ -37,6 +37,15 @@ function decorateSummaries(root = document) {
     s.prepend(c);
   }
 }
+/**
+ * Tautan ke berkas PDF (dibuka di tab baru): ikon file-text abu-abu lalu nama berkasnya.
+ * Nama berkas diketik orang, jadi dipasang lewat textContent.
+ */
+function fileLink(href, name, className = '') {
+  const i = ico('file-text');
+  i.classList.add('fico');
+  return el('a', { className: 'filelink' + (className ? ' ' + className : ''), href, target: '_blank', rel: 'noopener', title: name }, i, el('span', { textContent: name }));
+}
 /** Isi tombol (atau tautan) dengan ikon + teks; teksnya tetap lewat textContent. */
 function withIcon(node, name, text) {
   node.replaceChildren(ico(name), text);
@@ -311,11 +320,10 @@ function renderRecipients() {
     role.addEventListener('change', () => { r.role = role.value; touch(); });
     const cell = (k, ph) => el('td', { className: k === 'name' ? 'first' : '' }, cellInput(r[k], (v) => { r[k] = v; touch(); }, ph));
     return el('tr', {}, cell('name', T('mis. Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')), cell('email', 'nama@contoh.com'),
-      cell('telegram', T('id chat, mis. 123456789', 'chat id, e.g. 123456789')),
       el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 6, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima. Selama kosong, bot memakai nomor sales proyek (kartu Proyek di Pengaturan > Umum).', 'No recipients yet. While empty, the bot uses the project\'s sales number (Project card in Settings > General).') })));
-  $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp', 'Email', 'Telegram']), body);
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 5, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima. Selama kosong, bot memakai nomor sales proyek (kartu Proyek di Pengaturan > Umum).', 'No recipients yet. While empty, the bot uses the project\'s sales number (Project card in Settings > General).') })));
+  $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp', 'Email']), body);
 
   const opts = [['owner', T('Pemilik', 'Owner')], ['staff', T('Staf', 'Staff')], ['both', T('Pemilik dan staf', 'Owner and staff')], ['none', T('Tidak dikirim', 'Not sent')]];
   $('routes').replaceChildren(el('thead', {}, el('tr', {}, el('th', { textContent: T('Jenis kabar', 'Kind of news') }), el('th', { textContent: T('Dikirim ke', 'Sent to') }))),
@@ -331,11 +339,11 @@ function renderRecipients() {
   const no = T('belum diatur di .env bot', 'not set in the bot\'s .env');
   $('channels').textContent = !ch
     ? T('Bot belum melapor, jadi belum diketahui jalur mana yang siap.', 'The bot has not reported yet, so it is unknown which channels are ready.')
-    : 'WhatsApp: ' + yes + ' · Email: ' + (ch.email ? yes : no) + ' · Telegram: ' + (ch.telegram ? yes : no);
+    : 'WhatsApp: ' + yes + ' · Email: ' + (ch.email ? yes : no);
 }
 $('addRecipient').addEventListener('click', () => {
   if (profile.recipients.length >= 20) return toast(T('Maksimal 20 orang.', '20 people max.'), true);
-  profile.recipients.push({ name: '', role: 'staff', phone: '', email: '', telegram: '' });
+  profile.recipients.push({ name: '', role: 'staff', phone: '', email: '' });
   setDirty(true, 'recipients');
   renderRecipients();
 });
@@ -441,7 +449,7 @@ function renderPdfs() {
       } catch (e) { toast(e.message, true); }
       renderPdfs();
     });
-    return el('tr', {}, el('td', {}, el('a', { href: mediaBase() + f.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + f.name })),
+    return el('tr', {}, el('td', {}, fileLink(mediaBase() + f.file, f.name)),
       el('td', {}, chips), el('td', {}, el('label', { className: 'switch' }, read)), el('td', { className: 'acts' }, re, del));
   });
   $('pdfs').replaceChildren(head, el('tbody', {}, ...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 4, style: 'color:var(--muted)', textContent: T('Belum ada PDF. Unggah brosur atau katalog Anda.', 'No PDFs yet. Upload your brochures or catalogues.') }))])));
@@ -683,7 +691,7 @@ function renderProducts() {
     let pdf;
     const cur = fileOf(p.pdf);
     if (cur) {
-      pdf = el('div', { className: 'pdf' }, el('a', { href: mediaUrl(p.pdf), target: '_blank', rel: 'noopener', textContent: '📄 ' + cur.name, title: cur.name }),
+      pdf = el('div', { className: 'pdf' }, fileLink(mediaUrl(p.pdf), cur.name),
         xBtn(T('Lepas PDF', 'Remove PDF'), () => { p.pdf = ''; touchProducts(); renderProducts(); renderPdfs(); }, 'x'));
     } else {
       const sel = el('select', {}, el('option', { value: '', textContent: T('Tanpa PDF', 'No PDF') }),
@@ -887,7 +895,7 @@ const chatHint = () => el('div', { className: 'msg note', textContent: T('Ketik 
 function addMsg(cls, text, photos, docs) {
   const m = el('div', { className: 'msg ' + cls, textContent: text });
   for (const p of photos || []) m.append(el('img', { src: mediaBase() + p.file, alt: p.name, title: p.name }));
-  for (const d of docs || []) m.append(el('a', { className: 'doc', href: mediaBase() + d.file, target: '_blank', rel: 'noopener', textContent: '📄 ' + d.name }));
+  for (const d of docs || []) m.append(fileLink(mediaBase() + d.file, d.name, 'doc'));
   $('chat').append(m);
   $('chat').scrollTop = $('chat').scrollHeight;
   return m;
@@ -956,15 +964,61 @@ const usd = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: n < 
 const idr = (n) => 'Rp ' + n.toLocaleString(locale(), { maximumFractionDigits: n < 100 ? 1 : 0 });
 const pct = (a, b) => (b ? Math.round((a * 100) / b) + '%' : '-');
 const emptyRow = (cols, text) => el('tr', {}, el('td', { colSpan: cols, style: 'color:var(--muted)', textContent: text }));
+/** Pesan error di dalam satu kartu (data kartu itu gagal dimuat); kartu lain tetap tampil. */
+const loadError = (msg) => T('Gagal memuat: ', 'Failed to load: ') + msg;
+const errorNote = (msg) => el('p', { className: 'help load-err', textContent: loadError(msg) });
+/** Pesan dari hasil Promise.allSettled yang gagal; '' kalau berhasil. */
+const failure = (r) => (r.status === 'rejected' ? (r.reason && r.reason.message) || String(r.reason) : '');
+
+// ---------- kerangka muat (skeleton) ----------
+// Saat satu halaman dibuka, tiap wadah datanya langsung diisi kerangka abu-abu seukuran isi akhirnya
+// (digambar tanpa menunggu server), lalu ditukar dengan isinya sekali saja setelah SEMUA permintaan
+// halaman itu selesai (Promise.allSettled). Jadi kartu tidak melompat satu per satu saat data datang.
+// Kotak angka memakai kerangka teks (skelText): teks contoh yang sama panjang, jadi baris yang membungkus
+// sama dengan isi akhirnya. Animasi kilau ada di app.css dan mati kalau pengguna memilih gerak dikurangi.
+/** Tinggi grafik batang (SVG di columnChart); kerangka grafik memakai tinggi yang sama. */
+const CHART_H = 190;
+/** Teks contoh berbentuk balok abu-abu (huruf tidak terlihat), selebar dan sebaris teks aslinya. */
+function skelText(sample) {
+  const n = el('span', { className: 'skel-text', textContent: sample });
+  n.setAttribute('aria-hidden', 'true');
+  return n;
+}
+/**
+ * Kerangka sejenis, sebanyak n:
+ * - 'chart': balok setinggi grafik batang;
+ * - 'row': baris tabel 40 px (satu sel selebar tabel);
+ * - 'qrow': baris pertanyaan 48 px.
+ */
+function skeleton(kind, n = 1) {
+  const bar = (width, height) => {
+    const b = el('span', { className: 'skel' });
+    b.setAttribute('aria-hidden', 'true');
+    b.style.width = width;
+    if (height) b.style.height = height;
+    return b;
+  };
+  const widths = ['92%', '78%', '64%'];
+  return Array.from({ length: n }, (_, i) => {
+    if (kind === 'chart') return bar('100%', CHART_H + 'px');
+    if (kind === 'row') return el('tr', { className: 'skel-row' }, el('td', { colSpan: 12 }, bar(widths[i % 3])));
+    if (kind === 'qrow') return el('div', { className: 'skel-qrow' }, bar(widths[(i + 1) % 3]), bar('88px'));
+    throw new Error('kerangka tidak dikenal: ' + kind);
+  });
+}
+/** Tandai wadah sedang dimuat (aria-busy), supaya pembaca layar tidak membacakan kerangkanya. */
+function busy(ids, on) {
+  for (const id of ids) $(id).setAttribute('aria-busy', String(on));
+}
 
 // ---------- grafik ----------
 // Grafik sebagai SVG polos yang digambar di sini (dashboard tanpa pustaka grafik).
-// Semua grafik memakai columnChart (batang per hari, tunggal atau bertumpuk) dan
-// stackedBar100 (satu batang 100 %), supaya tampilan dan perilakunya sama:
+// Semua grafik memakai columnChart (batang per hari, tunggal atau bertumpuk), supaya
+// tampilan dan perilakunya sama:
 // - seri N selalu berwarna --viz-N (urutan tetap, tidak diputar atau diurutkan ulang);
 // - teks memakai warna teks; identitas seri hanya dari kotak warna di sampingnya;
 // - legenda hanya kalau ada 2 seri atau lebih;
-// - tiap batang/segmen bisa disorot dengan tetikus dan papan ketik (satu tooltip per grafik);
+// - tiap batang bisa disorot dengan tetikus dan papan ketik (satu tooltip per grafik);
 // - tombol "Tabel" menukar grafik dengan tabel angkanya: tidak ada angka yang hanya ada di tooltip.
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const COL_MAX = 24; // batang paling tebal
@@ -1072,12 +1126,9 @@ function placeTip(tip, plotWidth, x0, x1, top) {
   tip.style.top = Math.round(top) + 'px';
 }
 
-/** Legenda: kotak warna + nama (+ jumlah); kalau ada href, tiap butir adalah tautan. */
+/** Legenda: kotak warna + nama seri. */
 function legend(items) {
-  return el('div', { className: 'legend' }, ...items.map((it) => {
-    const kids = [swatch(it.slot), el('span', { textContent: it.label }), it.count !== undefined ? el('b', { textContent: it.count }) : null];
-    return it.href ? el('a', { href: it.href }, ...kids) : el('div', {}, ...kids);
-  }));
+  return el('div', { className: 'legend' }, ...items.map((it) => el('div', {}, swatch(it.slot), el('span', { textContent: it.label }))));
 }
 
 /** Teks label sumbu x: di tengah batangnya, tapi digeser masuk kalau akan terpotong di tepi. */
@@ -1093,8 +1144,17 @@ function edgeText(x, y, text, w, width, cls) {
  * series: [{ key, label, slot }] dengan slot 1–4 = --viz-1…4. Tanpa stacked hanya seri pertama yang dipakai.
  * format: angka -> teks untuk sumbu, label, tooltip, dan tabel (bawaan: bilangan bulat dengan pemisah ribuan).
  */
-function columnChart({ el: host, title, help, days, series, stacked = false, format = int }) {
+function columnChart({ el: host, title, help, days, series, stacked = false, format = int, error = '' }) {
   const ser = stacked ? series : series.slice(0, 1);
+  // Belum ada data (days null): judul, keterangan, dan legenda asli, grafiknya diganti kerangka setinggi grafik.
+  // Data gagal dimuat: pesan error di tempat grafiknya.
+  if (!days || error) {
+    const { view, plot, table } = chartFrame(host, title, help);
+    if (ser.length >= 2) view.append(legend(ser.map((s) => ({ slot: s.slot, label: s.label }))));
+    plot.replaceChildren(...(error ? [errorNote(error)] : skeleton('chart')));
+    table.replaceChildren(...(error ? [errorNote(error)] : skeleton('chart')));
+    return;
+  }
   const val = (d, s) => Number(d[s.key]) || 0;
   const totalOf = (d) => ser.reduce((a, s) => a + val(d, s), 0);
   const peak = Math.max(0, ...days.map(totalOf));
@@ -1112,7 +1172,7 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
       showSum ? td(format(days.reduce((a, d) => a + totalOf(d), 0)), true) : null))));
 
   const draw = (W) => {
-    const H = 190, mt = 20, mb = 24, mr = 2;
+    const H = CHART_H, mt = 20, mb = 24, mr = 2;
     const { top, ticks } = niceTicks(peak);
     const empty = peak === 0;
     const left = empty ? 0 : Math.ceil(Math.max(...ticks.map((v) => textWidth(format(v))))) + 8;
@@ -1210,82 +1270,26 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
   onWidth(plot, draw);
 }
 
-/**
- * Satu batang mendatar 100 % (bagian dari keseluruhan).
- * parts: [{ key, label, value, slot, href }] dalam urutan tetap; klik segmen atau butir legenda membuka href.
- */
-function stackedBar100({ el: host, title, help, parts }) {
-  const total = parts.reduce((a, p) => a + p.value, 0);
-  const { view, plot, tip, table } = chartFrame(host, title, help);
-  view.append(legend(parts.map((p) => ({ slot: p.slot, label: p.label, count: int(p.value), href: p.href }))));
-  const td = (kid, num) => el('td', { className: num ? 'num' : '' }, kid);
-  table.append(el('table', { className: 'list' },
-    el('thead', {}, el('tr', {}, el('th', { textContent: T('Tahap', 'Stage') }), el('th', { className: 'num', textContent: T('Jumlah', 'Count') }), el('th', { className: 'num', textContent: '%' }))),
-    el('tbody', {}, ...parts.map((p) => el('tr', {}, td(el('a', { href: p.href, textContent: p.label })), td(int(p.value), true), td(pct(p.value, total), true)))),
-    el('tfoot', {}, el('tr', {}, td('Total'), td(int(total), true), td(total ? '100%' : '-', true)))));
-
-  const draw = (W) => {
-    const H = 30, bh = 28;
-    const root = svg('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, role: 'group', 'aria-label': title });
-    if (!total) {
-      root.append(svg('rect', { class: 'track', x: 0, y: 0, width: W, height: bh, rx: RADIUS }));
-      root.append(svg('text', { class: 'empty', x: W / 2, y: bh / 2 + 4, 'text-anchor': 'middle' }, T('Belum ada data', 'No data yet')));
-      plot.replaceChildren(root, tip);
-      tip.hidden = true;
-      return;
-    }
-    const shown = parts.filter((p) => p.value > 0);
-    const avail = W - GAP * (shown.length - 1);
-    const marks = [];
-    let x = 0;
-    shown.forEach((p, j) => {
-      const w = j === shown.length - 1 ? W - x : Math.max(3, (avail * p.value) / total);
-      const rl = j === 0 ? RADIUS : 0, rr = j === shown.length - 1 ? RADIUS : 0;
-      const mark = svg('path', { class: 'mark viz' + p.slot, d: roundRect(x, 0, w, bh, [rl, rr, rr, rl]) });
-      root.append(mark);
-      // Label di dalam segmen hanya kalau muat dengan jarak 8 px di kiri-kanan.
-      const full = p.label + ' ' + int(p.value);
-      const text = textWidth(full, '600 12px') + 16 <= w ? full : textWidth(int(p.value), '600 12px') + 16 <= w ? int(p.value) : '';
-      if (text) root.append(svg('text', { class: 'seg-label on' + p.slot, x: x + w / 2, y: bh / 2 + 4, 'text-anchor': 'middle' }, text));
-      marks.push({ p, x, w, mark });
-      x += w + GAP;
-    });
-    const hide = () => { tip.hidden = true; for (const m of marks) m.mark.classList.remove('hot'); };
-    for (const m of marks) {
-      const rows = parts.map((p) => ({ slot: p.slot, value: int(p.value) + ' (' + pct(p.value, total) + ')', label: p.label, cur: p === m.p }));
-      const hit = svg('rect', { class: 'hit link', x: m.x, y: 0, width: m.w, height: bh, tabindex: 0, role: 'link',
-        'aria-label': m.p.label + ': ' + int(m.p.value) + ' (' + pct(m.p.value, total) + '). ' + T('Buka daftarnya.', 'Open the list.') });
-      const show = () => {
-        hide();
-        m.mark.classList.add('hot');
-        fillTip(tip, title, rows, { value: int(total), label: 'Total' });
-        // Di bawah batang, sejajar dengan segmen yang disorot.
-        const tw = tip.offsetWidth;
-        tip.style.left = Math.round(Math.max(0, Math.min(W - tw, m.x + m.w / 2 - tw / 2))) + 'px';
-        tip.style.top = (bh + 8) + 'px';
-      };
-      const open = () => void go(m.p.href);
-      hit.addEventListener('mouseenter', show);
-      hit.addEventListener('focus', show);
-      hit.addEventListener('mouseleave', hide);
-      hit.addEventListener('blur', hide);
-      hit.addEventListener('click', open);
-      hit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-      root.append(hit);
-    }
-    plot.replaceChildren(root, tip);
-    tip.hidden = true;
-  };
-  onWidth(plot, draw);
-}
-
 const STAGES = ['baru', 'dihubungi', 'closing', 'batal'];
 const stageLabel = (s) => ({ baru: T('Baru', 'New'), dihubungi: T('Dihubungi', 'Contacted'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
+/**
+ * Warna tiap tahap: satu sumber untuk chip Beranda, saringan Percakapan, dan pilihan tahap.
+ * Kelasnya ada di app.css (.stage-baru …) dan mengisi --st-bg / --st-fg untuk tema terang dan gelap:
+ * baru biru, dihubungi oranye, closing hijau, batal abu-abu.
+ */
+const STAGE_COLOR = { baru: 'stage-baru', dihubungi: 'stage-dihubungi', closing: 'stage-closing', batal: 'stage-batal' };
+const stageClass = (s) => STAGE_COLOR[s] || STAGE_COLOR.baru;
+/** Pilihan tahap berwarna sesuai tahap yang terpilih. */
+function paintStage(sel) {
+  sel.classList.remove(...Object.values(STAGE_COLOR));
+  sel.classList.add('stagesel', stageClass(sel.value));
+}
 function stageSelect(value, onChange) {
   const sel = el('select', {}, ...STAGES.map((s) => el('option', { value: s, textContent: stageLabel(s) })));
   sel.value = value || 'baru';
+  paintStage(sel);
   sel.setAttribute('aria-label', T('Tahap', 'Stage'));
-  sel.addEventListener('change', () => onChange(sel.value, sel));
+  sel.addEventListener('change', () => { paintStage(sel); onChange(sel.value, sel); });
   return sel;
 }
 /** Simpan tahap pipeline satu pelanggan. */
@@ -1305,13 +1309,26 @@ function nameOf(c) {
 // ---------- lead / percakapan ----------
 let leadData = null;
 let leadFilter = 'semua';
+/** Halaman Percakapan baru dibuka dan daftarnya belum datang: tabel berisi kerangka. */
+let leadsPending = false;
+/** Pesan error muat daftar terakhir ('' = berhasil). */
+let leadError = '';
 
 async function loadLeads() {
+  const pid = project;
   try {
-    leadData = await api('leads');
-    renderLeads();
-    setBadge();
-  } catch (e) { toast(e.message, true); }
+    const r = await api('leads');
+    if (pid !== project) return;
+    leadData = r;
+    leadError = '';
+  } catch (e) {
+    if (pid !== project) return;
+    leadError = e.message;
+    toast(e.message, true);
+  }
+  leadsPending = false;
+  renderLeads();
+  setBadge();
 }
 
 const FILTERS = () => [
@@ -1329,18 +1346,34 @@ function visibleLeads() {
   });
 }
 
-function renderFilters() {
+/** Saringan; loading = jumlahnya belum diketahui (kerangka). Saringan tahap memakai warna tahapnya. */
+function renderFilters(loading = false) {
   const rows = leadData ? leadData.rows : [];
   $('leadFilters').replaceChildren(...FILTERS().map(([k, label]) => {
-    const b = el('button', { type: 'button', className: k === leadFilter ? 'on' : '' }, label, el('small', { textContent: String(rows.filter((c) => matchFilter(c, k)).length) }));
+    const stage = STAGE_COLOR[k];
+    const count = loading ? skelText('00') : el('small', { textContent: String(rows.filter((c) => matchFilter(c, k)).length) });
+    const b = el('button', { type: 'button', className: [k === leadFilter ? 'on' : '', stage || ''].join(' ').trim() },
+      stage ? el('span', { className: 'dot' }) : null, label, count);
+    if (stage) b.dataset.stage = k;
     b.setAttribute('aria-pressed', String(k === leadFilter));
     b.addEventListener('click', () => { leadFilter = k; renderLeads(); });
     return b;
   }));
 }
 
+/** Daftar belum ada: kerangka selama dimuat, pesan error kalau gagal. */
+function renderLeadsPending() {
+  const failed = !leadsPending && leadError;
+  renderFilters(!failed);
+  busy(['leads'], !failed);
+  $('leadCount').replaceChildren(failed ? '' : skelText(T('00 dari 00 kontak', '00 of 00 contacts')));
+  $('leads').replaceChildren(el('tbody', {}, ...(failed ? [emptyRow(1, loadError(leadError))] : skeleton('row', 3))));
+}
+
 function renderLeads() {
-  if (!leadData || !profile) return;
+  if (!profile) return;
+  if (leadsPending || !leadData) return renderLeadsPending();
+  busy(['leads'], false);
   const r = leadData;
   renderFilters();
   const nameKey = (profile.leadFields.find((f) => f.isName) || {}).key;
@@ -1369,7 +1402,7 @@ function renderLeads() {
     const why = holdLabel(c.hold);
     const stage = stageSelect(c.stage, async (v, sel) => {
       sel.disabled = true;
-      try { await putStage(c.phone, v); renderFilters(); } catch (e) { toast(e.message, true); sel.value = c.stage; }
+      try { await putStage(c.phone, v); renderFilters(); } catch (e) { toast(e.message, true); sel.value = c.stage || 'baru'; paintStage(sel); }
       sel.disabled = false;
     });
     const name = nameOf(c);
@@ -1518,6 +1551,7 @@ function renderConvHead() {
     $('convStage').dataset.lang = lang;
   }
   if (document.activeElement !== $('convStage')) $('convStage').value = c.stage || 'baru';
+  paintStage($('convStage'));
   // Catatan yang sedang diketik tidak ditimpa oleh pembaruan berkala.
   if (document.activeElement !== $('convNote') && !noteTimer) $('convNote').value = c.note || '';
   const facts = conv.fields.map((f) => [f.label, c.lead[f.key]]).filter(([, v]) => v);
@@ -1638,11 +1672,12 @@ $('convHandled').addEventListener('click', async () => {
 });
 
 $('convStage').addEventListener('change', async () => {
+  paintStage($('convStage'));
   if (!conv || !conv.contact) return;
   try {
     const r = await putStage(conv.phone, $('convStage').value);
     conv.contact.stage = r.stage;
-  } catch (e) { toast(e.message, true); $('convStage').value = conv.contact.stage; }
+  } catch (e) { toast(e.message, true); $('convStage').value = conv.contact.stage || 'baru'; paintStage($('convStage')); }
 });
 
 async function saveNote() {
@@ -1724,19 +1759,28 @@ async function resolveQuestion(g, resolution, answer, buttons) {
 }
 
 // ---------- beranda ----------
+/** Data Beranda; null = halaman baru dibuka dan datanya belum datang (kerangka). */
 let homeData = null;
 /** Jendela grafik Beranda (hari); angka di kotak tetap 7 hari. */
 const CHART_DAYS = 14;
 
+/**
+ * Muat semua data Beranda sekaligus. Kartu baru ditukar dari kerangka ke isinya setelah keempat
+ * permintaan selesai; permintaan yang gagal hanya membuat kartunya sendiri menampilkan error.
+ */
 async function loadHome() {
-  try {
-    const [metrics, trend, h, leads] = await Promise.all([api('metrics'), api('metrics?days=' + CHART_DAYS), api('handoffs?status=open'), api('leads')]);
-    homeData = { metrics, trend };
-    handoffData = h.groups;
-    leadData = leads;
-    renderHome();
-    setBadge();
-  } catch (e) { toast(e.message, true); }
+  const pid = project;
+  const res = await Promise.allSettled([api('metrics'), api('metrics?days=' + CHART_DAYS), api('handoffs?status=open'), api('leads')]);
+  if (pid !== project) return; // proyek sudah diganti selagi menunggu
+  const [metrics, trend, h, leads] = res.map((r) => (r.status === 'fulfilled' ? r.value : null));
+  const [eMetrics, eTrend, eHandoffs, eLeads] = res.map(failure);
+  if (h) handoffData = h.groups;
+  if (leads) leadData = leads;
+  homeData = { metrics, trend, errors: { metrics: eMetrics, trend: eTrend, handoffs: eHandoffs, leads: eLeads } };
+  renderHome();
+  setBadge();
+  const err = [eMetrics, eTrend, eHandoffs, eLeads].find(Boolean);
+  if (err) toast(err, true);
 }
 
 /** Lama waktu dalam detik -> "45 dtk" / "3 mnt" / "1 jam". */
@@ -1747,39 +1791,82 @@ function duration(s) {
   return T('≥ 1 jam', '≥ 1 h');
 }
 
-function renderHome() {
-  if (!homeData) return;
-  const m = homeData.metrics;
-  const tile = (k, v, s, extra) => el('div', { className: 'tile' }, el('div', { className: 'k', textContent: k }), el('div', { className: 'v', textContent: v }), extra || null, el('div', { className: 's', textContent: s }));
-  // Meter: jalur biru muda, isinya sepanjang rasio; angkanya tetap judul kotak.
-  const meter = (a, b) => {
-    const n = el('div', { className: 'meter' }, el('span', { style: 'width:' + (b ? Math.min(100, (a * 100) / b) : 0) + '%' }));
-    n.setAttribute('aria-hidden', 'true');
-    return n;
-  };
-  const week = m.days.reduce((a, d) => a + d.conversations, 0);
-  $('tiles').replaceChildren(
-    tile(T('Percakapan hari ini', 'Conversations today'), int(m.today), T('Orang yang chat hari ini; ', 'People chatting today; ') + int(week) + T(' dalam 7 hari', ' in 7 days')),
-    tile(T('Dioper ke staf', 'Handed to staff'), pct(m.handed.count, m.handed.total), int(m.handed.count) + T(' dari ', ' of ') + int(m.handed.total) + T(' percakapan dalam 7 hari', ' conversations in 7 days'), meter(m.handed.count, m.handed.total)),
-    tile(T('Waktu balas median', 'Median reply time'), duration(m.replyMedianSec), T('Dari pesan pelanggan sampai balasan bot', 'From a customer message to the bot\'s reply')),
-    tile(T('Follow-up dijawab', 'Follow-ups answered'), pct(m.followup.answered, m.followup.sent), int(m.followup.answered) + T(' dari ', ' of ') + int(m.followup.sent) + T(' pelanggan membalas dalam 48 jam', ' customers replied within 48 h'), meter(m.followup.answered, m.followup.sent)));
+/**
+ * Kotak angka. loading = kerangka: angka dan keterangannya jadi balok abu-abu dengan teks contoh
+ * yang sama panjang, jadi tinggi kotaknya sama dengan kotak yang sudah berisi.
+ */
+function tileNode(k, v, s, extra, loading = false) {
+  const val = (cls, text) => el('div', { className: cls }, loading ? skelText(text) : text);
+  return el('div', { className: 'tile' }, el('div', { className: 'k', textContent: k }), val('v', v), extra || null, val('s', s));
+}
+/** Meter: jalur biru muda, isinya sepanjang rasio; angkanya tetap judul kotak. */
+function meter(a, b, loading = false) {
+  const n = el('div', { className: 'meter' + (loading ? ' skel' : '') }, loading ? null : el('span', { style: 'width:' + (b ? Math.min(100, (a * 100) / b) : 0) + '%' }));
+  n.setAttribute('aria-hidden', 'true');
+  return n;
+}
+/** Angka nol untuk kerangka kotak Beranda (teks contohnya sepanjang teks asli). */
+const ZERO_METRICS = { today: 0, days: [], handed: { count: 0, total: 0 }, replyMedianSec: 0, followup: { answered: 0, sent: 0 } };
 
-  // Grafik: jendela CHART_DAYS hari (terlama di kiri); tahap lead dari semua kontak.
-  const t = homeData.trend;
-  columnChart({ el: $('chartConv'), title: T('Percakapan per hari', 'Conversations per day'),
-    help: T('Orang yang chat dengan bot, ' + t.windowDays + ' hari terakhir.', 'People who chatted with the bot, last ' + t.windowDays + ' days.'),
-    days: t.days, series: [{ key: 'conversations', label: T('Percakapan', 'Conversations'), slot: 1 }] });
-  columnChart({ el: $('chartMsgs'), title: T('Pesan per hari', 'Messages per day'), stacked: true,
-    help: T('Pesan masuk dan balasan, ' + t.windowDays + ' hari terakhir.', 'Incoming messages and replies, last ' + t.windowDays + ' days.'),
-    days: t.messagesByDay, series: [
+function renderHome() {
+  const d = homeData;
+  const loading = !d;
+  const errors = d ? d.errors : {};
+  busy(['tiles', 'chartConv', 'chartMsgs', 'stageChips', 'attention', 'homeQuestions'], loading);
+
+  // Kotak angka (7 hari).
+  if (errors.metrics) {
+    $('tiles').replaceChildren(el('div', { className: 'tile tile-err' }, errorNote(errors.metrics)));
+  } else {
+    const m = loading ? ZERO_METRICS : d.metrics;
+    const week = m.days.reduce((a, x) => a + x.conversations, 0);
+    const pctText = (a, b) => (loading ? '00%' : pct(a, b));
+    $('tiles').replaceChildren(
+      tileNode(T('Percakapan hari ini', 'Conversations today'), loading ? '00' : int(m.today), T('Orang yang chat hari ini; ', 'People chatting today; ') + int(week) + T(' dalam 7 hari', ' in 7 days'), null, loading),
+      tileNode(T('Dioper ke staf', 'Handed to staff'), pctText(m.handed.count, m.handed.total), int(m.handed.count) + T(' dari ', ' of ') + int(m.handed.total) + T(' percakapan dalam 7 hari', ' conversations in 7 days'), meter(m.handed.count, m.handed.total, loading), loading),
+      tileNode(T('Waktu balas median', 'Median reply time'), loading ? T('00 dtk', '00 s') : duration(m.replyMedianSec), T('Dari pesan pelanggan sampai balasan bot', 'From a customer message to the bot\'s reply'), null, loading),
+      tileNode(T('Follow-up dijawab', 'Follow-ups answered'), pctText(m.followup.answered, m.followup.sent), int(m.followup.answered) + T(' dari ', ' of ') + int(m.followup.sent) + T(' pelanggan membalas dalam 48 jam', ' customers replied within 48 h'), meter(m.followup.answered, m.followup.sent, loading), loading));
+  }
+
+  // Grafik: jendela CHART_DAYS hari (terlama di kiri). Tanpa data: kerangka setinggi grafik.
+  const t = d && d.trend;
+  const win = t ? t.windowDays : CHART_DAYS;
+  columnChart({ el: $('chartConv'), title: T('Percakapan per hari', 'Conversations per day'), error: errors.trend,
+    help: T('Orang yang chat dengan bot, ' + win + ' hari terakhir.', 'People who chatted with the bot, last ' + win + ' days.'),
+    days: t ? t.days : null, series: [{ key: 'conversations', label: T('Percakapan', 'Conversations'), slot: 1 }] });
+  columnChart({ el: $('chartMsgs'), title: T('Pesan per hari', 'Messages per day'), stacked: true, error: errors.trend,
+    help: T('Pesan masuk dan balasan, ' + win + ' hari terakhir.', 'Incoming messages and replies, last ' + win + ' days.'),
+    days: t ? t.messagesByDay : null, series: [
       { key: 'in', label: T('Dari pelanggan', 'From customers'), slot: 1 },
       { key: 'out', label: T('Dibalas bot', 'Replied by the bot'), slot: 2 },
       { key: 'human', label: T('Dibalas admin', 'Replied by an admin'), slot: 3 }] });
-  stackedBar100({ el: $('chartStages'), title: T('Tahap lead', 'Lead stages'),
-    help: T('Semua kontak menurut tahapnya. Klik satu tahap untuk membuka daftarnya.', 'All contacts by stage. Click a stage to open its list.'),
-    parts: STAGES.map((s, i) => ({ key: s, label: stageLabel(s), value: Number(t.stages[s]) || 0, slot: i + 1, href: pathOf('percakapan') + '?stage=' + s })) });
+
+  // Tahap lead: satu chip per tahap (semua kontak), tiap chip membuka daftarnya.
+  $('stageChips').replaceChildren(...(errors.trend ? [errorNote(errors.trend)] : STAGES.map((s) => el('a', { className: 'stagechip ' + stageClass(s), href: pathOf('percakapan') + '?stage=' + s },
+    el('span', { textContent: stageLabel(s) }), t ? el('b', { textContent: int(Number(t.stages[s]) || 0) }) : skelText('00')))));
 
   // Perlu perhatian: pelanggan yang menunggu staf, lalu masalah bot 24 jam terakhir.
+  if (loading || errors.leads) {
+    $('attentionHelp').hidden = true;
+    $('attention').replaceChildren(el('tbody', {}, ...(loading ? skeleton('row', 3) : [emptyRow(4, loadError(errors.leads))])));
+  } else {
+    renderAttention();
+  }
+
+  // Pertanyaan yang belum terjawab (5 terbaru).
+  const qs = (handoffData || []).slice(0, 5);
+  $('homeQuestions').replaceChildren(...(loading ? skeleton('qrow', 3)
+    : errors.handoffs ? [errorNote(errors.handoffs)]
+    : qs.length ? qs.map((g) => el('div', { className: 'qrow' },
+      el('a', { className: 'q link', href: pathOf('lainnya') + '#questions', textContent: g.question, title: g.question }),
+      el('small', { textContent: g.count + '× · ' + when(g.last_at) })))
+    : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang dioper ke staf.', 'No questions handed to staff yet.') })]));
+  $('allQuestions').textContent = !loading && (handoffData || []).length > 5
+    ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan > Lainnya →', 'Open in Knowledge > Other →');
+}
+
+/** Isi kartu "Perlu perhatian" dari daftar pelanggan dan warning bot. */
+function renderAttention() {
   const rows = [];
   for (const c of (leadData ? leadData.rows : []).filter((x) => x.needsSales)) {
     const done = el('button', { className: 'btn ghost', type: 'button' }, ico('check-circle'), T('Sudah ditangani', 'Handled'));
@@ -1815,13 +1902,6 @@ function renderHome() {
       el('td', { colSpan: 2, textContent: T('Bot terakhir melapor ', 'The bot last reported ') + mins + T(' menit lalu. Kemungkinan bot mati atau mesinnya tidak tersambung internet.', ' minutes ago. It is probably stopped, or its machine is offline.') })));
   }
   $('attention').replaceChildren(el('tbody', {}, ...(rows.length ? rows : [emptyRow(4, T('Tidak ada yang perlu perhatian.', 'Nothing needs attention.'))])));
-
-  const qs = (handoffData || []).slice(0, 5);
-  $('homeQuestions').replaceChildren(...(qs.length ? qs.map((g) => el('div', { className: 'qrow' },
-    el('a', { className: 'q link', href: pathOf('lainnya') + '#questions', textContent: g.question, title: g.question }),
-    el('small', { textContent: g.count + '× · ' + when(g.last_at) }))) : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang dioper ke staf.', 'No questions handed to staff yet.') })]));
-  $('allQuestions').textContent = (handoffData || []).length > 5
-    ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan > Lainnya →', 'Open in Knowledge > Other →');
 }
 
 // ---------- warning & catatan error ----------
@@ -1855,23 +1935,21 @@ function setBadge() {
   if (n > 0) b.setAttribute('aria-label', tip); else b.removeAttribute('aria-label');
 }
 
-async function loadAlerts() {
-  try {
-    const r = await api('alerts');
-    state.alerts = r.alerts;
-    state.status = r.status;
-    setBadge();
-    const th = (...names) => el('thead', {}, el('tr', {}, ...names.map((n) => el('th', { textContent: n }))));
-    const rows = r.alerts.map((a) => el('tr', {}, el('td', { textContent: when(a.at), style: 'white-space:nowrap' }),
-      el('td', {}, el('span', { className: 'chip warn', textContent: (ALERT_KINDS[a.kind] || (() => a.kind))() })), el('td', { textContent: a.text })));
-    $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
-      el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada warning.', 'No alerts yet.'))])));
-    const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
-      el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? T('error', 'error') : T('warning', 'warning') })),
-      el('td', { className: 'mono', textContent: e.text })));
-    $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Isi', 'Message')),
-      el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
-  } catch (e) { toast(e.message, true); }
+/** Isi riwayat warning dan catatan error (Lanjutan) dari jawaban /alerts. */
+function renderAlerts(r) {
+  state.alerts = r.alerts;
+  state.status = r.status;
+  setBadge();
+  const th = (...names) => el('thead', {}, el('tr', {}, ...names.map((n) => el('th', { textContent: n }))));
+  const rows = r.alerts.map((a) => el('tr', {}, el('td', { textContent: when(a.at), style: 'white-space:nowrap' }),
+    el('td', {}, el('span', { className: 'chip warn', textContent: (ALERT_KINDS[a.kind] || (() => a.kind))() })), el('td', { textContent: a.text })));
+  $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
+    el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada warning.', 'No alerts yet.'))])));
+  const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
+    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? T('error', 'error') : T('warning', 'warning') })),
+    el('td', { className: 'mono', textContent: e.text })));
+  $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Isi', 'Message')),
+    el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
 }
 
 // ---------- pemakaian & biaya ----------
@@ -1881,19 +1959,30 @@ let usageData = null;
 let usageRange = 30;
 const USAGE_RANGES = [7, 30, 90];
 
-async function loadUsage() {
-  try {
-    usageData = { u: (await api('usage')).usage };
-    renderUsage();
-  } catch (e) { toast(e.message, true); }
+/**
+ * Muat halaman Lanjutan: pemakaian LLM dan riwayat warning sekaligus, lalu gambar keduanya sekali.
+ * Selama dimuat (usageData null) kartu pemakaian berisi kerangka.
+ */
+async function loadAdvanced() {
+  const pid = project;
+  const [u, a] = await Promise.allSettled([api('usage'), api('alerts')]);
+  if (pid !== project) return;
+  usageData = u.status === 'fulfilled' ? { u: u.value.usage } : { error: failure(u) };
+  renderUsage();
+  if (a.status === 'fulfilled') renderAlerts(a.value);
+  const err = failure(u) || failure(a);
+  if (err) toast(err, true);
 }
 
 /** Geser tanggal "YYYY-MM-DD" sekian hari (dihitung di UTC, jadi aman dari geser zona waktu). */
 const shiftDay = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 
 function renderUsage() {
-  if (!usageData) return;
-  const u = usageData.u;
+  // usageData null = sedang dimuat: kotak dan grafik berupa kerangka. usageData.error = gagal dimuat.
+  const loading = !usageData;
+  const error = (usageData && usageData.error) || '';
+  busy(['usageTiles', 'chartCost', 'chartCalls'], loading);
+  const u = usageData && usageData.u;
   const price = u ? u.price : { in: 0, cached: 0, out: 0 };
   const rate = u ? u.usdIdr : 0;
   const n = usageRange;
@@ -1936,9 +2025,10 @@ function renderUsage() {
 
   // Kotak angka: hari ini, seluruh rentang, dan rata-rata per hari dalam rentang.
   const total = sum(used);
-  const tile = (k, v, s) => el('div', { className: 'tile' }, el('div', { className: 'k', textContent: k }), el('div', { className: 'v', textContent: v }), el('div', { className: 's', textContent: s }));
+  const tile = (k, v, s) => tileNode(k, loading ? 'Rp 00.000' : v, s, null, loading);
   const todaySum = sum(used.filter((d) => d.day === last));
-  $('usageTiles').replaceChildren(
+  if (error) $('usageTiles').replaceChildren(el('div', { className: 'tile tile-err' }, errorNote(error)));
+  else $('usageTiles').replaceChildren(
     tile(T('Hari ini', 'Today'), idr(todaySum.usd * rate),
       usd(todaySum.usd) + ' · ' + int(todaySum.calls) + T(' balasan · ', ' replies · ') + int(todaySum.promptTokens + todaySum.completionTokens) + ' token'),
     tile(T(n + ' hari terakhir', 'Last ' + n + ' days'), idr(total.usd * rate),
@@ -1948,14 +2038,25 @@ function renderUsage() {
 
   // Grafik biaya: tiga bagian bertumpuk dalam Rupiah, urutan seri tetap.
   const host = $('chartCost');
-  columnChart({ el: host, title: T('Biaya per hari (Rp)', 'Cost per day (Rp)'), stacked: true, format: idr,
+  columnChart({ el: host, title: T('Biaya per hari (Rp)', 'Cost per day (Rp)'), stacked: true, format: idr, error,
     help: T('Perkiraan biaya LLM, ' + n + ' hari terakhir.', 'Estimated LLM cost, last ' + n + ' days.'),
-    days: days.map((d) => { const p = parts(d); return { day: d.day, in: p.in * rate, cached: p.cached * rate, out: p.out * rate }; }),
+    days: loading ? null : days.map((d) => { const p = parts(d); return { day: d.day, in: p.in * rate, cached: p.cached * rate, out: p.out * rate }; }),
     series: [
       { key: 'in', label: 'Input', slot: 1 },
       { key: 'cached', label: T('Input dari cache', 'Cached input'), slot: 2 },
       { key: 'out', label: 'Output', slot: 3 }] });
-  // Satu baris keterangan tarif dan kurs di bawah grafik.
+  // Satu baris keterangan tarif dan kurs di bawah grafik (selama dimuat: kerangka sepanjang teks biasanya).
+  if (loading) {
+    host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note' },
+      skelText(T('Model gpt-4o-mini · tarif per 1 juta token: input $0.1500, dari cache $0.0750, output $0.6000 · kurs Rp 16.000 per USD',
+        'Model gpt-4o-mini · rates per 1M tokens: input $0.1500, cached $0.0750, output $0.6000 · exchange rate Rp 16.000 per USD'))));
+  }
+  if (loading || error) {
+    columnChart({ el: $('chartCalls'), title: T('Panggilan LLM per hari', 'LLM calls per day'), error,
+      help: T('Jumlah panggilan ke LLM, ' + n + ' hari terakhir.', 'Number of LLM calls, last ' + n + ' days.'),
+      days: null, series: [{ key: 'calls', label: T('Panggilan', 'Calls'), slot: 1 }] });
+    return;
+  }
   if (u) {
     host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note', textContent: 'Model ' + u.model + T(' · tarif per 1 juta token: input ', ' · rates per 1M tokens: input ') + usd(price.in) +
       T(', dari cache ', ', cached ') + usd(price.cached) + ', output ' + usd(price.out) + T(' · kurs Rp ', ' · exchange rate Rp ') + int(rate) + T(' per USD', ' per USD') }));
@@ -1993,6 +2094,10 @@ const waLabel = (s) => (WA_STATES[s] ? WA_STATES[s]()[0] : s || '-');
 const showPhone = (p) => (p ? (/^\d+$/.test(p) ? '+' + p : p) : T('nomor belum diketahui', 'number not known yet'));
 let waTimer = null;
 let wa = null;
+/** Halaman WhatsApp baru dibuka dan laporan /wa belum datang: area keadaan berisi kerangka. */
+let waPending = false;
+/** Pesan error kalau laporan pertama gagal dimuat. */
+let waError = '';
 
 /** Keadaan bot (tabel di Pengaturan > WhatsApp), termasuk pengaman nomor dan antiban. */
 function renderStatus() {
@@ -2024,7 +2129,32 @@ function clearQr() {
   delete $('waQrImg').dataset.qr;
 }
 
+/** Area keadaan WhatsApp selama laporan pertama belum datang (kerangka) atau gagal dimuat (error). */
+function renderWaPending() {
+  const failed = !waPending && waError;
+  busy(['waState', 'waDetail', 'waFoot'], !failed);
+  $('waState').className = 'chip' + (failed ? ' danger' : '');
+  $('waState').replaceChildren(failed ? T('gagal memuat', 'failed to load') : skelText(T('menyambung…', 'connecting…')));
+  $('waQr').hidden = true;
+  $('waCodeBox').hidden = true;
+  // Tebak susunan akhirnya dari laporan bot terakhir (sudah ada di state): tersambung = baris rincian
+  // tanpa kotak kode pairing; belum = kotak kode pairing tanpa baris rincian. Jadi kartunya tidak melompat.
+  const st = state && state.status;
+  const reported = Boolean(st && st.reportedAt);
+  $('waSeen').replaceChildren(failed || !reported ? '' : skelText(T('laporan terakhir 12 Nov 2026 10.00', 'last report 12 Nov 2026 10:00')));
+  const linked = reported && st.wa === 'connected' && Date.now() - st.reportedAt < 120000;
+  const cloud = Boolean(state && state.project && state.project.transport === 'cloud');
+  if (!failed) $('waPairBox').hidden = linked || cloud;
+  $('waDetail').replaceChildren(failed ? loadError(waError) : linked ? skelText(T('Tersambung sebagai +6281234567890', 'Connected as +6281234567890')) : '');
+  $('waFoot').replaceChildren(failed ? '' : skelText(reported ? T('Jalur: baileys · versi bot 0.1.0 · dinyalakan 12 Nov 2026 10.00', 'Channel: baileys · bot version 0.1.0 · started 12 Nov 2026 10:00')
+    : WA_NEVER()));
+}
+/** Kaki kartu WhatsApp kalau bot proyek ini belum pernah melapor. */
+const WA_NEVER = () => T('Bot proyek ini belum pernah melapor. Di server, bot dinyalakan dalam ±1 menit setelah proyek dibuat.', 'This project\'s bot has never reported. On the server it starts within a minute after the project is created.');
+
 function renderWa() {
+  if (waPending || (!wa && waError)) return renderWaPending();
+  busy(['waState', 'waDetail', 'waFoot'], false);
   const w = wa && wa.wa;
   const p = state && state.project;
   // Laporan bot datang tiap 30 detik; lebih dari 2 menit diam = bot tidak jalan.
@@ -2058,17 +2188,27 @@ function renderWa() {
   $('waPairBox').hidden = connected || cloud;
   if (!$('waNumber').value && p && p.wa_number) $('waNumber').value = p.wa_number;
   $('waFoot').textContent = w ? [T('Jalur: ', 'Channel: ') + (w.transport || (p && p.transport) || '-'), w.version ? T('versi bot ', 'bot version ') + w.version : '',
-    w.started_at ? T('dinyalakan ', 'started ') + when(w.started_at) : ''].filter(Boolean).join(' · ') : T('Bot proyek ini belum pernah melapor. Di server, bot dinyalakan dalam ±1 menit setelah proyek dibuat.', 'This project\'s bot has never reported. On the server it starts within a minute after the project is created.');
+    w.started_at ? T('dinyalakan ', 'started ') + when(w.started_at) : ''].filter(Boolean).join(' · ') : WA_NEVER();
 }
 
 async function loadWa() {
   clearTimeout(waTimer);
   if (!project || page !== 'whatsapp') return;
+  const pid = project;
   try {
-    wa = await api('wa');
+    const r = await api('wa');
+    if (pid !== project) return;
+    wa = r;
+    waError = '';
+    waPending = false;
     renderWa();
     renderStrip();
-  } catch { /* dicoba lagi di putaran berikutnya */ }
+  } catch (e) {
+    // Dicoba lagi di putaran berikutnya. Laporan pertama yang gagal tampil sebagai error di kartunya.
+    if (pid !== project) return;
+    waError = e.message;
+    if (waPending) { waPending = false; renderWa(); }
+  }
   // Selama belum tersambung, QR dan kode pairing berganti cepat: periksa tiap 3 detik.
   const connected = wa && wa.wa && wa.wa.state === 'connected' && !wa.pending;
   waTimer = setTimeout(loadWa, connected ? 15000 : 3000);
@@ -2251,18 +2391,35 @@ function show(next, r = {}) {
   clearTimeout(convTimer);
   if (page !== 'chat') { if (noteTimer) void saveNote(); conv = null; }
   renderMeta();
-  if (page === 'beranda') void loadHome();
+  // Halaman berdata: kerangka digambar langsung (sebelum permintaan apa pun), lalu datanya dimuat.
+  // Pindah halaman dan ganti proyek memakai jalur yang sama.
+  if (page === 'beranda') {
+    homeData = null;
+    renderHome();
+    void loadHome();
+  }
   if (page === 'percakapan') {
-    // ?stage=<tahap> (mis. dari grafik "Tahap lead" di Beranda) memilih saringannya.
+    // ?stage=<tahap> (mis. dari chip "Tahap lead" di Beranda) memilih saringannya.
     const st = new URLSearchParams(location.search).get('stage');
     if (st && FILTERS().some(([k]) => k === st)) leadFilter = st;
+    leadsPending = true;
+    renderLeads();
     void loadLeads();
   }
   if (page === 'chat') void openConv(r.phone);
   if (page === 'lainnya') void loadHandoffs();
-  if (page === 'whatsapp') { renderStatus(); void loadWa(); }
+  if (page === 'whatsapp') {
+    renderStatus();
+    waPending = true;
+    renderWa();
+    void loadWa();
+  }
   if (page === 'notifikasi') renderRecipients();
-  if (page === 'lanjutan') { void loadUsage(); void loadAlerts(); }
+  if (page === 'lanjutan') {
+    usageData = null;
+    renderUsage();
+    void loadAdvanced();
+  }
   if (page === 'notfound') $('notFoundText').textContent = r.text || T('Alamat ini tidak ada di dashboard.', 'This address does not exist in the dashboard.');
   // Tautan ke bagian tertentu (#cost, #questions): buka lipatannya dan gulung ke sana.
   const target = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
@@ -2335,6 +2492,9 @@ async function openProject(id) {
   handoffData = null;
   conv = null;
   wa = null;
+  waError = '';
+  leadError = '';
+  usageData = null;
   $('waNumber').value = '';
   clearQr();
   $('chat').replaceChildren(chatHint());
@@ -2346,6 +2506,9 @@ async function openProject(id) {
   $('app').hidden = false;
   $('strip').hidden = false;
   renderAll();
+  // Tinggi kepala (kini dengan bilah keadaan) langsung ditulis, tidak menunggu ResizeObserver:
+  // kalau menunggu, isi halaman sempat tergambar setinggi kepala lama lalu melompat turun.
+  putHeight($('chrome'), '--chrome-h');
 }
 
 /** Baca alamat sekarang, buka proyeknya kalau perlu, lalu tampilkan halamannya. */
@@ -2404,10 +2567,11 @@ function renderAll() {
   setBadge();
   if (!chat.length) $('chat').replaceChildren(chatHint());
   // Data halaman yang sudah dimuat cukup digambar ulang (mis. setelah ganti bahasa).
-  if (leadData) renderLeads();
-  if (homeData) renderHome();
+  if (leadData || page === 'percakapan') renderLeads();
+  if (homeData || page === 'beranda') renderHome();
   if (handoffData) renderHandoffs();
-  if (wa) renderWa();
+  if (wa || page === 'whatsapp') renderWa();
+  if (usageData || page === 'lanjutan') renderUsage();
   if (conv) { conv.key = ''; renderConv(); }
   if (page) renderMeta();
 }
@@ -2418,7 +2582,7 @@ $('lang').addEventListener('click', (e) => {
   lang = next;
   try { localStorage.setItem('lang', lang); } catch { /* tetap berlaku untuk kunjungan ini */ }
   renderAll();
-  if (page === 'lanjutan') { void loadUsage(); void loadAlerts(); }
+  if (page === 'lanjutan') void loadAdvanced();
 });
 
 /** Simpan semua perubahan: baris proyek dulu (kalau diubah), lalu profil (kalau diubah). */
@@ -2500,8 +2664,11 @@ $('logout').addEventListener('click', async () => {
 // Kepala tetap (bilah atas + bilah keadaan) dan bilah simpan: tingginya berubah saat bilah keadaan muncul
 // atau saat isinya membungkus di HP, jadi diukur terus dan ditulis ke variabel CSS (--chrome-h untuk jarak
 // atas halaman dan menu samping, --savebar-h untuk jarak bawah isi dan letak kabar singkat).
+function putHeight(node, name) {
+  document.documentElement.style.setProperty(name, Math.ceil(node.getBoundingClientRect().height) + 'px');
+}
 function watchHeight(node, name) {
-  const put = () => document.documentElement.style.setProperty(name, Math.ceil(node.getBoundingClientRect().height) + 'px');
+  const put = () => putHeight(node, name);
   if (typeof ResizeObserver === 'function') new ResizeObserver(put).observe(node);
   put();
 }
