@@ -137,15 +137,18 @@
       </div>
     </div>
 
+    <!-- Isi halaman. Kalau halaman yang tampil punya dua bagian atau lebih, app.js memberi kelas "withtoc"
+         dan mengisi daftar "Di halaman ini" (#pageToc); di layar >= 1100 px daftar itu tampil di kanan. -->
     <div class="content">
 
       <!-- ================= Beranda ================= -->
       <section data-page="beranda">
         <!-- Saat halaman dibuka, app.js langsung menggambar kerangka (skeleton) seukuran isi akhirnya di tiap
              wadah di bawah, lalu menukarnya sekali saja setelah semua data Beranda dimuat. -->
-        <div class="tiles four" id="tiles"></div>
+        <!-- data-toc: blok tanpa judul kartu yang tetap masuk daftar "Di halaman ini" dengan nama ini. -->
+        <div class="tiles four" id="tiles" data-toc="Angka" data-toc-en="Numbers"></div>
         <!-- Grafik digambar app.js (columnChart). -->
-        <div class="charts"><div id="chartConv"></div><div id="chartMsgs"></div></div>
+        <div class="charts" data-toc="Grafik" data-toc-en="Charts"><div id="chartConv"></div><div id="chartMsgs"></div></div>
         <div class="card" id="chartStages">
           <div class="ch"><h2 data-en="Lead stages">Tahap lead</h2><p class="help" data-en="All contacts by stage. Click a stage to open its list.">Semua kontak menurut tahapnya. Klik satu tahap untuk membuka daftarnya.</p></div>
           <div class="cb"><div class="stagechips" id="stageChips"></div></div>
@@ -210,11 +213,9 @@
       </section>
 
       <!-- ================= Pengetahuan: Cara bot bicara ================= -->
-      <!-- Satu halaman panjang. Di layar >= 1100 px daftar "Di halaman ini" tampil di kanan (app.js menandai
-           bagian yang sedang terlihat). Dua bagian terakhir dilipat; keadaan bukanya diingat per bagian. -->
+      <!-- Satu halaman panjang. Dua bagian terakhir dilipat; keadaan bukanya diingat per bagian. Lipatan dengan
+           data-toc (tanpa nilai) masuk daftar "Di halaman ini" dengan judul lipatannya. -->
       <section data-page="behavior">
-        <div class="withtoc">
-        <div class="withtoc-main">
         <div class="card" id="who">
           <div class="ch"><h2 data-en="Who answers">Siapa yang menjawab</h2></div>
           <div class="cb">
@@ -259,7 +260,7 @@
             <textarea rows="18" data-key="advice"></textarea>
           </div>
         </div>
-        <details class="fold" id="style" data-remember>
+        <details class="fold" id="style" data-remember data-toc>
           <summary><span data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</span></summary>
           <div class="fold-body">
             <p class="help" style="margin-bottom:12px" data-en="How you want the bot to write and behave, one rule per row. Say it the way you would brief a new admin: the tone you like, what to avoid, an example sentence, what to do right away without asking. Use “Try chat” to see the effect.">Cara Anda ingin bot menulis dan bersikap, satu aturan per baris. Tulis seperti memberi arahan ke admin baru: nada yang disukai, yang harus dihindari, contoh kalimat, hal yang langsung dikerjakan tanpa bertanya. Pakai “Coba chat” untuk melihat hasilnya.</p>
@@ -267,7 +268,7 @@
             <p class="cb-acts fold-acts"><button class="btn ghost" id="addRule" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Rule">Aturan</span></button></p>
           </div>
         </details>
-        <details class="fold" id="handoff" data-remember>
+        <details class="fold" id="handoff" data-remember data-toc>
           <summary><span data-en="What a human must answer">Yang harus dijawab manusia</span></summary>
           <div class="fold-body">
             <p class="help" style="margin-bottom:12px" data-en="For these topics the bot says “our team will get back to you” and notifies sales.">Untuk topik-topik ini bot bilang “tim kami yang akan menginfokan” dan mengabari sales.</p>
@@ -278,16 +279,6 @@
             </div>
           </div>
         </details>
-        </div>
-        <div class="toc" id="behaviorToc" role="navigation" aria-labelledby="behaviorTocTitle">
-          <p class="toc-h" id="behaviorTocTitle" data-en="On this page">Di halaman ini</p>
-          <a href="#who" data-en="Who answers">Siapa yang menjawab</a>
-          <a href="#opening" data-en="Opening">Pembukaan</a>
-          <a href="#questions-asked" data-en="Questions and recommendations">Pertanyaan dan rekomendasi</a>
-          <a href="#style" data-en="Reply style &amp; rules">Gaya &amp; aturan balasan</a>
-          <a href="#handoff" data-en="What a human must answer">Yang harus dijawab manusia</a>
-        </div>
-        </div>
       </section>
 
       <!-- ================= Pengetahuan: Produk ================= -->
@@ -517,11 +508,11 @@
           </div>
           <div class="cardfoot"><span class="note" data-en="The cost here is an <b>estimate</b>: tokens × the rates above. The official bill is in your LLM provider account.">Biaya di sini adalah <b>perkiraan</b> dari jumlah token × tarif di atas. Tagihan resminya ada di akun penyedia LLM.</span></div>
         </div>
-        <details class="fold" id="alertFold">
+        <details class="fold" id="alertFold" data-toc>
           <summary><span data-en="Alert history">Riwayat warning</span></summary>
           <div class="fold-body"><div class="scroll"><table class="list" id="alerts"></table></div></div>
         </details>
-        <details class="fold" id="errorFold">
+        <details class="fold" id="errorFold" data-toc>
           <summary><span data-en="Error log">Catatan error</span></summary>
           <div class="fold-body">
             <p class="help" style="margin-bottom:10px" data-en="Every error and warning the bot wrote, newest first: the same lines as in its terminal. The full log is in the server journal (<code>journalctl -u alice-bot@&lt;project&gt;</code>).">Semua error dan warning yang ditulis bot, terbaru dulu. Barisnya sama dengan di terminalnya. Log lengkapnya ada di jurnal server (<code>journalctl -u alice-bot@&lt;proyek&gt;</code>).</p>
@@ -537,6 +528,11 @@
           <p style="margin:12px 0 0"><a class="btn" href="/"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Back to home">Kembali ke beranda</span></a></p>
         </div></div>
       </section>
+
+      <!-- Daftar "Di halaman ini": tautannya diisi app.js (renderToc) untuk halaman yang sedang tampil. -->
+      <div class="toc" id="pageToc" role="navigation" aria-labelledby="pageTocTitle">
+        <p class="toc-h" id="pageTocTitle" data-en="On this page">Di halaman ini</p>
+      </div>
 
     </div>
   </main>

@@ -2359,12 +2359,59 @@ function rememberFolds() {
 }
 
 /**
- * Daftar "Di halaman ini" di kanan halaman Cara bot bicara (hanya tampil di layar >= 1100 px).
+ * Daftar "Di halaman ini" di kanan halaman (hanya tampil di layar >= 1100 px), sama untuk semua halaman.
+ * Isinya bagian-bagian halaman yang sedang tampil, urut seperti di halaman: tiap kartu yang terlihat dan
+ * berjudul (.ch h2), plus blok bertanda data-toc (deretan angka dan grafik Beranda, beberapa lipatan).
+ * Kurang dari dua bagian: daftar tidak tampil dan halaman tetap satu kolom.
  * Bagian yang ditandai = bagian pertama yang terlihat di bawah kepala tetap (IntersectionObserver);
  * di ujung bawah halaman, bagian terakhir.
  */
-const tocLinks = () => [...$('behaviorToc').querySelectorAll('a[href^="#"]')];
-const tocTargets = () => tocLinks().map((a) => document.getElementById(a.hash.slice(1))).filter(Boolean);
+
+/** id untuk bagian yang belum punya id: id halaman + judul Indonesianya, mis. "pengaturan-follow-up". */
+function tocSlug(pageId, title) {
+  const s = String(title).replace(/<[^>]*>/g, ' ').replace(/&[a-z0-9#]+;/gi, ' ')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return pageId + '-' + (s || 'bagian');
+}
+
+/** Judul satu bagian: [teks Indonesia (untuk id), teks dalam bahasa tampilan sekarang], atau null. */
+function tocTitle(n) {
+  if (n.dataset.toc) return [n.dataset.toc, T(n.dataset.toc, n.dataset.tocEn || n.dataset.toc)];
+  const s = n.tagName === 'DETAILS' ? n.querySelector(':scope > summary') : null;
+  const h = s ? s.querySelector('[data-en]') || s : n.querySelector(':scope > .ch h2');
+  if (!h) return null;
+  const now = h.textContent.trim();
+  // applyLang menyimpan teks Indonesia aslinya di data-id; judul tanpa data-en sama di kedua bahasa.
+  return now ? [h.dataset.id !== undefined ? h.dataset.id : now, now] : null;
+}
+
+/** Bagian halaman yang sedang tampil, urut seperti di halaman. Bagian tanpa id diberi id. */
+function tocEntries() {
+  const sec = document.querySelector('section[data-page].on');
+  if (!sec) return [];
+  const out = [];
+  for (const n of sec.querySelectorAll('.card, [data-toc]')) {
+    // Kartu di dalam kartu atau blok lain (mis. grafik di kartu biaya, grafik Beranda) ikut induknya.
+    if (n.parentElement.closest('.card, [data-toc], section[data-page]') !== sec) continue;
+    if (!n.getClientRects().length) continue; // tersembunyi
+    const title = tocTitle(n);
+    if (!title) continue;
+    if (!n.id) {
+      const base = tocSlug(sec.dataset.page, title[0]);
+      let id = base;
+      for (let k = 2; document.getElementById(id); k++) id = base + '-' + k;
+      n.id = id;
+    }
+    out.push({ node: n, label: title[1] });
+  }
+  return out;
+}
+
+/** Bagian yang sedang diamati (kosong = daftar tidak tampil). */
+let tocItems = [];
+const tocLinks = () => [...$('pageToc').querySelectorAll('a[href^="#"]')];
+const tocTargets = () => tocItems.map((x) => x.node);
 /** Bagian yang sedang memotong pita baca (dari bawah kepala sampai 45% tinggi layar). */
 const tocSeen = new Map();
 let tocObserver = null;
@@ -2380,7 +2427,7 @@ function markToc(id) {
 }
 
 function updateToc() {
-  if (page !== 'behavior' || tocHold) return;
+  if (!tocItems.length || tocHold) return;
   const targets = tocTargets();
   const root = document.documentElement;
   const atBottom = window.innerHeight + window.scrollY >= root.scrollHeight - 4;
@@ -2391,8 +2438,9 @@ function updateToc() {
 /** Pasang ulang pengamat: pita bacanya bergantung pada tinggi kepala, yang bisa berubah. */
 function watchToc() {
   if (tocObserver) tocObserver.disconnect();
+  tocObserver = null;
   tocSeen.clear();
-  if (typeof IntersectionObserver !== 'function') return;
+  if (!tocItems.length || typeof IntersectionObserver !== 'function') return;
   const top = Math.ceil($('chrome').getBoundingClientRect().height) + 16;
   tocObserver = new IntersectionObserver((entries) => {
     for (const e of entries) tocSeen.set(e.target.id, e.isIntersecting);
@@ -2401,12 +2449,45 @@ function watchToc() {
   for (const t of tocTargets()) tocObserver.observe(t);
 }
 
+/**
+ * Susun ulang daftar untuk halaman yang sedang tampil. Dipanggil saat halaman ditampilkan, setelah ganti
+ * bahasa (renderAll), dan setelah kartu ditambah, dihapus, atau disembunyikan (MutationObserver di bawah).
+ * Kalau bagian dan judulnya tidak berubah, daftar dibiarkan (tanda yang sedang menyala tetap).
+ */
+function renderToc() {
+  const items = page ? tocEntries() : [];
+  const next = items.length >= 2 ? items : [];
+  if (next.length === tocItems.length && next.every((x, i) => x.node === tocItems[i].node && x.label === tocItems[i].label)) return;
+  const same = next.length === tocItems.length && next.every((x, i) => x.node === tocItems[i].node);
+  const lit = same ? ($('pageToc').querySelector('a.on') || {}).hash : '';
+  tocItems = next;
+  for (const a of tocLinks()) a.remove();
+  $('pageToc').append(...next.map((x) => el('a', { href: '#' + x.node.id, textContent: x.label })));
+  $('pageToc').parentElement.classList.toggle('withtoc', next.length > 0);
+  if (lit) markToc(lit.slice(1));
+  if (!same) watchToc();
+}
+
+// Render yang menambah, menghapus, atau menyembunyikan kartu (mis. data halaman yang baru datang):
+// susun ulang daftarnya sekali per bingkai. Perubahan di dalam kartu (tabel, grafik, tooltip) diabaikan.
+{
+  const PART = '.card, [data-toc]';
+  const holds = (n) => n.nodeType === 1 && (n.matches(PART) || !!n.querySelector(PART));
+  let frame = 0;
+  new MutationObserver((list) => {
+    if (frame) return;
+    const hit = list.some((m) => (m.type === 'attributes' ? holds(m.target)
+      : [...m.addedNodes, ...m.removedNodes].some(holds)));
+    if (hit) frame = requestAnimationFrame(() => { frame = 0; renderToc(); });
+  }).observe($('pageToc').parentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+}
+
 function holdToc(ms) {
   clearTimeout(tocHold);
   tocHold = setTimeout(() => { tocHold = 0; }, ms);
 }
 
-$('behaviorToc').addEventListener('click', (e) => {
+$('pageToc').addEventListener('click', (e) => {
   const a = e.target.closest('a[href^="#"]');
   if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const target = document.getElementById(a.hash.slice(1));
@@ -2421,10 +2502,10 @@ $('behaviorToc').addEventListener('click', (e) => {
   target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
 });
 window.addEventListener('scroll', () => {
-  if (page !== 'behavior') return;
+  if (!tocItems.length) return;
   if (tocHold) holdToc(150); else updateToc();
 }, { passive: true });
-window.addEventListener('resize', () => { if (page === 'behavior') watchToc(); });
+window.addEventListener('resize', () => { if (tocItems.length) watchToc(); });
 
 // ---------- navigasi ----------
 /** Pasang alamat di semua tautan menu untuk proyek yang sedang dibuka. */
@@ -2490,7 +2571,6 @@ function show(next, r = {}) {
     if (handoffData) renderHandoffs();
     void loadHandoffs();
   }
-  if (page === 'behavior') watchToc();
   if (page === 'whatsapp') {
     renderStatus();
     waPending = true;
@@ -2504,6 +2584,7 @@ function show(next, r = {}) {
     void loadAdvanced();
   }
   if (page === 'notfound') $('notFoundText').textContent = r.text || T('Alamat ini tidak ada di dashboard.', 'This address does not exist in the dashboard.');
+  renderToc();
   // Tautan ke bagian tertentu (#cost, #questions): buka lipatannya dan gulung ke sana.
   const target = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
   if (target && target.closest('section[data-page].on')) {
@@ -2656,7 +2737,7 @@ function renderAll() {
   if (wa || page === 'whatsapp') renderWa();
   if (usageData || page === 'lanjutan') renderUsage();
   if (conv) { conv.key = ''; renderConv(); }
-  if (page) renderMeta();
+  if (page) { renderMeta(); renderToc(); }
 }
 
 $('lang').addEventListener('click', (e) => {

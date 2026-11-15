@@ -626,6 +626,21 @@ const PNG = Buffer.from(
           assert.equal(js.renamedPath(rest), renamedPath(rest), rest);
         }
       }
+      // Daftar "Di halaman ini": bagian tanpa id diberi id dari id halaman + judul Indonesianya.
+      {
+        const src = readFileSync(join(__dirname, 'app.js'), 'utf8');
+        const at = src.indexOf('function tocSlug(');
+        const tocSlug = new Function(`${src.slice(at, src.indexOf('\n}\n', at) + 2)}; return tocSlug;`)() as (page: string, title: string) => string;
+        assert.equal(tocSlug('pengaturan', 'Follow-up'), 'pengaturan-follow-up');
+        assert.equal(tocSlug('lanjutan', 'Batas &amp; pengaman'), 'lanjutan-batas-pengaman');
+        assert.equal(tocSlug('beranda', 'Pertanyaan yang belum terjawab'), 'beranda-pertanyaan-yang-belum-terjawab');
+        assert.equal(tocSlug('x', '<b>Énergie</b>  2 kW'), 'x-energie-2-kw');
+        assert.equal(tocSlug('x', '…'), 'x-bagian');
+        // Satu daftar bersama untuk semua halaman, tanpa tautan yang ditulis tangan.
+        const html = readFileSync(join(__dirname, 'page.html'), 'utf8');
+        assert.equal(html.split('class="toc"').length - 1, 1, 'satu daftar "Di halaman ini"');
+        assert.ok(!/<a href="#/.test(html), 'tautan daftar diisi app.js');
+      }
       // Tiap halaman di ROUTES punya satu bagian dan satu tautan menu di page.html; halaman yang dihapus hilang.
       {
         const html = readFileSync(join(__dirname, 'page.html'), 'utf8');
