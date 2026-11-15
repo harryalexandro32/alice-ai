@@ -75,6 +75,11 @@ export function followupDueAt(lastInbound: number, key = ''): number {
   return due - (m >= end ? m - end : m + 24 * 60 - end) * MINUTE - 5 * MINUTE;
 }
 
+/**
+ * Kirim follow-up yang sudah waktunya, satu per satu. Di bot sungguhan (app.ts)
+ * `send` memakai irama manusia: mikir singkat, "sedang mengetik…" sesuai
+ * panjang pesannya, dan antre di belakang chat lain (lihat pace.ts).
+ */
 export async function runFollowups(send: Sender): Promise<number> {
   // Bot dijeda untuk semua chat: tidak ada follow-up sama sekali.
   if (projectPaused()) return 0;

@@ -720,7 +720,10 @@ const PNG = Buffer.from(
     assert.ok(near < 8, `terlalu sering hampir sama berturut-turut: ${near}/400`);
     const burst = pickDelayMs(3000, 20_000);
     assert.ok(burst >= 2000 && burst <= 5000, 'pesan susulan dalam satu giliran menyusul cepat');
-    assert.ok(typingMs(10_000, 200) <= 10_000 && typingMs(3000, 5000) === 3000);
+    // Lama mengetik mengikuti panjang pesan, dijepit 1,5–40 detik (lihat pace.test.ts).
+    assert.equal(typingMs(60, 4), 15_000);
+    assert.ok(typingMs(40, 4) < typingMs(80, 4));
+    assert.ok(typingMs(3) === 1500 && typingMs(5000) === 40_000);
     biz.replyDelayMin = biz.replyDelayMax = 0;
     assert.equal(pickDelayMs(60_000, null), 0, 'jeda bisa dimatikan');
 

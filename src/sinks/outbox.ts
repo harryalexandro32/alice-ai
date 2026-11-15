@@ -42,7 +42,12 @@ export interface ReplyPayload {
   message_id?: number | null;
 }
 
-/** Mengirim satu balasan ke pelanggan; melempar = gagal, coba lagi nanti. */
+/**
+ * Mengirim satu balasan ke pelanggan; melempar = gagal, coba lagi nanti.
+ * Isinya tidak diubah. Di bot sungguhan (app.ts) kirimannya lewat irama
+ * manusia: mikir singkat, "sedang mengetik…" sesuai panjangnya, dan antre di
+ * belakang chat lain yang sedang diketik (lihat pace.ts).
+ */
 export type ReplySender = (to: { phone: string; address: string }, text: string) => Promise<void>;
 
 /** Lead yang sudah lengkap = "lead"; selebihnya pelanggan yang menunggu staf. */
