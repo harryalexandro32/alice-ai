@@ -112,7 +112,7 @@ const ROUTES = {
   brosur: 'pengetahuan/brosur', lainnya: 'pengetahuan/lainnya',
   pengaturan: 'pengaturan', whatsapp: 'pengaturan/whatsapp', notifikasi: 'pengaturan/notifikasi', lanjutan: 'pengaturan/lanjutan',
 };
-/** Halaman Pengetahuan: di sini tombol "Coba bicara" tersedia. */
+/** Halaman Pengetahuan: di sini tombol "Coba chat" tersedia. */
 const KNOWLEDGE = ['identitas', 'produk', 'rekomendasi', 'brosur', 'lainnya'];
 
 const pathOf = (pg, pid = project) => '/' + pid + (ROUTES[pg] ? '/' + ROUTES[pg] : '');
@@ -413,7 +413,7 @@ function renderPdfs() {
       read.disabled = true;
       try {
         profile.files = (await api('files/' + f.id + '/read', { method: 'POST', body: JSON.stringify({ read: read.checked }) })).files;
-        toast(read.checked ? T('Bot sekarang membaca isi PDF ini. Uji lewat "Coba bicara".', 'The bot now reads this PDF. Test it with "Try talking".') : T('Bot tidak lagi membaca isi PDF ini.', 'The bot no longer reads this PDF.'));
+        toast(read.checked ? T('Bot sekarang membaca isi PDF ini. Uji lewat "Coba chat".', 'The bot now reads this PDF. Test it with "Try chat".') : T('Bot tidak lagi membaca isi PDF ini.', 'The bot no longer reads this PDF.'));
       } catch (e) { toast(e.message, true); }
       renderPdfs();
     });
@@ -902,7 +902,7 @@ $('resetChat').addEventListener('click', () => {
   $('chat').replaceChildren(chatHint());
 });
 
-// Panel samping "Coba bicara": tersedia di semua halaman Pengetahuan.
+// Panel samping "Coba chat": tersedia di semua halaman Pengetahuan.
 function openTry() {
   $('uji').classList.add('on');
   $('ujiBg').classList.add('on');
@@ -2063,6 +2063,8 @@ function renderStrip() {
   const month = state.month || { idr: 0 };
   // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
   out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#biaya', 'coins'));
+  // Tombol Coba chat ikut di strip, di ujung kanan, di semua halaman (node yang sama dipindahkan lagi).
+  out.push($('tryBtn'));
   $('strip').replaceChildren(...out);
 }
 
@@ -2179,7 +2181,6 @@ function renderMeta() {
   $('desc').hidden = !desc;
   const p = projects.find((x) => x.id === project);
   document.title = title + (p ? ' · ' + p.name : '') + ' · Alice AI';
-  $('tryBtn').hidden = !KNOWLEDGE.includes(page);
   setDirty(dirty);
   if (page === 'chat' && conv && conv.contact) renderConvHead();
 }
