@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 24" width="92" height="24" role="img" aria-label="Alice AI" color="#1d1f20">
+  <title>Alice AI</title>
+  <rect width="24" height="24" rx="6" fill="#f6821f"/>
+  <path d="M6.6 18.2 12 5.2l5.4 13M8.18 14.4h7.64" fill="none" stroke="#fff" stroke-width="3.36" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="32" y="18" font-family='-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif' font-size="17" font-weight="700" letter-spacing="-0.34" fill="currentColor">Alice <tspan fill="#f6821f">AI</tspan></text>
+</svg>
