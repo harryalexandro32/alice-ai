@@ -23,13 +23,7 @@
  * Folder kredensial (auth/<proyek>/) setara akses penuh ke nomor tersebut.
  */
 
-import makeWASocket, {
-  DisconnectReason,
-  downloadMediaMessage,
-  fetchLatestBaileysVersion,
-  useMultiFileAuthState,
-  type WASocket,
-} from '@whiskeysockets/baileys';
+import type { WASocket } from '@whiskeysockets/baileys';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -46,6 +40,17 @@ import type { MediaKind, SendOptions, Transport, TransportHandlers, TransportSta
 /** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
 const MIN_GAP_MS = 1200;
 const MAX_RETRY_MS = 60_000;
+
+/**
+ * Baileys 7 hanya tersedia sebagai modul ESM. Proyek ini CommonJS, jadi
+ * pustakanya dimuat lewat import() dinamis; import statis akan gagal saat
+ * Node mencari dependensinya (whatsapp-rust-bridge) dengan aturan require.
+ */
+type Baileys = typeof import('@whiskeysockets/baileys');
+let baileysModule: Promise<Baileys> | null = null;
+function baileys(): Promise<Baileys> {
+  return (baileysModule ??= import('@whiskeysockets/baileys'));
+}
 
 let sock: WASocket | null = null;
 let handlers: TransportHandlers | null = null;
@@ -237,12 +242,13 @@ async function connect(): Promise<void> {
   const myGeneration = ++generation;
   pairing = false;
   if (current.state !== 'starting') setState({ state: 'starting', ...(current.detail ? { detail: current.detail } : {}) });
-  const { state, saveCreds } = await useMultiFileAuthState(cfg.waAuthDir);
+  const wa = await baileys();
+  const { state, saveCreds } = await wa.useMultiFileAuthState(cfg.waAuthDir);
   creds = state.creds;
   syncAntiBan();
-  const { version } = await fetchLatestBaileysVersion();
+  const { version } = await wa.fetchLatestBaileysVersion();
 
-  const s = makeWASocket({
+  const s = wa.makeWASocket({
     version,
     auth: state,
     logger: waLogger,
@@ -286,7 +292,7 @@ async function connect(): Promise<void> {
       s.ev.removeAllListeners('creds.update');
       if (sock === s) sock = null;
 
-      if (code === DisconnectReason.loggedOut) {
+      if (code === wa.DisconnectReason.loggedOut) {
         onFatal?.('Sesi WhatsApp dicabut dari HP. Bot tidak bisa menerima maupun membalas pesan sampai ditautkan ulang.');
         console.error(
           `\n[wa] SESI DICABUT dari HP. Tautkan ulang dari dashboard (Pengaturan > WhatsApp > Putuskan & tautkan ulang).\n`
@@ -295,7 +301,7 @@ async function connect(): Promise<void> {
         process.exitCode = 1;
         return;
       }
-      if (code === DisconnectReason.connectionReplaced) {
+      if (code === wa.DisconnectReason.connectionReplaced) {
         onFatal?.('Sesi WhatsApp direbut sesi lain (440). Bot berhenti dan tidak menyambung ulang sendiri.');
         setState({ state: 'conflict', detail: 'Ada sesi lain yang memakai kredensial ini (440). Pastikan hanya satu bot yang jalan, lalu nyalakan ulang bot.' });
         console.error(
@@ -387,8 +393,12 @@ async function connect(): Promise<void> {
         continue;
       }
 
-      const key = m.key as { senderPn?: string; participantPn?: string };
+      // Baileys 7 menaruh nomor telepon di remoteJidAlt/participantAlt;
+      // senderPn/participantPn adalah nama lamanya (Baileys 6).
+      const key = m.key as { remoteJidAlt?: string; participantAlt?: string; senderPn?: string; participantPn?: string };
       const phone =
+        jidToE164(key.remoteJidAlt) ??
+        jidToE164(key.participantAlt) ??
         jidToE164(key.senderPn) ??
         jidToE164(key.participantPn) ??
         jidToE164(jid) ??
@@ -409,7 +419,7 @@ async function connect(): Promise<void> {
         ...(media === 'foto' || media === 'suara'
           ? {
               fetchMedia: async () => {
-                const data = await downloadMediaMessage(m, 'buffer', {});
+                const data = await (await baileys()).downloadMediaMessage(m, 'buffer', {});
                 const inner = [m.message as Record<string, unknown>, ...unwrap((m.message ?? {}) as Record<string, unknown>)];
                 const mime =
                   inner.map((x) => ((x.imageMessage ?? x.audioMessage) as { mimetype?: string } | undefined)?.mimetype).find(Boolean) ??
