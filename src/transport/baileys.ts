@@ -346,7 +346,13 @@ async function connect(): Promise<void> {
         continue;
       }
       if (!kind) {
-        console.log(`[wa] dilewat (bukan isi percakapan): ${tag}`);
+        // Catat bentuknya: pesan yang gagal didekripsi datang sebagai stub
+        // CIPHERTEXT tanpa isi, dan tanpa catatan ini tidak bisa dibedakan
+        // dari notifikasi biasa.
+        const stub = m.messageStubType ? ` stub=${m.messageStubType}` : '';
+        const params = m.messageStubParameters?.length ? ` param=${m.messageStubParameters.join('|')}` : '';
+        const keys = Object.keys(m.message ?? {});
+        console.log(`[wa] dilewat (bukan isi percakapan): ${tag}${stub}${params}${keys.length ? ` kunci=${keys.join(',')}` : ''}`);
         continue;
       }
       if (AUTOMATED.has(kind) && !m.key.fromMe) {
