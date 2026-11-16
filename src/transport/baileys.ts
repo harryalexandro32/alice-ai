@@ -536,7 +536,12 @@ export const baileysTransport: Transport = {
     await sock?.sendPresenceUpdate('paused', jid).catch(() => {});
   },
   send(to, text, opts) {
-    const jid = to.address || `${to.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    // WA_REPLY_VIA_PN=1: balas ke alamat nomor telepon, bukan alamat LID
+    // tempat pesannya masuk. Percobaan untuk akun bisnis yang juga terdaftar
+    // di Cloud API: HP pelanggan menolak kiriman ke alamat LID dari bot.
+    const digits = to.phone.replace(/[^0-9]/g, '');
+    const viaPn = process.env.WA_REPLY_VIA_PN === '1' && digits && !to.phone.startsWith('lid:');
+    const jid = viaPn ? `${digits}@s.whatsapp.net` : to.address || `${digits}@s.whatsapp.net`;
     // Satu antrean: dua kiriman bersamaan tidak boleh saling menyalip jedanya.
     const job = sendChain.then(() => sendNow(jid, text, opts));
     sendChain = job.catch(() => {});
