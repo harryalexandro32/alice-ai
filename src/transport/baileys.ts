@@ -144,7 +144,9 @@ const STATUS = ['gagal', 'menunggu', 'diterima server', 'sampai di HP pelanggan'
  * dan warning (40) juga disalin ke catatan error untuk dashboard.
  */
 const waLogger = pino(
-  { level: 'info' },
+  // WA_LOG_LEVEL=trace menulis setiap stanza XML yang masuk dan keluar: untuk
+  // menelusuri pesan yang tidak sampai ke bot. Jangan dibiarkan menyala.
+  { level: process.env.WA_LOG_LEVEL?.trim() || 'info' },
   {
     write(line: string) {
       process.stdout.write(line);
