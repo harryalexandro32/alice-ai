@@ -118,7 +118,7 @@ dijumlahkan: bot menunggu sekali, selama jeda yang terbesar. Keadaannya disimpan
 
 Irama kiriman (`src/pace.ts`, berlaku untuk semua jalur): bot "mikir" dulu selama jeda di kartu **Balasan**
 di Pengaturan (diacak di antara dua angkanya; follow-up dan balasan dari dashboard 1–3 detik), lalu
-"sedang mengetik…" selama panjang pesannya (3,5–5,5 huruf per detik, 1,5–40 detik). Bot melayani
+"sedang mengetik…" selama panjang pesannya (3,5–5,5 huruf per detik, 1,5–15 detik). Bot melayani
 satu lawan bicara pada satu waktu: selama mengetik ke satu chat, kiriman ke chat lain (termasuk
 notifikasi ke sales) menunggu giliran. Jalur `cloud` tidak punya "sedang mengetik…"; jedanya sama.
 

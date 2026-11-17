@@ -81,19 +81,19 @@ console.debug = (...a: unknown[]) => void debugLines.push(a.join(' '));
   // --- lama mengetik mengikuti panjang ---------------------------------------
   setPaceRandom(() => 0); // jeda berpikir 0,8 s; cps acak = 3,5
   assert.equal(typingMs(60, 4), 15_000, '60 huruf / 4 per detik, tanpa jeda berpikir');
-  assert.equal(typingMs(150, 5), 18_000 + 800 + 12_000, 'jeda berpikir di antara potongan 90 huruf');
+  assert.equal(typingMs(150, 5), 15_000, '150 huruf: 30,8 s mentah, dijepit ke batas atas');
   assert.ok(typingMs(40, 4) < typingMs(80, 4), 'lebih panjang = lebih lama');
   assert.equal(typingMs(0), 1500, 'batas bawah');
   assert.equal(typingMs(3), 1500, 'batas bawah');
-  assert.equal(typingMs(5000), 40_000, 'batas atas');
-  assert.equal(typingMs(70), 20_000, 'acakan 0 = 3,5 huruf per detik');
+  assert.equal(typingMs(5000), 15_000, 'batas atas');
+  assert.equal(typingMs(35), 10_000, 'acakan 0 = 3,5 huruf per detik');
   setPaceRandom(() => 0.999_999);
   assert.ok(Math.abs(typingMs(70) - 70_000 / 5.5) <= 1, 'acakan ≈1 = 5,5 huruf per detik');
-  assert.ok(Math.abs(typingMs(100, 5) - (18_000 + 2500 + 2000)) <= 1, 'jeda berpikir paling lama 2,5 s');
+  assert.equal(typingMs(100, 5), 15_000, '100 huruf dengan jeda berpikir 2,5 s: 22,5 s mentah, dijepit');
   setPaceRandom(null);
   for (let i = 0; i < 300; i++) {
     const ms = typingMs(70);
-    assert.ok(ms >= Math.floor(70_000 / 5.5) && ms <= 20_000, `cps di luar 3,5–5,5: ${ms}`);
+    assert.ok(ms >= Math.floor(70_000 / 5.5) && ms <= 15_000, `cps di luar 3,5–5,5: ${ms}`);
   }
 
   // --- satu lawan bicara pada satu waktu ---------------------------------------
@@ -136,16 +136,17 @@ console.debug = (...a: unknown[]) => void debugLines.push(a.join(' '));
   setPaceRandom(() => 0); // 3,5 huruf per detik, jeda berpikir 0,8 s
   events = [];
   const [long] = await run([paced('D', 'k'.repeat(105), 'followup')]);
-  assert.equal(long!.typingMs, 30_800, '105 huruf: 25,7 s + jeda 0,8 s + 4,3 s');
+  // Mentah 25,7 s + jeda 0,8 s + 4,3 s = 30,8 s; dijepit ke 15 s, tiap potongan diperpendek sebanding.
+  assert.equal(long!.typingMs, 15_000, '105 huruf: 12,5 s + jeda 0,4 s + 2,1 s');
   const starts = events.filter((e) => e.ev === 'D:start').map((e) => e.t);
   const stops = events.filter((e) => e.ev === 'D:stop').map((e) => e.t);
   const begin = starts[0]!;
-  assert.deepEqual(starts.map((t) => t - begin), [0, 7000, 14_000, 21_000, 26_514], 'tiap 7 s, dan lagi setelah jeda berpikir');
-  assert.deepEqual(stops.map((t) => t - begin), [25_714, 30_800], 'paused saat jeda berpikir, dan sekali tepat sebelum kirim');
+  assert.deepEqual(starts.map((t) => t - begin), [0, 7000, 12_913], 'tiap 7 s, dan lagi setelah jeda berpikir');
+  assert.deepEqual(stops.map((t) => t - begin), [12_523, 15_000], 'paused saat jeda berpikir, dan sekali tepat sebelum kirim');
   const iSend = sendBegin('D');
   assert.equal(events[iSend - 1]!.ev, 'D:stop', 'paused tepat sebelum kirim');
   assert.equal(events[iSend - 2]!.ev, 'D:start', 'hanya satu paused di antara ketikan terakhir dan kiriman');
-  assert.equal(events[iSend]!.t, begin + 30_800);
+  assert.equal(events[iSend]!.t, begin + 15_000);
 
   // --- notify: ikut antre, tanpa mengetik --------------------------------------
   events = [];
