@@ -648,8 +648,8 @@ $('addRule').addEventListener('click', () => {
 const P_COLS = ['name', 'description', 'price', 'stock'];
 // Sama dengan MARKETS dan MARKET_HOSTS di src/business (server memeriksanya lagi saat menyimpan).
 const MARKETS = [
-  { key: 'tokopedia', label: 'Tokopedia', icon: '/assets/tokopedia.png', host: /(^|\.)(tokopedia\.com|tokopedia\.link)$/i },
-  { key: 'shopee', label: 'Shopee', icon: '/assets/shopee.svg', host: /(^|\.)(shopee\.co\.id|shp\.ee|shope\.ee)$/i },
+  { key: 'tokopedia', label: 'Tokopedia', icon: '/assets/tokopedia.png', example: 'https://www.tokopedia.com/…', host: /(^|\.)(tokopedia\.com|tokopedia\.link)$/i },
+  { key: 'shopee', label: 'Shopee', icon: '/assets/shopee.svg', example: 'https://shopee.co.id/…', host: /(^|\.)(shopee\.co\.id|shp\.ee|shope\.ee)$/i },
 ];
 /** Marketplace dari sebuah tautan, atau null kalau bukan tautan marketplace yang dikenal. */
 function marketOf(url) {
@@ -661,41 +661,44 @@ let focusProduct = () => {};
 
 // Dialog tambah tautan marketplace untuk satu produk.
 let linkTarget = null;
-function openLinkDlg(p) {
-  linkTarget = p;
+function openLinkDlg(p, m) {
+  linkTarget = { p, m };
+  $('linkTitle').textContent = T('Link ', '') + m.label + T('', ' link');
   $('linkFor').textContent = p.name || T('Produk tanpa nama', 'Unnamed product');
   $('linkUrl').value = '';
+  $('linkUrl').placeholder = m.example;
   $('linkDlg').classList.add('on');
   $('linkUrl').focus();
 }
 $('linkCancel').addEventListener('click', () => $('linkDlg').classList.remove('on'));
 $('linkForm').addEventListener('submit', (e) => {
   e.preventDefault();
+  const { p, m } = linkTarget;
   const url = $('linkUrl').value.trim();
-  const m = marketOf(url);
-  if (!m) return toast(T('Tempel tautan produk dari Tokopedia atau Shopee.', 'Paste a product link from Tokopedia or Shopee.'), true);
-  if (!url.startsWith('https://')) return toast(T('Tautannya harus diawali https://', 'The link must start with https://'), true);
-  const links = (linkTarget.links ||= { tokopedia: '', shopee: '' });
-  if (links[m.key]) return toast(T('Produk ini sudah punya tautan ', 'This product already has a link for ') + m.label + T('. Hapus dulu yang lama.', '. Remove the old one first.'), true);
-  links[m.key] = url;
+  if (marketOf(url) !== m) return toast(T('Tempel link produk dari ', 'Paste a product link from ') + m.label + '.', true);
+  if (!url.startsWith('https://')) return toast(T('Link-nya harus diawali https://', 'The link must start with https://'), true);
+  (p.links ||= { tokopedia: '', shopee: '' })[m.key] = url;
   $('linkDlg').classList.remove('on');
   touchProducts();
   renderProducts();
 });
 
-/** Kolom Marketplace: satu baris per tautan (buka / hapus), lalu "+" selama masih ada marketplace yang kosong. */
+/**
+ * Kolom Marketplace: selalu satu baris per marketplace, tingginya sama. Ada link: ikon, nama
+ * (buka di tab baru), dan hapus. Kosong: tombol "+ Tambah link <marketplace>".
+ */
 function marketCell(p) {
   const links = p.links || {};
-  const rows = MARKETS.filter((m) => links[m.key]).map((m) => {
-    const a = el('a', { href: links[m.key], target: '_blank', rel: 'noopener', title: links[m.key] },
-      el('img', { src: m.icon, alt: '', width: 16, height: 16 }), el('span', { textContent: m.label }));
-    return el('div', { className: 'ln' }, a, xBtn(T('Hapus tautan ', 'Remove link ') + m.label, () => { links[m.key] = ''; touchProducts(); renderProducts(); }, 'x'));
-  });
-  if (rows.length === MARKETS.length) return el('div', { className: 'links' }, ...rows);
-  const add = el('button', { className: 'add', type: 'button', title: T('Tambah tautan marketplace', 'Add marketplace link') }, ico('plus'));
-  add.setAttribute('aria-label', add.title);
-  add.addEventListener('click', () => openLinkDlg(p));
-  return el('div', { className: 'links' }, ...rows, add);
+  return el('div', { className: 'mkt' }, ...MARKETS.map((m) => {
+    if (links[m.key]) {
+      const a = el('a', { href: links[m.key], target: '_blank', rel: 'noopener', title: links[m.key] },
+        el('img', { src: m.icon, alt: '', width: 16, height: 16 }), el('span', { textContent: m.label }));
+      return el('div', { className: 'ln' }, a, xBtn(T('Hapus link ', 'Remove ') + m.label + T('', ' link'), () => { links[m.key] = ''; touchProducts(); renderProducts(); }, 'x'));
+    }
+    const add = el('button', { className: 'addlink', type: 'button' }, ico('plus'), el('span', { textContent: T('Tambah link ', 'Add ') + m.label + T('', ' link') }));
+    add.addEventListener('click', () => openLinkDlg(p, m));
+    return el('div', { className: 'ln' }, add);
+  }));
 }
 
 function renderProducts() {
