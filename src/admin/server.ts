@@ -143,7 +143,7 @@ const ASSETS: Record<string, [string, string]> = {
 };
 
 /**
- * Berkas merek (ikon tab, ikon layar utama, wordmark) dari folder brand/: alamat -> [nama berkas, jenis].
+ * Berkas merek (ikon tab, ikon layar utama, wordmark, ikon marketplace) dari folder brand/: alamat -> [nama berkas, jenis].
  * Jarang berganti, jadi peramban boleh menyimpannya sehari tanpa bertanya.
  */
 const BRAND: Record<string, [string, string]> = {
@@ -154,6 +154,8 @@ const BRAND: Record<string, [string, string]> = {
   '/assets/apple-touch-icon.png': ['brand/apple-touch-icon.png', 'png'],
   '/assets/wordmark.svg': ['brand/wordmark.svg', 'svg'],
   '/assets/wordmark.png': ['brand/wordmark.png', 'png'],
+  '/assets/tokopedia.png': ['brand/tokopedia.png', 'png'],
+  '/assets/shopee.svg': ['brand/shopee.svg', 'svg'],
 };
 
 /**

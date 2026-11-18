@@ -249,11 +249,11 @@ table.grid textarea.cellbox { display: block; width: 100%; resize: none; field-s
 table.grid textarea.cellbox:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--field); }
 table.grid .hc input[type=text] { flex: 1; min-width: 0; }
 /* Lebar kolom per tabel; kolom tanpa lebar berbagi sisanya. */
-#products th:nth-child(1) { width: 15%; }
+#products th:nth-child(1) { width: 14%; }
 #products th:nth-child(3), #products th:nth-child(4) { width: 10%; }
 #products th:nth-child(5) { width: 110px; }
 #products th:nth-child(6) { width: 160px; }
-#products th:nth-child(7) { width: 120px; }
+#products th:nth-child(7) { width: 140px; }
 #fields th:nth-child(1) { width: 20%; }
 #fields th:nth-child(4) { width: 70px; }
 #recipients th:nth-child(2) { width: 130px; }
@@ -273,8 +273,10 @@ table.grid td.center { text-align: center; padding: 0 10px; }
 /* Kolom Marketplace: satu baris per tautan, lalu "+" selama masih ada marketplace yang kosong. */
 .links { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 4px 6px 10px; }
 .links .ln { display: flex; align-items: center; gap: 2px; width: 100%; min-width: 0; }
-.links .ln a { color: var(--blue); text-decoration: none; flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.links .ln a:hover { text-decoration: underline; }
+.links .ln a { display: inline-flex; align-items: center; gap: 6px; color: var(--blue); text-decoration: none; flex: 1; min-width: 0; font-size: 13px; }
+.links .ln a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.links .ln a img { width: 16px; height: 16px; flex: none; object-fit: contain; }
+.links .ln a:hover span { text-decoration: underline; }
 .pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 0; }
 .pdf a { color: var(--blue); text-decoration: none; min-width: 0; flex: 1; font-size: 13px; }
 .pdf a:hover { text-decoration: underline; }
@@ -590,7 +592,7 @@ div.sub.sub-first { margin-top: 0; }
 }
 /* Layar sempit: tabel isian yang banyak kolomnya diberi lebar minimum, jadi wadahnya yang bergulung ke samping. */
 @media (max-width: 720px) {
-  #products { min-width: 1030px; }
+  #products { min-width: 1050px; }
   #fields, #recipients { min-width: 600px; }
 }
 @media (max-width: 420px) {

@@ -648,8 +648,8 @@ $('addRule').addEventListener('click', () => {
 const P_COLS = ['name', 'description', 'price', 'stock'];
 // Sama dengan MARKETS dan MARKET_HOSTS di src/business (server memeriksanya lagi saat menyimpan).
 const MARKETS = [
-  { key: 'tokopedia', label: 'Tokopedia', host: /(^|\.)(tokopedia\.com|tokopedia\.link)$/i },
-  { key: 'shopee', label: 'Shopee', host: /(^|\.)(shopee\.co\.id|shp\.ee|shope\.ee)$/i },
+  { key: 'tokopedia', label: 'Tokopedia', icon: '/assets/tokopedia.png', host: /(^|\.)(tokopedia\.com|tokopedia\.link)$/i },
+  { key: 'shopee', label: 'Shopee', icon: '/assets/shopee.svg', host: /(^|\.)(shopee\.co\.id|shp\.ee|shope\.ee)$/i },
 ];
 /** Marketplace dari sebuah tautan, atau null kalau bukan tautan marketplace yang dikenal. */
 function marketOf(url) {
@@ -687,7 +687,8 @@ $('linkForm').addEventListener('submit', (e) => {
 function marketCell(p) {
   const links = p.links || {};
   const rows = MARKETS.filter((m) => links[m.key]).map((m) => {
-    const a = el('a', { href: links[m.key], target: '_blank', rel: 'noopener', title: links[m.key], textContent: m.label });
+    const a = el('a', { href: links[m.key], target: '_blank', rel: 'noopener', title: links[m.key] },
+      el('img', { src: m.icon, alt: '', width: 16, height: 16 }), el('span', { textContent: m.label }));
     return el('div', { className: 'ln' }, a, xBtn(T('Hapus tautan ', 'Remove link ') + m.label, () => { links[m.key] = ''; touchProducts(); renderProducts(); }, 'x'));
   });
   if (rows.length === MARKETS.length) return el('div', { className: 'links' }, ...rows);

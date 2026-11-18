@@ -620,6 +620,7 @@ const PNG = Buffer.from(
         ['/favicon.ico', 'image/x-icon'], ['/assets/favicon.svg', 'image/svg+xml'], ['/assets/favicon-32.png', 'image/png'],
         ['/assets/favicon-192.png', 'image/png'], ['/assets/apple-touch-icon.png', 'image/png'],
         ['/assets/wordmark.svg', 'image/svg+xml'], ['/assets/wordmark.png', 'image/png'],
+        ['/assets/tokopedia.png', 'image/png'], ['/assets/shopee.svg', 'image/svg+xml'],
       ] as const) {
         const r = await page(path, false);
         assert.equal(r.status, 200, path);
