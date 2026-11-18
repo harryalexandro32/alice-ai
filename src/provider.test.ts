@@ -52,7 +52,7 @@ server.listen(0, '127.0.0.1', async () => {
   try {
     content = '{"reply":"GFAF-40A dayanya 130 W.","fields":{"name":"Budi","city":"Bekasi","need":null},"intent":"info"}';
     const r = await llmBrain(input);
-    assert.deepEqual(r, { reply: 'GFAF-40A dayanya 130 W.', fields: { name: 'Budi', city: 'Bekasi' }, intent: 'info', photos: [], docs: [], summary: '' });
+    assert.deepEqual(r, { reply: 'GFAF-40A dayanya 130 W.', fields: { name: 'Budi', city: 'Bekasi' }, intent: 'info', photos: [], docs: [], buy: [], summary: '' });
     assert.equal(seen.auth, 'Bearer kunci-tes');
     assert.equal(seen.body.model, 'deepseek-chat');
     assert.deepEqual(seen.body.response_format, { type: 'json_object' });

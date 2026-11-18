@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { cfg, normPhone, projectCfg, settingsCfg, TUNABLE, type Settings, type TunableKey } from '../config';
 import { currentProject, defaultProject, maybeProject, setDefaultProject, type ProjectCtx } from '../project';
 import { getProfile, getProject, projectStamp, saveProfile, type Project } from '../store';
-import { isPdf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
+import { isPdf, linksOf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
 import { generic } from './generic/profile';
 import { gfan } from './gfan/profile';
 import {
@@ -95,6 +95,8 @@ function apply(ctx: ProjectCtx, overrides: Partial<Editable>): void {
     b.catalog = [];
     b.notes = legacy;
   }
+  // Produk yang disimpan sebelum ada tautan marketplace: tanpa tautan.
+  b.products = (b.products ?? []).map((p) => ({ ...p, links: linksOf(p.links) }));
   // Profil lama bisa menyimpan penerima dengan jalur yang sudah dihapus: hanya
   // WhatsApp dan email yang dipakai, dan penerima tanpa keduanya dibuang diam-diam.
   b.recipients = (b.recipients ?? [])

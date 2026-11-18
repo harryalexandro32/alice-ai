@@ -645,20 +645,25 @@ $('addRule').addEventListener('click', () => {
 });
 
 // ---------- daftar produk ----------
-const P_COLS = ['name', 'description', 'price', 'stock'];
-const blankProduct = () => ({ name: '', description: '', price: '', stock: '', photos: [], pdf: '' });
+// Kolom teks yang bisa diisi dan ditempel dari Excel. Tautan marketplace ada di p.links (src/business/types.ts: MARKETS).
+const P_COLS = ['name', 'description', 'price', 'stock', 'tokopedia', 'shopee'];
+const MARKETS = ['tokopedia', 'shopee'];
+const pGet = (p, k) => (MARKETS.includes(k) ? (p.links || {})[k] : p[k]);
+const pSet = (p, k, v) => { if (MARKETS.includes(k)) (p.links ||= { tokopedia: '', shopee: '' })[k] = v; else p[k] = v; };
+const blankProduct = () => ({ name: '', description: '', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: '', shopee: '' } });
 const touchProducts = () => { setDirty(true, 'products'); updateKnowLen(); };
 let focusProduct = () => {};
 
 function renderProducts() {
   const list = profile.products;
   const pdfs = pdfLibrary();
-  const ph = [T('mis. GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('mis. Rp 450.000', 'e.g. Rp 450.000'), T('mis. ada / 12 unit', 'e.g. ada / 12 unit')];
+  const ph = [T('mis. GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('mis. Rp 450.000', 'e.g. Rp 450.000'), T('mis. ada / 12 unit', 'e.g. ada / 12 unit'),
+    'https://www.tokopedia.com/…', 'https://shopee.co.id/…'];
 
   const body = el('tbody', {}, ...list.map((p, ri) => {
     const cells = P_COLS.map((k, ci) => {
       const make = k === 'description' ? cellText : cellInput;
-      const input = make(p[k], (v) => { p[k] = v; touchProducts(); }, ri === 0 || !p.name ? ph[ci] : '');
+      const input = make(pGet(p, k), (v) => { pSet(p, k, v); touchProducts(); }, ri === 0 || !p.name ? ph[ci] : '');
       input.dataset.r = ri;
       input.dataset.c = ci;
       return el('td', { className: ci === 0 ? 'first' : '' }, input);
@@ -716,8 +721,8 @@ function renderProducts() {
     const del = xBtn(T('Hapus produk', 'Delete product'), () => { list.splice(ri, 1); touchProducts(); renderProducts(); });
     return el('tr', {}, ...cells, el('td', {}, thumbs), el('td', {}, pdf), el('td', { className: 'act' }, del));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 7, style: 'padding:12px;color:var(--muted)', textContent: T('Belum ada produk.', 'No products yet.') })));
-  $('products').replaceChildren(headRow([T('Nama', 'Name'), T('Keterangan', 'Description'), T('Harga', 'Price'), T('Stok', 'Stock'), T('Foto', 'Photos'), 'PDF']), body);
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:12px;color:var(--muted)', textContent: T('Belum ada produk.', 'No products yet.') })));
+  $('products').replaceChildren(headRow([T('Nama', 'Name'), T('Keterangan', 'Description'), T('Harga', 'Price'), T('Stok', 'Stock'), 'Tokopedia', 'Shopee', T('Foto', 'Photos'), 'PDF']), body);
   updateKnowLen();
 }
 
@@ -726,7 +731,7 @@ focusProduct = gridKeys($('products'), {
   count: () => profile.products.length,
   cols: () => P_COLS.length,
   addRow: () => { profile.products.push(blankProduct()); },
-  set: (r, c, v) => { profile.products[r][P_COLS[c]] = v; },
+  set: (r, c, v) => { pSet(profile.products[r], P_COLS[c], v); },
   redraw: () => { touchProducts(); renderProducts(); },
 });
 
@@ -741,7 +746,8 @@ $('addProduct').addEventListener('click', () => {
 // Sama dengan rakitan di server (src/business/catalog.ts): ini yang dibaca bot.
 function knowledgeLength() {
   const v = (s) => s || '-';
-  const products = profile.products.map((x) => [x.name, v(x.description), v(x.price), v(x.stock), v(x.photos.join(', ')), v(x.pdf)].join(' | ')).join('\n');
+  const buy = (x) => [['tokopedia', 'Tokopedia'], ['shopee', 'Shopee']].filter(([m]) => (x.links || {})[m]).map(([, l]) => l).join(', ');
+  const products = profile.products.map((x) => [x.name, v(x.description), v(x.price), v(x.stock), v(x.photos.join(', ')), v(x.pdf), v(buy(x))].join(' | ')).join('\n');
   const catalog = profile.catalog
     .map((s) => {
       const tables = s.tables.map((t) => t.title + ':\n' + t.columns.join(' | ') + '\n' + t.rows.map((r) => r.join(' | ')).join('\n')).join('\n\n');
@@ -910,12 +916,13 @@ $('sendForm').addEventListener('submit', async (e) => {
       addMsg('bad', T('Balasan ini TIDAK akan dikirim (', 'This reply will NOT be sent (') + r.rejected + '):\n\n' + r.reply);
     } else {
       addMsg('out', r.reply, r.photos, r.docs);
+      for (const b of r.buy || []) addMsg('out', b.text);
     }
     Object.assign(known, r.fields);
     const got = Object.entries(r.fields).map(([k, v]) => k + ' = ' + v).join(' · ');
     const n = r.photos.length + r.docs.length;
     addMsg('note', T('niat: ', 'intent: ') + r.intent + (got ? T(' · tercatat: ', ' · captured: ') + got : '') + (n ? ' · ' + n + T(' lampiran', ' attachments') : ''));
-    chat.push({ dir: 'in', text }, { dir: 'out', text: r.reply });
+    chat.push({ dir: 'in', text }, { dir: 'out', text: r.reply }, ...(r.rejected ? [] : (r.buy || []).map((b) => ({ dir: 'out', text: b.mark }))));
   } catch (err) {
     wait.remove();
     addMsg('bad', err.message);
@@ -1264,14 +1271,14 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
   onWidth(plot, draw);
 }
 
-const STAGES = ['baru', 'dihubungi', 'closing', 'batal'];
-const stageLabel = (s) => ({ baru: T('Baru', 'New'), dihubungi: T('Dihubungi', 'Contacted'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
+const STAGES = ['baru', 'dihubungi', 'link', 'closing', 'batal'];
+const stageLabel = (s) => ({ baru: T('Baru', 'New'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
 /**
  * Warna tiap tahap: satu sumber untuk chip Beranda, saringan Percakapan, dan pilihan tahap.
  * Kelasnya ada di app.css (.stage-baru …) dan mengisi --st-bg / --st-fg untuk tema terang dan gelap:
- * baru biru, dihubungi oranye, closing hijau, batal abu-abu.
+ * baru biru, dihubungi oranye, link ungu, closing hijau, batal abu-abu.
  */
-const STAGE_COLOR = { baru: 'stage-baru', dihubungi: 'stage-dihubungi', closing: 'stage-closing', batal: 'stage-batal' };
+const STAGE_COLOR = { baru: 'stage-baru', dihubungi: 'stage-dihubungi', link: 'stage-link', closing: 'stage-closing', batal: 'stage-batal' };
 const stageClass = (s) => STAGE_COLOR[s] || STAGE_COLOR.baru;
 /** Pilihan tahap berwarna sesuai tahap yang terpilih. */
 function paintStage(sel) {
@@ -1326,7 +1333,7 @@ async function loadLeads() {
 }
 
 const FILTERS = () => [
-  ['semua', T('Semua', 'All')], ['baru', stageLabel('baru')], ['dihubungi', stageLabel('dihubungi')],
+  ['semua', T('Semua', 'All')], ['baru', stageLabel('baru')], ['dihubungi', stageLabel('dihubungi')], ['link', stageLabel('link')],
   ['closing', stageLabel('closing')], ['batal', stageLabel('batal')], ['staf', T('Perlu staf', 'Needs staff')],
 ];
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);

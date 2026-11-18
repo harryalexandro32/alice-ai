@@ -47,6 +47,11 @@ export interface Recipient {
   email: string;
 }
 
+/** Marketplace tempat produk bisa dibeli; urutannya = urutan kolom dan tautan yang dikirim. */
+export const MARKETS = ['tokopedia', 'shopee'] as const;
+export type Market = (typeof MARKETS)[number];
+export const MARKET_LABELS: Record<Market, string> = { tokopedia: 'Tokopedia', shopee: 'Shopee' };
+
 /** Satu baris daftar produk. Yang rinci cukup ada di PDF-nya. */
 export interface Product {
   name: string;
@@ -59,6 +64,11 @@ export interface Product {
   photos: string[];
   /** Id PDF (brosur/spesifikasi) yang bisa dikirim ke pelanggan, atau ''. */
   pdf: string;
+  /**
+   * Tautan halaman produk ini di tiap marketplace ('' = tidak ada). Bot
+   * mengirimnya saat pelanggan ingin membeli, lalu tahap lead jadi "link".
+   */
+  links: Record<Market, string>;
 }
 
 /** Satu tabel produk: baris = produk, kolom pertama = kode/modelnya. */

@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { checkReply, llmBrain, type Brain, type BrainResult } from './brain';
 import { ALERT_TITLES, raiseAlert, signalDashboard } from './alerts';
 import { biz, fileById, mediaDir, productOfFile } from './business';
+import { buyMessage } from './business/catalog';
 import type { LeadField } from './business/types';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, localStamp, now } from './clock';
@@ -616,6 +617,27 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
         c = await reply(c, ATTACH_FAILED).catch(() => c);
         handoff = true;
       }
+    }
+
+    // Tautan beli: pesan sendiri per produk, ditulis kode dari daftar produk
+    // (LLM hanya memilih produknya), lalu tahap lead jadi "link". Tahap yang
+    // sudah lebih jauh (closing, batal) tidak diturunkan.
+    if (result && !rejected && result.buy.length) {
+      let sentLink = false;
+      for (const name of result.buy) {
+        const p = biz.products.find((x) => x.name === name);
+        const msg = p && buyMessage({ ...p, name: noDash(p.name) });
+        if (!msg) continue;
+        try {
+          await send({ phone: c.phone, address: c.address }, msg.text);
+          await addMessage(c.phone, 'out', msg.mark, now());
+          sentLink = true;
+          console.log(`[alur] ${c.phone}: tautan beli terkirim: ${name}`);
+        } catch (e) {
+          console.error(`[alur] ${c.phone}: tautan beli ${name} gagal terkirim: ${e instanceof Error ? e.message : e}`);
+        }
+      }
+      if (sentLink && (c.stage === 'baru' || c.stage === 'dihubungi')) c = await updateContact(c.phone, { stage: 'link' });
     }
 
     // Pertanyaan yang tidak bisa dijawab bot sendiri (dioper ke staf, atau
