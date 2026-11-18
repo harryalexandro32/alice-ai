@@ -726,12 +726,14 @@ const PNG = Buffer.from(
       assert.match((await reply('x'.repeat(4001))).body.error, /terlalu panjang/);
       assert.equal((await post(`/api/gfan/leads/${encodeURIComponent('+6281299998888')}/reply`, { text: 'halo' })).status, 404);
       assert.match((await post(`/api/gfan/leads/${encodeURIComponent('+6281700000009')}/reply`, { text: 'halo' })).body.error, /belum pernah chat/, 'pelanggan lama yang belum pernah chat');
+      await updateContact(P, { needs_sales: 1 });
       const sentAt = Date.now();
       const r = await reply('  Halo Pak, saya Rina dari GFAN.\r\nAda yang bisa dibantu?  ');
       assert.equal(r.status, 200);
       assert.deepEqual([r.body.message.dir, r.body.message.text, r.body.message.kind, r.body.stage], ['human', 'Halo Pak, saya Rina dari GFAN.\nAda yang bisa dibantu?', 'dashboard', 'dihubungi']);
       const c = await getContact(P);
       assert.deepEqual([c?.last_dir, c?.followup_state, c?.stage], ['human', 'idle', 'dihubungi'], 'tahap "baru" pindah ke "dihubungi"');
+      assert.equal(c?.needs_sales, 0, 'dibalas dari web: tanda perlu staf lepas');
       assert.ok(((await humanSeenAt(c?.address as string)) ?? 0) >= sentAt, 'tanda "admin membalas" dipasang');
       assert.equal((await recentMessages(P, 1))[0]?.dir, 'human');
       const after = await lead();

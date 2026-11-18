@@ -88,6 +88,9 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   - "baru", "menunggu tim", atau "dihubungi" -> "link terkirim" saat bot mengirim tautan beli (lihat
     **Tautan marketplace**).
 
+  Tanda **Perlu staf** (bukan tahap) muncul saat bot meminta bantuan staf, di tahap apa pun, dan
+  hilang saat staf membalas (dari HP atau dari web) atau menandai **Sudah ditangani**.
+
   Tahap tidak pernah turun sendiri. Payment, barang terkirim, order complete, dan batal hanya diubah
   staf dari dashboard; bot tidak pernah memasang atau mengubahnya.
 - **Tautan marketplace**: tiap produk punya kolom Tokopedia dan Shopee (https, di situs

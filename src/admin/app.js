@@ -1645,8 +1645,8 @@ const FILTER_HELP = () => ({
   dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya diubah staf.', 'The goods are on the way to the customer. Only staff set this.'),
   selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Hanya diubah staf.', 'The order is complete: the customer received the goods. Only staff set this.'),
   batal: T('Pelanggan tidak jadi membeli. Hanya diubah staf.', 'The customer did not buy. Only staff set this.'),
-  staf: T('Bukan tahap. Bot meminta bantuan staf dan belum ada yang menandai Sudah ditangani, di tahap apa pun. Tetap di sini walau staf sudah membalas, sampai ditandai.',
-    'Not a stage. The bot asked staff for help and nobody has marked it as handled, at any stage. It stays here after staff reply, until someone marks it.'),
+  staf: T('Bukan tahap. Bot meminta bantuan staf dan belum ada staf yang membalas, di tahap apa pun. Hilang saat staf membalas, atau saat ditandai Sudah ditangani (mis. sudah ditelepon).',
+    'Not a stage. The bot asked staff for help and no staff member has replied yet, at any stage. It clears when staff reply, or when someone marks it as handled (for example after a phone call).'),
 });
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);
 

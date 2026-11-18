@@ -805,6 +805,19 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 1);
   }],
 
+  ['balasan staf melepas tanda perlu staf, di tahap apa pun; butuh staf lagi = tandanya kembali', async () => {
+    await say('halo');
+    next = () => R('Tim kami yang akan bantu ya.', {}, 'handoff');
+    await say('bisa custom warna?');
+    assert.equal((await getContact(A))?.needs_sales, 1);
+    await handleHumanReply({ address: A, text: 'Bisa pak, warnanya apa?' });
+    assert.deepEqual([(await getContact(A))?.needs_sales, (await getContact(A))?.stage], [0, 'dihubungi'], 'dibalas dari HP');
+    // Tahap yang lebih jauh: tandanya tetap lepas, tahapnya tidak berubah.
+    await updateContact(A, { stage: 'link', needs_sales: 1 });
+    await handleHumanReply({ address: A, text: 'ongkirnya Rp 20.000 pak' });
+    assert.deepEqual([(await getContact(A))?.needs_sales, (await getContact(A))?.stage], [0, 'link']);
+  }],
+
   ['"sudah ditangani": tanda perlu staf hilang sampai pelanggan butuh staf lagi', async () => {
     await say('halo');
     next = () => R('Tim kami yang akan bantu ya.', {}, 'handoff');
