@@ -644,6 +644,33 @@ $('addRule').addEventListener('click', () => {
   boxes[boxes.length - 1].focus();
 });
 
+// ---------- pelajaran dari percakapan ----------
+function renderLessons() {
+  const list = profile.lessons || (profile.lessons = []);
+  const body = el('tbody', {}, ...list.map((l, i) => {
+    const box = el('textarea', { rows: Math.min(5, Math.max(2, Math.ceil((l.rule || '').length / 90))), value: l.rule, maxLength: 600,
+      placeholder: T('mis. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan.', 'e.g. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan.'),
+      style: 'border:0;border-radius:0;background:transparent' });
+    box.setAttribute('aria-label', T('Pelajaran ', 'Lesson ') + (i + 1));
+    box.addEventListener('input', () => { l.rule = box.value; setDirty(true, 'lessons'); });
+    const ex = l.example ? el('div', { className: 'lesson-ex', textContent: T('Dari: ', 'From: ') + l.example }) : null;
+    return el('tr', {}, el('td', {}, box, ex),
+      el('td', { className: 'act' }, xBtn(T('Hapus pelajaran', 'Delete lesson'), () => { list.splice(i, 1); setDirty(true, 'lessons'); renderLessons(); })));
+  }));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)',
+    textContent: T('Belum ada pelajaran. Tambahkan lewat “Ajari bot” di Pertanyaan yang belum terjawab, atau tulis sendiri di sini.', 'No lessons yet. Add one with “Teach the bot” in Unanswered questions, or write one here.') })));
+  $('lessonTable').replaceChildren(headRow([T('Pelajaran', 'Lesson')]), body);
+}
+$('addLesson').addEventListener('click', () => {
+  const list = profile.lessons || (profile.lessons = []);
+  if (list.length >= 40) return toast(T('Maksimal 40 pelajaran.', '40 lessons max.'), true);
+  list.push({ rule: '', example: '' });
+  setDirty(true, 'lessons');
+  renderLessons();
+  const boxes = $('lessonTable').querySelectorAll('textarea');
+  boxes[boxes.length - 1].focus();
+});
+
 // ---------- daftar produk ----------
 const P_COLS = ['name', 'description', 'price', 'stock'];
 // Sama dengan MARKETS dan MARKET_HOSTS di src/business (server memeriksanya lagi saat menyimpan).
@@ -1018,7 +1045,7 @@ $('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.
 
 /** Kata lain yang biasa diketik orang untuk satu halaman (mis. "wa" untuk WhatsApp). */
 const QS_KEYS = {
-  beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt',
+  beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt pelajaran ajari',
   produk: 'katalog harga stok marketplace tokopedia shopee', brosur: 'pdf katalog', pengaturan: 'proyek follow-up',
   whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'email penerima sales', lanjutan: 'biaya llm error warning mode uji',
 };
@@ -2041,17 +2068,96 @@ function askedLine(g) {
 
 function renderHandoffs() {
   const list = handoffData || [];
-  $('questionList').replaceChildren(...(list.length ? list.map((g) => {
-    const box = el('textarea', { rows: 2, maxLength: 4000, placeholder: T('Tulis jawabannya seperti Anda menjawab pelanggan…', 'Write the answer as you would tell the customer…') });
-    box.setAttribute('aria-label', T('Jawaban', 'Answer'));
-    const add = el('button', { type: 'button', className: 'btn' }, ico('book-plus'), T('Tambahkan ke pengetahuan', 'Add to knowledge'));
-    const skip = el('button', { type: 'button', className: 'btn ghost' }, ico('x'), T('Abaikan', 'Ignore'));
-    add.addEventListener('click', () => void resolveQuestion(g, 'ditambahkan', box.value, [add, skip]));
-    skip.addEventListener('click', () => void resolveQuestion(g, 'diabaikan', '', [add, skip]));
-    return el('div', { className: 'qitem' }, el('div', { className: 'q', textContent: g.question }),
-      el('div', { className: 'm' }, askedLine(g) + T(' · contoh dari ', ' · e.g. from '), el('a', { className: 'link', href: convPath(g.phone), textContent: g.phone })),
-      box, el('div', { className: 'acts' }, add, skip));
-  }) : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang menunggu jawaban. Pertanyaan yang dioper bot ke staf muncul di sini.', 'No questions waiting for an answer. Questions the bot hands to staff appear here.') })]));
+  $('questionList').replaceChildren(...(list.length ? list.map(questionItem) : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang menunggu jawaban. Pertanyaan yang dioper bot ke staf muncul di sini.', 'No questions waiting for an answer. Questions the bot hands to staff appear here.') })]));
+}
+
+/**
+ * Satu pertanyaan yang dioper bot ke tim: konteksnya (pesan bot sebelumnya dan balasan bot), lalu tiga
+ * pilihan: jawab untuk pelanggan (masuk "Pengetahuan lain"), ajari bot (jadi pelajaran), atau abaikan.
+ */
+function questionItem(g) {
+  const box = el('textarea', { rows: 2, maxLength: 4000, placeholder: T('Tulis jawabannya seperti Anda menjawab pelanggan…', 'Write the answer as you would tell the customer…') });
+  box.setAttribute('aria-label', T('Jawaban', 'Answer'));
+  const add = el('button', { type: 'button', className: 'btn' }, ico('book-plus'), T('Tambahkan ke pengetahuan', 'Add to knowledge'));
+  const teach = el('button', { type: 'button', className: 'btn ghost' }, ico('sparkles'), T('Ajari bot', 'Teach the bot'));
+  const skip = el('button', { type: 'button', className: 'btn ghost' }, ico('x'), T('Abaikan', 'Ignore'));
+  add.addEventListener('click', () => void resolveQuestion(g, 'ditambahkan', box.value, [add, teach, skip]));
+  skip.addEventListener('click', () => void resolveQuestion(g, 'diabaikan', '', [add, teach, skip]));
+
+  const ctx = g.context || {};
+  const line = (label, text) => el('div', { className: 'qctx-l' }, el('b', { textContent: label }), el('span', { textContent: text }));
+  // Balasan panjang dipotong 3 baris; "Lihat semua" membukanya (alasan handoff sering ada di kalimat terakhir).
+  const long = (ctx.before || '').length + (ctx.reply || '').length > 220 || /\n/.test(ctx.reply || '');
+  const more = long ? el('button', { type: 'button', className: 'linkbtn', textContent: T('Lihat semua', 'Show all') }) : null;
+  const context = ctx.before || ctx.reply ? el('div', { className: 'qctx' },
+    ctx.before ? line(T('Bot sebelumnya: ', 'Bot before: '), ctx.before) : null,
+    ctx.reply ? line(T('Balasan bot: ', 'Bot reply: '), ctx.reply) : line(T('Balasan bot: ', 'Bot reply: '), T('(tidak ada)', '(none)')), more) : null;
+  if (more) {
+    more.addEventListener('click', () => {
+      const open = context.classList.toggle('open');
+      more.textContent = open ? T('Ringkas', 'Show less') : T('Lihat semua', 'Show all');
+    });
+  }
+
+  // "Ajari bot": tulis pelajarannya (atau minta usulan), coba dulu, lalu simpan.
+  const lesson = el('textarea', { rows: 3, maxLength: 600,
+    placeholder: T('mis. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan. Pakai untuk menghitung kebutuhan udaranya.',
+      'e.g. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan. Pakai untuk menghitung kebutuhan udaranya.') });
+  lesson.setAttribute('aria-label', T('Pelajaran untuk bot', 'Lesson for the bot'));
+  const why = el('p', { className: 'qwhy', hidden: true });
+  const result = el('div', { className: 'qtry', hidden: true });
+  const save = el('button', { type: 'button', className: 'btn' }, ico('book-plus'), T('Simpan pelajaran', 'Save lesson'));
+  const retry = el('button', { type: 'button', className: 'btn ghost' }, ico('refresh'), T('Coba lagi', 'Try again'));
+  const explain = el('button', { type: 'button', className: 'btn ghost' }, ico('sparkles'), T('Bantu jelaskan', 'Help me explain'));
+  const cancel = el('button', { type: 'button', className: 'btn ghost' }, T('Batal', 'Cancel'));
+  const panel = el('div', { className: 'qteach', hidden: true },
+    el('p', { className: 'help', textContent: T('Jelaskan arti pesan seperti ini dan yang harus dilakukan bot. Bot membacanya di tiap balasan, dan menerapkannya juga pada pesan yang mirip.',
+      'Explain what a message like this means and what the bot must do. The bot reads it on every reply, and applies it to similar messages too.') }),
+    why, lesson, el('div', { className: 'acts' }, save, retry, explain, cancel), result);
+  const answer = el('div', {}, box, el('div', { className: 'acts' }, add, teach, skip));
+  const busyBtns = (on) => { for (const b of [save, retry, explain, cancel]) b.disabled = on; };
+
+  teach.addEventListener('click', () => { answer.hidden = true; panel.hidden = false; lesson.focus(); });
+  cancel.addEventListener('click', () => { panel.hidden = true; answer.hidden = false; });
+  explain.addEventListener('click', async () => {
+    busyBtns(true);
+    try {
+      const r = await api('handoffs/' + g.id + '/explain', { method: 'POST', body: '{}' });
+      const parts = [r.why ? T('Kenapa: ', 'Why: ') + r.why : ''];
+      if (!r.lesson) parts.push(T('Yang kurang adalah data dari tim. Lebih tepat pakai “Tambahkan ke pengetahuan”.', 'What is missing is data from the team. “Add to knowledge” fits better.'));
+      else if (lesson.value.trim()) parts.push(T('Usulan pelajaran: ', 'Suggested lesson: ') + r.lesson);
+      else lesson.value = r.lesson;
+      why.textContent = parts.filter(Boolean).join(' ');
+      why.hidden = !why.textContent;
+    } catch (e) { toast(e.message, true); }
+    busyBtns(false);
+  });
+  retry.addEventListener('click', async () => {
+    busyBtns(true);
+    result.hidden = false;
+    result.replaceChildren(el('p', { className: 'help', textContent: T('Bot menjawab ulang…', 'The bot is answering again…') }));
+    try {
+      const r = await api('handoffs/' + g.id + '/retry', { method: 'POST', body: JSON.stringify({ lesson: lesson.value }) });
+      const passed = r.intent === 'handoff' || r.intent === 'human';
+      const verdict = r.rejected ? el('span', { className: 'chip danger', textContent: T('tidak akan dikirim: ', 'would not be sent: ') + r.rejected })
+        : passed ? el('span', { className: 'chip warn', textContent: T('masih diserahkan ke tim', 'still passed to the team') })
+          : el('span', { className: 'chip ok', textContent: T('dijawab bot', 'answered by the bot') });
+      const files = [...(r.photos || []), ...(r.docs || [])].map((f) => f.name);
+      result.replaceChildren(
+        el('div', { className: 'qtry-h' }, el('b', { textContent: T('Jawaban bot sekarang', 'The bot\'s answer now') }), verdict),
+        el('div', { className: 'qtry-reply', textContent: r.reply }),
+        ...(r.buy || []).map((b) => el('div', { className: 'qtry-reply', textContent: b.text })),
+        files.length ? el('p', { className: 'help', textContent: T('Lampiran: ', 'Attachments: ') + files.join(', ') }) : null);
+    } catch (e) {
+      result.replaceChildren(el('p', { className: 'help', textContent: e.message }));
+    }
+    busyBtns(false);
+  });
+  save.addEventListener('click', () => void resolveQuestion(g, 'diajarkan', lesson.value, [save, retry, explain, cancel]));
+
+  return el('div', { className: 'qitem' }, el('div', { className: 'q', textContent: g.question }),
+    el('div', { className: 'm' }, askedLine(g) + T(' · contoh dari ', ' · e.g. from '), el('a', { className: 'link', href: convPath(g.phone), textContent: g.phone })),
+    context, answer, panel);
 }
 
 async function resolveQuestion(g, resolution, answer, buttons) {
@@ -2059,10 +2165,18 @@ async function resolveQuestion(g, resolution, answer, buttons) {
     if (!answer.trim()) return toast(T('Tulis jawabannya dulu.', 'Write the answer first.'), true);
     if (changed.has('notes')) return toast(T('Simpan dulu perubahan di "Pengetahuan lain" sebelum menambahkan jawaban.', 'Save your changes to "Other knowledge" before adding an answer.'), true);
   }
+  if (resolution === 'diajarkan') {
+    if (!answer.trim()) return toast(T('Tulis pelajarannya dulu.', 'Write the lesson first.'), true);
+    if (changed.has('lessons')) return toast(T('Simpan dulu perubahan di "Pelajaran dari percakapan" sebelum menambahkan pelajaran.', 'Save your changes to "Lessons from real chats" before adding a lesson.'), true);
+  }
   for (const b of buttons) b.disabled = true;
   try {
-    const r = await api('handoffs/' + g.id + '/resolve', { method: 'POST', body: JSON.stringify({ resolution, ...(answer.trim() ? { answer } : {}) }) });
-    if (r.profile) {
+    const text = answer.trim() ? (resolution === 'diajarkan' ? { lesson: answer } : { answer }) : {};
+    const r = await api('handoffs/' + g.id + '/resolve', { method: 'POST', body: JSON.stringify({ resolution, ...text }) });
+    if (r.profile && resolution === 'diajarkan') {
+      profile.lessons = r.profile.lessons;
+      renderLessons();
+    } else if (r.profile) {
       profile.notes = r.profile.notes;
       for (const n of document.querySelectorAll('[data-key="notes"]')) n.value = profile.notes;
       updateKnowLen();
@@ -2072,7 +2186,9 @@ async function resolveQuestion(g, resolution, answer, buttons) {
     if (homeData) renderHome();
     toast(resolution === 'ditambahkan'
       ? T('Jawaban ditambahkan ke "Pengetahuan lain". Bot memakainya mulai pesan berikutnya.', 'Answer added to "Other knowledge". The bot uses it from the next message.')
-      : T('Pertanyaan diabaikan.', 'Question ignored.'));
+      : resolution === 'diajarkan'
+        ? T('Pelajaran disimpan di "Cara bot bicara". Bot memakainya mulai pesan berikutnya.', 'Lesson saved in "How the bot talks". The bot uses it from the next message.')
+        : T('Pertanyaan diabaikan.', 'Question ignored.'));
   } catch (e) {
     toast(e.message, true);
     for (const b of buttons) b.disabled = false;
@@ -3054,6 +3170,7 @@ function renderAll() {
   renderFields();
   renderQuestions();
   renderRules();
+  renderLessons();
   renderProducts();
   renderPdfs();
   renderCatalog();

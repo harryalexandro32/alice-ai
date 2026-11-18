@@ -23,9 +23,12 @@ import { setDefaultProject } from './project';
     console.error('LLM_API_KEY kosong — eval butuh LLM sungguhan.');
     process.exit(1);
   }
+  // EVAL_MATCH=<teks>: hanya kasus yang pertanyaannya memuat teks itu (mis. saat memeriksa satu aturan).
+  const only = process.env.EVAL_MATCH?.trim().toLowerCase();
+  const cases = only ? biz.evalCases.filter((c) => c.q.toLowerCase().includes(only)) : biz.evalCases;
   let pass = 0;
-  for (const c of biz.evalCases) {
-    const r = await llmBrain({ text: c.q, known: {}, history: [], justGreeted: false });
+  for (const c of cases) {
+    const r = await llmBrain({ text: c.q, known: {}, history: c.history ?? [], justGreeted: false });
     const problems: string[] = [];
     if (!r) problems.push('tidak ada hasil');
     else {
@@ -44,6 +47,6 @@ import { setDefaultProject } from './project';
       console.log(`    ${problems.join('; ')}\n    → ${r?.reply.replace(/\n/g, ' ') ?? '(null)'}`);
     }
   }
-  console.log(`\neval ${biz.id}: ${pass}/${biz.evalCases.length}`);
+  console.log(`\neval ${biz.id}: ${pass}/${cases.length}`);
   console.log(llmUsageToday());
 })();

@@ -231,7 +231,7 @@ export const handoffs = pgTable(
     at: ms('at').notNull(),
     resolved_at: ms('resolved_at'),
     answer: text('answer'),
-    /** ditambahkan (jawabannya masuk pengetahuan) | diabaikan */
+    /** ditambahkan (jawabannya masuk pengetahuan) | diajarkan (jadi pelajaran untuk bot) | diabaikan */
     resolution: text('resolution'),
   },
   (t) => [index('handoffs_project').on(t.project, t.id)]

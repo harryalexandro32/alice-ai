@@ -41,6 +41,7 @@ export const generic: Business = {
   notes: '',
   questions: [],
   styleRules: [],
+  lessons: [],
   advice: '',
   handoffTopics: 'harga, diskon, stok, waktu kirim, ongkir, garansi, cara bayar, alamat/kontak toko',
   handoffLabel: 'harga/stok',

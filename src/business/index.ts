@@ -21,7 +21,7 @@ import { isPdf, linksOf, renderCatalog, renderProducts, validateCatalog, validat
 import { generic } from './generic/profile';
 import { gfan } from './gfan/profile';
 import {
-  EDITABLE, type Business, type Editable, type LeadField, type MediaFile, type NotifyKind, type Recipient, type Route,
+  EDITABLE, type Business, type Editable, type LeadField, type Lesson, type MediaFile, type NotifyKind, type Recipient, type Route,
 } from './types';
 
 /** Bibit profil yang bisa dipilih saat membuat proyek. */
@@ -95,6 +95,7 @@ function apply(ctx: ProjectCtx, overrides: Partial<Editable>): void {
     b.catalog = [];
     b.notes = legacy;
   }
+  b.lessons = Array.isArray(b.lessons) ? b.lessons : [];
   // Produk yang disimpan sebelum ada tautan marketplace: tanpa tautan.
   b.products = (b.products ?? []).map((p) => ({ ...p, links: linksOf(p.links) }));
   // Profil lama bisa menyimpan penerima dengan jalur yang sudah dihapus: hanya
@@ -228,6 +229,26 @@ const text = (v: unknown, max: number, name: string, required = false): string =
  * Periksa masukan dari dashboard. Melempar pesan yang bisa ditampilkan ke
  * pemilik. Hanya kunci yang dikenal yang lolos; sisanya dibuang diam-diam.
  */
+export const LESSON_LIMITS = { rows: 40, rule: 600, example: 600 };
+
+/** Periksa daftar pelajaran dari dashboard. Baris tanpa pelajaran dibuang. */
+export function validateLessons(input: unknown): Lesson[] {
+  const L = LESSON_LIMITS;
+  if (!Array.isArray(input)) throw new Error('Pelajaran harus berupa daftar');
+  const rows = input
+    .map((raw: Record<string, unknown>) => ({
+      rule: String(raw?.rule ?? '').replace(/\r\n/g, '\n').trim(),
+      example: String(raw?.example ?? '').replace(/\s+/g, ' ').trim(),
+    }))
+    .filter((x) => x.rule);
+  if (rows.length > L.rows) throw new Error(`Pelajaran: maksimal ${L.rows}`);
+  for (const [i, x] of rows.entries()) {
+    if (x.rule.length > L.rule) throw new Error(`Pelajaran ${i + 1}: maksimal ${L.rule} karakter`);
+    if (x.example.length > L.example) x.example = x.example.slice(0, L.example);
+  }
+  return rows;
+}
+
 export function validate(input: Record<string, unknown>): Partial<Editable> {
   const out: Partial<Editable> = {};
   const set = <K extends keyof Editable>(k: K, v: Editable[K]) => void (out[k] = v);
@@ -255,6 +276,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
     if (!Array.isArray(input.questions) || input.questions.length > 12) throw new Error('Pertanyaan kebutuhan: maksimal 12 baris');
     set('questions', input.questions.map((q, i) => text(q, 200, `Pertanyaan baris ${i + 1}`)).filter(Boolean));
   }
+  if ('lessons' in input) set('lessons', validateLessons(input.lessons));
   if ('styleRules' in input) {
     if (!Array.isArray(input.styleRules) || input.styleRules.length > 20) throw new Error('Aturan balasan: maksimal 20 baris');
     set('styleRules', input.styleRules.map((r, i) => text(r, 400, `Aturan balasan baris ${i + 1}`)).filter(Boolean));

@@ -12,7 +12,7 @@
  * dikumpulkan ditentukan profil bisnis, bukan skema.
  */
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql } from 'drizzle-orm';
 
 import { db } from './db';
 import {
@@ -161,6 +161,24 @@ export async function recentMessages(phone: string, n: number): Promise<{ dir: D
     .orderBy(desc(messages.id))
     .limit(n);
   return rows.reverse().map((r) => ({ ...r, dir: r.dir as Dir }));
+}
+
+/**
+ * Percakapan di sekitar satu pesan pelanggan (waktu `at`): pesan-pesan sebelumnya
+ * (terlama dulu) dan pesan sejak pesan itu (termasuk pesan itu sendiri dan
+ * balasan bot sesudahnya). Dipakai Pertanyaan yang belum terjawab.
+ */
+export async function messagesAround(
+  phone: string, at: number, before = 8, after = 6
+): Promise<{ before: { dir: Dir; text: string; at: number }[]; after: { dir: Dir; text: string; at: number }[] }> {
+  const cols = { dir: messages.dir, text: messages.text, at: messages.at };
+  const where = (cond: ReturnType<typeof lt>) => and(eq(messages.project, pid()), eq(messages.phone, phone), cond);
+  const [prev, next] = await Promise.all([
+    db().select(cols).from(messages).where(where(lt(messages.at, at))).orderBy(desc(messages.id)).limit(before),
+    db().select(cols).from(messages).where(where(gte(messages.at, at))).orderBy(asc(messages.id)).limit(after),
+  ]);
+  const typed = (rows: typeof prev) => rows.map((r) => ({ ...r, dir: r.dir as Dir }));
+  return { before: typed(prev.reverse()), after: typed(next) };
 }
 
 export async function countInboundSince(phone: string, since: number): Promise<number> {
@@ -456,7 +474,7 @@ export async function getHandoff(id: number): Promise<HandoffRow | undefined> {
 }
 
 /** Tandai baris-baris ini selesai. */
-export async function resolveHandoffs(ids: number[], resolution: 'ditambahkan' | 'diabaikan', answer: string | null, at: number): Promise<void> {
+export async function resolveHandoffs(ids: number[], resolution: 'ditambahkan' | 'diajarkan' | 'diabaikan', answer: string | null, at: number): Promise<void> {
   if (!ids.length) return;
   await db()
     .update(handoffs)
