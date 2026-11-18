@@ -42,10 +42,10 @@ export const gfan: Business = {
     },
   ],
 
-  // Satu baris per model. Harga, stok, foto, dan PDF diisi pemilik lewat dashboard.
+  // Satu baris per model. Harga, stok, foto, PDF, dan tautan marketplace diisi pemilik lewat dashboard.
   products: SERIES.flatMap((s) =>
     [...new Set(s.tables.flatMap((t) => t.rows.map((r) => r[0] as string)))].map((code) => ({
-      name: code, description: s.name, price: '', stock: '', photos: [], pdf: '',
+      name: code, description: s.name, price: '', stock: '', photos: [], pdf: '', links: { tokopedia: '', shopee: '' },
     }))
   ),
   questions: [

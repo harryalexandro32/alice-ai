@@ -25,8 +25,11 @@ export type { PairingRequest, Project, ProjectStatus };
 
 export type Dir = 'in' | 'out' | 'human';
 export type FollowupState = 'idle' | 'pending';
-/** Tahap pipeline lead; hanya "baru" -> "dihubungi" yang berubah otomatis (manusia membalas). */
-export const STAGES = ['baru', 'dihubungi', 'closing', 'batal'] as const;
+/**
+ * Tahap pipeline lead. Yang berubah otomatis hanya "baru" -> "dihubungi"
+ * (manusia membalas) dan "baru"/"dihubungi" -> "link" (bot mengirim tautan beli).
+ */
+export const STAGES = ['baru', 'dihubungi', 'link', 'closing', 'batal'] as const;
 export type Stage = (typeof STAGES)[number];
 
 export interface Contact {

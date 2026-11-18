@@ -113,7 +113,7 @@ const PNG = Buffer.from(
     assert.match(systemPrompt(), /Jam buka: Senin–Sabtu/);
     assert.equal(state.body.profile.catalog.length, 6, 'tabel produk bawaan tampil di dashboard');
     assert.equal(state.body.profile.products.length, 30, 'satu baris per model');
-    assert.deepEqual(state.body.profile.products[0], { name: 'GFC10-12B4', description: 'Ceiling Fan GFC — Model B4 (ceiling vent-type)', price: '', stock: '', photos: [], pdf: '' });
+    assert.deepEqual(state.body.profile.products[0], { name: 'GFC10-12B4', description: 'Ceiling Fan GFC — Model B4 (ceiling vent-type)', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: '', shopee: '' } });
     assert.equal(state.body.profile.knowledge, undefined);
 
     // --- tabel produk: masukan dirapikan, yang salah ditolak ---
@@ -186,9 +186,19 @@ const PNG = Buffer.from(
       logo: 'f99999999',
     });
     assert.match(prod.body.error, /Logo/);
+    // Tautan marketplace: https di situs marketplace itu saja.
+    const TOKO = 'https://www.tokopedia.com/kipashisap/axial-wall-fan-16-inch';
+    for (const [links, error] of [
+      [{ tokopedia: 'http://www.tokopedia.com/kipashisap/x' }, /Tokopedia harus https/],
+      [{ tokopedia: 'https://shopee.co.id/x' }, /Tokopedia harus https/],
+      [{ shopee: 'https://www.tokopedia.com/x' }, /Shopee harus https/],
+      [{ shopee: 'bukan tautan' }, /Shopee tidak sah/],
+    ] as const) {
+      assert.match((await put({ products: [{ name: 'GFAF-40A', links }] })).body.error, error);
+    }
     const prod2 = await put({
       products: [
-        { name: 'GFAF-40A', description: 'Exhaust 16" | industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id, pdf.id, 'f99999999'], pdf: pdf.id },
+        { name: 'GFAF-40A', description: 'Exhaust 16" | industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id, pdf.id, 'f99999999'], pdf: pdf.id, links: { tokopedia: ` ${TOKO} `, lazada: 'https://lazada.co.id/x' } },
         { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: photo.id },
         { name: '', description: '', price: '', stock: '', photos: [], pdf: '' },
       ],
@@ -196,13 +206,15 @@ const PNG = Buffer.from(
     });
     assert.equal(prod2.status, 200);
     assert.deepEqual(biz.products, [
-      { name: 'GFAF-40A', description: 'Exhaust 16" industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id], pdf: pdf.id },
-      { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: '' },
+      { name: 'GFAF-40A', description: 'Exhaust 16" industri', price: 'Rp 450.000', stock: 'ada', photos: [photo.id], pdf: pdf.id, links: { tokopedia: TOKO, shopee: '' } },
+      { name: 'GFAF-50A', description: '', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: '', shopee: '' } },
     ]);
     assert.deepEqual(biz.files.map((f) => f.id), [photo.id, pdf.id], 'foto yang tidak dipakai dihapus dari daftar');
     assert.ok(!existsSync(join(mediaDir(), stray.file)), '…dan dari disk');
-    assert.match(systemPrompt(), new RegExp(`GFAF-40A \\| Exhaust 16" industri \\| Rp 450.000 \\| ada \\| ${photo.id} \\| ${pdf.id}`));
-    assert.match(systemPrompt(), /GFAF-50A \| - \| - \| - \| - \| -/);
+    assert.match(systemPrompt(), new RegExp(`GFAF-40A \\| Exhaust 16" industri \\| Rp 450.000 \\| ada \\| ${photo.id} \\| ${pdf.id} \\| Tokopedia\n`));
+    assert.match(systemPrompt(), /GFAF-50A \| - \| - \| - \| - \| - \| -\n/);
+    assert.ok(!systemPrompt().includes(TOKO), 'tautannya tidak masuk prompt; kode yang mengirimnya');
+    assert.match(systemPrompt(), /MEMBELI\n/);
     assert.match(systemPrompt(), /PERTANYAAN KEBUTUHAN\n- Ukuran kamarnya berapa × berapa\?\n- Dipakai untuk apa\?/);
 
     // Logo: harus gambar yang ada; selama dipakai tidak ikut dibuang.
@@ -214,7 +226,7 @@ const PNG = Buffer.from(
     // --- uji coba: memakai pagar yang sama dengan bot sungguhan ---
     setAdminBrain(async (i) => ({
       reply: i.text.includes('harga') ? 'Harganya Rp 500.000' : i.text.includes('40A') ? 'GFAF-40A Rp 450.000 ya' : 'Ini fotonya ya',
-      fields: { name: 'Budi' }, intent: 'info', photos: [photo.id], docs: [pdf.id], summary: '',
+      fields: { name: 'Budi' }, intent: 'info', photos: [photo.id], docs: [pdf.id], buy: i.text.includes('beli') ? ['GFAF-40A', 'GFAF-50A'] : [], summary: '',
     }));
     const test = (text: string) => call('/api/gfan/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
     const t1 = await test('minta foto');
@@ -223,6 +235,8 @@ const PNG = Buffer.from(
     assert.equal(t1.body.docs[0].file, pdf.file);
     assert.equal((await test('harga berapa')).body.rejected, 'menyebut harga', 'harga di luar daftar produk ditolak');
     assert.equal((await test('40A berapa')).body.rejected, null, 'harga yang tertulis di daftar produk boleh');
+    assert.deepEqual((await test('mau beli')).body.buy, [{ text: `*GFAF-40A*\nTokopedia: ${TOKO}`, mark: `[link:GFAF-40A] Tokopedia: ${TOKO}` }],
+      'uji coba menampilkan tautan beli yang akan dikirim; produk tanpa tautan dilewati');
 
     // Foto yang dilepas dari produk ikut dihapus; PDF tetap di pustaka sampai
     // dihapus dari halaman PDF, dan saat itu lepas dari semua produk.
@@ -822,7 +836,7 @@ const PNG = Buffer.from(
       const { day: _today, ...todayMsgs } = m.messagesByDay[6];
       assert.deepEqual(todayMsgs, { in: 2, out: 1, human: 1 });
       // Tahap lead: semua kontak proyek, tidak dibatasi jendela.
-      assert.deepEqual(m.stages, { baru: 1, dihubungi: 0, closing: 1, batal: 0 });
+      assert.deepEqual(m.stages, { baru: 1, dihubungi: 0, link: 0, closing: 1, batal: 0 });
       // ?days=: jendela lain untuk grafik, paling banyak 90; yang tidak sah kembali ke 7.
       const m14 = (await call('/api/metrik/metrics?days=14')).body;
       assert.deepEqual([m14.windowDays, m14.days.length, m14.messagesByDay.length], [14, 14, 14]);

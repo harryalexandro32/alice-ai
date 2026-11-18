@@ -58,8 +58,9 @@ const R = (
   intent: BrainResult['intent'] = 'info',
   photos: string[] = [],
   docs: string[] = [],
-  summary = ''
-): BrainResult => ({ reply, fields, intent, photos, docs, summary });
+  summary = '',
+  buy: string[] = []
+): BrainResult => ({ reply, fields, intent, photos, docs, buy, summary });
 
 const SEED_PRODUCTS = biz.products;
 const SEED_RULES = biz.styleRules;
@@ -931,7 +932,7 @@ const tests: [string, () => Promise<void>][] = [
     const greeting = biz.greeting;
     biz.greeting = 'Halo — selamat datang di toko kami — ada yang bisa dibantu?';
     biz.files = [{ id: 'd0000000b', file: 'd0000000b.pdf', name: 'Katalog — Seri A.pdf' }];
-    biz.products = [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: 'd0000000b' }];
+    biz.products = [{ name: 'GFAF-40A', description: '', price: '', stock: '', photos: [], pdf: 'd0000000b', links: { tokopedia: '', shopee: '' } }];
     try {
       next = () => R('Ada, Pak — ini katalognya. Ukuran 16–20 inci tersedia.', {}, 'info', [], ['d0000000b']);
       await say('halo ada katalog?');
@@ -1039,7 +1040,7 @@ const tests: [string, () => Promise<void>][] = [
       { id: 'd0000000b', file: 'd0000000b.pdf', name: 'Industrial Fan - GFan.pdf' },
       { id: 'f0000000c', file: 'f0000000c.jpg', name: 'tidak-terpasang.jpg' },
     ];
-    biz.products = [{ name: 'GFAF-40A', description: 'Exhaust 16"', price: 'Rp 450.000', stock: 'ada', photos: ['f0000000a'], pdf: 'd0000000b' }];
+    biz.products = [{ name: 'GFAF-40A', description: 'Exhaust 16"', price: 'Rp 450.000', stock: 'ada', photos: ['f0000000a'], pdf: 'd0000000b', links: { tokopedia: '', shopee: '' } }];
     await say('halo');
     next = () => R('Ini fotonya ya, Pak.', {}, 'info', ['f0000000a']);
     await say('minta foto GFAF-40A');
@@ -1137,6 +1138,43 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(A))?.stage, 'closing', 'hanya "baru" yang berpindah otomatis');
   }],
 
+  ['tautan beli: dikirim kode dari daftar produk, tahap lead jadi "link"', async () => {
+    const TOKO = 'https://www.tokopedia.com/kipashisap/axial-wall-fan-16-inch-industrial-ventilation-fan-gfaf-40ab';
+    const none = { tokopedia: '', shopee: '' };
+    biz.products = [
+      { name: 'GFAF-40AB', description: '', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: TOKO, shopee: '' } },
+      { name: 'GFAF-20A', description: '', price: '', stock: '', photos: [], pdf: '', links: none },
+    ];
+    assert.match(systemPrompt(), /MEMBELI\n[\s\S]*isi "buy" dengan nama produk itu/);
+    assert.match(systemPrompt(), /GFAF-40AB \| - \| - \| - \| - \| - \| Tokopedia\n/);
+    // Hanya produk yang punya tautan yang bisa dipilih model.
+    assert.deepEqual(parseBrain('{"reply":"Siap","buy":["GFAF-40AB","GFAF-20A","GFAF-99X",7]}')?.buy, ['GFAF-40AB']);
+    // Model tetap tidak boleh menulis tautan sendiri, juga tautan yang benar.
+    assert.equal(checkReply(`Silakan order di ${TOKO}`), 'menyertakan tautan');
+
+    await say('halo');
+    next = () => R('Siap, Pak. Link pembeliannya kami kirimkan ya.', {}, 'info', [], [], '', ['GFAF-40AB', 'GFAF-20A']);
+    await say('mau beli GFAF-40AB 2 unit');
+    assert.deepEqual(sent.slice(-2), ['Siap, Pak. Link pembeliannya kami kirimkan ya.', `*GFAF-40AB*\nTokopedia: ${TOKO}`], 'produk tanpa tautan dilewati');
+    assert.equal((await getContact(A))?.stage, 'link');
+    assert.equal((await recentMessages(A, 1))[0]?.text, `[link:GFAF-40AB] Tokopedia: ${TOKO}`, 'tercatat di riwayat, jadi model tahu tautannya sudah terkirim');
+
+    // Tahap yang sudah lebih jauh tidak diturunkan; "dihubungi" naik ke "link".
+    await updateContact(A, { stage: 'closing' });
+    await say('kirim lagi linknya');
+    assert.equal((await getContact(A))?.stage, 'closing');
+    await updateContact(A, { stage: 'dihubungi' });
+    await say('linknya mana');
+    assert.equal((await getContact(A))?.stage, 'link');
+
+    // Tanpa tautan yang terkirim, tahap tidak berubah.
+    next = () => R('Untuk GFAF-20A tim kami yang bantu pesanannya ya.', {}, 'handoff', [], [], '', ['GFAF-20A']);
+    const B = '+6281211110002';
+    await say('halo', B);
+    await say('mau beli GFAF-20A', B);
+    assert.equal((await getContact(B))?.stage, 'baru');
+  }],
+
   ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {
     await say('halo');
     const out: { phone: string; address: string; text: string }[] = [];
@@ -1221,8 +1259,8 @@ const tests: [string, () => Promise<void>][] = [
     const p = parseBrain(
       '```json\n{"reply":"Halo","fields":{"name":"null","city":" Bandung ","need":null,"admin":"ya"},"intent":"hapus semua"}\n```'
     );
-    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [], docs: [], summary: '' });
-    assert.deepEqual(parseBrain('{"reply":"Hai","summary":" Cari exhaust gudang;  menunggu ukuran. "}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [], docs: [], summary: 'Cari exhaust gudang; menunggu ukuran.' });
+    assert.deepEqual(p, { reply: 'Halo', fields: { city: 'Bandung' }, intent: 'other', photos: [], docs: [], buy: [], summary: '' });
+    assert.deepEqual(parseBrain('{"reply":"Hai","summary":" Cari exhaust gudang;  menunggu ukuran. "}'), { reply: 'Hai', fields: {}, intent: 'other', photos: [], docs: [], buy: [], summary: 'Cari exhaust gudang; menunggu ukuran.' });
     assert.equal(checkReply('GFAF-40A: 130 W, 2880 m³/h, 62 dB.'), null);
     assert.equal(checkReply('Tegangan 220/380 V, berat 8.5 kg.'), null);
     assert.ok(checkReply('Sekitar Rp750.000'));
@@ -1239,7 +1277,7 @@ const tests: [string, () => Promise<void>][] = [
       'GFAF-40A berukuran 16 inci, kabel 1.5 m.', 'Tegangan 220/380 V, berat 8.5 kg.', 'Baik Pak. Id produknya GFAF-40A.', 'Debit 2880 m³/h, 62 dB.',
       'Kami kirim ke Jakarta, Bandung, dan kota lain.', 'Ukuran 30 x 30 cm cocok untuk kamar mandi.',
     ]) assert.equal(checkReply(r), null, r);
-    assert.match(systemPrompt(), /Jangan pernah menyertakan tautan/);
+    assert.match(systemPrompt(), /Jangan pernah menulis tautan, alamat situs, atau link wa\.me/);
 
     // Balasan LLM dengan tautan dibuang: jalur "balasan dibuang" yang biasa.
     await say('halo');

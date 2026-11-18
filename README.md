@@ -75,9 +75,14 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`, nomor WA bot, nomor sales).
 - **Bilah keadaan** di atas tiap halaman: WhatsApp tersambung atau belum, **Bot dijeda**,
   **MODE UJI**, dan perkiraan biaya LLM bulan ini. Tiap tanda adalah tautan ke pengaturannya.
-- **Percakapan**: tiap pelanggan punya **tahap** (baru, dihubungi, closing, batal) dan **catatan**.
-  Tahap "baru" pindah sendiri ke "dihubungi" begitu admin membalas (dari HP atau dari web); tahap
-  lain hanya berubah dari dashboard.
+- **Percakapan**: tiap pelanggan punya **tahap** (baru, dihubungi, link terkirim, closing, batal) dan
+  **catatan**. Tahap "baru" pindah sendiri ke "dihubungi" begitu admin membalas (dari HP atau dari
+  web). Tahap "baru" atau "dihubungi" pindah sendiri ke "link terkirim" begitu bot mengirim tautan
+  beli (lihat **Tautan marketplace**). Tahap lain hanya berubah dari dashboard.
+- **Tautan marketplace**: tiap produk punya kolom Tokopedia dan Shopee (https, di situs
+  marketplace itu). Kalau pelanggan ingin membeli produk yang punya tautan, LLM hanya memilih
+  produknya (`buy`); kode mengirim tautannya sebagai pesan sendiri dan mencatatnya di riwayat
+  sebagai `[link:<produk>]`. Tautannya tidak masuk prompt.
 - **Balas dari web**: balasan masuk antrean (`outbox`, jenis `reply`) dan dikirim proses bot dalam
   ±3 detik selama WhatsApp tersambung. Bot langsung mundur di chat itu, sama seperti admin yang
   membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi warning
@@ -138,8 +143,8 @@ dilakukan bot untuk menekannya:
   mengaktifkan bot lagi di percakapannya.
 - **Batas kiriman** yang rendah (bawaan 60 per jam, 300 per 24 jam) dan pemanasan 7 hari untuk
   nomor baru (matikan di Pengaturan > Lanjutan untuk nomor yang sudah lama dipakai normal).
-- **Tanpa tautan**: balasan LLM yang memuat tautan atau alamat situs tidak dikirim; tim yang
-  membagikan tautan secara langsung.
+- **Tanpa tautan dari LLM**: balasan LLM yang memuat tautan atau alamat situs tidak dikirim. Satu-satunya
+  tautan dari bot adalah tautan marketplace di daftar produk, yang dikirim kode saat pelanggan ingin membeli.
 - **Restart jarang**: deploy hanya menyalakan ulang bot kalau kode bot berubah.
 
 Yang perlu dilakukan pemilik:
@@ -163,7 +168,7 @@ Mesin tidak menyebut nama klien, produk, maupun field lead. Semua itu ada di sat
 2. Isi `profile.ts` (lihat `src/business/types.ts`):
    - `brand`, `about`, `honorific`, `greeting`
    - `leadFields` — data apa yang dikumpulkan (bebas: tanggal acara, jumlah orang, …)
-   - `products` (daftar produk: nama, keterangan, harga, stok, foto, PDF), `catalog` (tabel teknis rinci,
+   - `products` (daftar produk: nama, keterangan, harga, stok, foto, PDF, tautan Tokopedia/Shopee), `catalog` (tabel teknis rinci,
      opsional) dan `notes` (FAQ, jam buka) — satu-satunya sumber jawaban
    - `questions` — pertanyaan untuk memahami kebutuhan pelanggan
    - `handoffTopics` — yang harus dijawab manusia; `forbidPrices` kalau bot tidak boleh sebut harga

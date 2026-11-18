@@ -32,7 +32,7 @@ import { join } from 'node:path';
 
 import { checkReply, llmBrain, type Brain } from '../brain';
 import { biz, editableView, fileById, loadProject, referencedFiles, setPdfText, TEMPLATES, validate } from '../business';
-import { isPdf } from '../business/catalog';
+import { buyMessage, isPdf } from '../business/catalog';
 import type { MediaFile } from '../business/types';
 import { cfg, normPhone, parseSalesNumber } from '../config';
 import { ensureProject } from '../db/seed';
@@ -774,6 +774,8 @@ export function createAdminHandler(store: AdminStore) {
         ...result,
         photos: result.photos.map(fileById).filter(Boolean),
         docs: result.docs.map(fileById).filter(Boolean),
+        // Pesan tautan beli yang akan dikirim bot sesudah balasannya.
+        buy: result.buy.map((name) => biz.products.find((p) => p.name === name)).map((p) => p && buyMessage(p)).filter(Boolean),
         rejected: checkReply(result.reply, asked),
       });
     }

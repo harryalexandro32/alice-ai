@@ -11,6 +11,7 @@
  */
 
 import { biz, knowledgeText } from './business';
+import { marketsOf } from './business/catalog';
 import type { Intent } from './business/types';
 import { unknownCodes } from './guard';
 import { askJson } from './llm/provider';
@@ -41,6 +42,8 @@ export interface BrainResult {
   photos: string[];
   /** Id PDF yang dilampirkan (hanya yang benar-benar ada). */
   docs: string[];
+  /** Nama produk yang tautan belinya dikirim (hanya produk yang punya tautan marketplace). */
+  buy: string[];
   /** Ringkasan percakapan sejauh ini untuk staf (bukan untuk pelanggan). */
   summary: string;
 }
@@ -49,6 +52,7 @@ export type Brain = (input: BrainInput) => Promise<BrainResult | null>;
 
 const MAX_PHOTOS = 3;
 const MAX_DOCS = 2;
+const MAX_BUY = 3;
 
 export function systemPrompt(): string {
   const labels = biz.leadFields.map((f) => f.label).join(', ');
@@ -63,6 +67,7 @@ export function systemPrompt(): string {
       ? ' JANGAN PERNAH menyebut nominal rupiah.'
       : '';
   const attach = biz.products.some((p) => p.photos.length || p.pdf);
+  const sells = biz.products.some((p) => marketsOf(p).length);
   const ask = biz.questions.length
     ? `- Kalau data untuk menganalisis belum cukup, tanyakan dulu yang kurang sebelum
   merekomendasikan, memakai PERTANYAAN KEBUTUHAN di bawah: pilih yang belum
@@ -84,8 +89,9 @@ GAYA
 - Bahasanya positif: sebutkan manfaatnya bagi pelanggan, jangan menyindir atau
   merendahkan cara dan pilihan lain.
 - Jangan pernah memakai tanda pisah panjang ("—" atau "–"). Pakai koma atau titik.
-- Jangan pernah menyertakan tautan, alamat situs, atau link wa.me. Tim kami yang
-  membagikan tautan secara langsung.
+- Jangan pernah menulis tautan, alamat situs, atau link wa.me di "reply".${
+    sells ? ' Tautan beli dikirim otomatis lewat "buy" (lihat MEMBELI).' : ' Tim kami yang\n  membagikan tautan secara langsung.'
+  }
 - JANGAN menyebut dirimu asisten virtual, bot, chatbot, AI, sistem, atau layanan
   otomatis, dan jangan memperkenalkan diri dengan sebutan semacam itu.
 ${biz.alias ? `- Nama panggilanmu ${biz.alias}. Sebutkan hanya kalau ditanya atau saat wajar memperkenalkan diri.\n` : ''}- Kalau pelanggan bertanya langsung apakah ini bot atau manusia: jangan mengaku
@@ -170,7 +176,25 @@ LAMPIRAN (FOTO DAN PDF)
 - Jangan bilang mengirim foto atau brosur kalau "photos"/"docs" kosong. Kalau
   foto DAN PDF-nya sama-sama "-", katakan tim kami yang akan mengirimkannya.
 
-MENGUMPULKAN DATA
+${
+    sells
+      ? `MEMBELI
+- Kolom Beli di DAFTAR PRODUK menyebut marketplace tempat produk itu bisa dibeli.
+- Kalau pelanggan ingin membeli/memesan/order produk tertentu, menanyakan cara
+  beli, atau minta link belinya: isi "buy" dengan nama produk itu, PERSIS seperti
+  di DAFTAR PRODUK (maksimal ${MAX_BUY}), hanya produk yang kolom Beli-nya bukan "-".
+  Tautannya dikirim otomatis tepat setelah balasanmu. Di "reply" cukup katakan
+  singkat bahwa link pembeliannya kami kirimkan, dan bahwa harga terbaru dan
+  pemesanan ada di sana. Jangan tulis tautannya sendiri. "intent" tetap "info".
+- Kalau belum jelas produk mana yang mau dibeli, tanyakan dulu, "buy" kosong.
+- Kalau kolom Beli produk itu "-": tim kami yang membantu pemesanannya, "intent" "handoff".
+- Jangan isi "buy" kalau pelanggan baru bertanya-tanya dan belum ingin membeli.
+- Baris "[link:…]" di RIWAYAT berarti tautan produk itu sudah terkirim. Jangan
+  kirim lagi, KECUALI pelanggan memintanya lagi.
+
+`
+      : ''
+  }MENGUMPULKAN DATA
 - Bagian DATA PELANGGAN menunjukkan apa yang sudah diketahui.
 - Kalau masih ada yang kosong, jawab dulu pertanyaannya, lalu tutup dengan
   menanyakan SATU data yang belum ada, dengan wajar. Jangan menanyakan yang sudah ada.
@@ -186,7 +210,7 @@ KEAMANAN
 
 FORMAT KELUARAN
 Balas HANYA dengan satu objek json:
-{"reply": "...", "fields": ${shape}, "intent": "info", "photos": [], "docs": [], "summary": "..."}
+{"reply": "...", "fields": ${shape}, "intent": "info", "photos": [], "docs": [],${sells ? ' "buy": [],' : ''} "summary": "..."}
 - "reply": teks yang dikirim ke pelanggan.
 - "fields": isi HANYA yang disebutkan (atau dikoreksi) pelanggan di pesan
   terbaru; selain itu null.
@@ -195,7 +219,7 @@ ${biz.leadFields.map((f) => `  - "${f.key}" (${f.label})${f.hint ? `: ${f.hint}`
   ketahui di atas), "human" (minta orang/komplain), atau "other".
 - "photos": daftar id foto, atau [].
 - "docs": daftar id PDF, atau [].
-- "summary": catatan untuk staf kami (TIDAK dikirim ke pelanggan): ringkasan
+${sells ? '- "buy": daftar nama produk yang tautan belinya dikirim, atau [].\n' : ''}- "summary": catatan untuk staf kami (TIDAK dikirim ke pelanggan): ringkasan
   percakapan sejauh ini dalam 1–2 kalimat, paling panjang 200 karakter — apa yang
   dicari pelanggan, apa yang sudah disarankan, dan apa yang masih ditunggu.
   Perbarui RINGKASAN SEJAUH INI dengan isi pesan terbaru.
@@ -244,9 +268,11 @@ export function parseBrain(raw: string): BrainResult | null {
   const exists = new Set(biz.files.map((f) => f.id));
   const photos = pick(obj.photos, new Set(biz.products.flatMap((p) => p.photos).filter((id) => exists.has(id))), MAX_PHOTOS);
   const docs = pick(obj.docs, new Set(biz.products.map((p) => p.pdf).filter((id) => exists.has(id))), MAX_DOCS);
+  // Hanya produk yang memang punya tautan; model tidak bisa mengarang tautan.
+  const buy = pick(obj.buy, new Set(biz.products.filter((p) => marketsOf(p).length).map((p) => p.name)), MAX_BUY);
 
   const intent = (['info', 'handoff', 'human', 'other'] as const).find((i) => i === obj.intent) ?? 'other';
-  return { reply: reply.slice(0, 1500), fields, intent, photos, docs, summary: clean(obj.summary, 300) ?? '' };
+  return { reply: reply.slice(0, 1500), fields, intent, photos, docs, buy, summary: clean(obj.summary, 300) ?? '' };
 }
 
 /** Tautan atau nama domain di balasan (https://…, www.…, wa.me, toko.com, gfan.co.id, …). */
@@ -318,7 +344,7 @@ export async function followupBrain(input: FollowupInput): Promise<string | null
     '- Tutup dengan satu pertanyaan ringan yang mudah dijawab.' +
     (input.missing.length ? ` Data yang belum ada dan boleh ditanyakan: ${input.missing.join(', ')}.` : '') +
     '\n- Jangan mengulang salam pembuka, jangan mendesak, jangan menjanjikan apa pun, jangan menyebut harga, dan jangan mengarang hal yang tidak ada di riwayat.\n' +
-    '- "fields" semua null, "intent" "other", "photos" dan "docs" kosong, "summary" kosong.';
+    '- "fields" semua null, "intent" "other", "photos", "docs", dan "buy" kosong, "summary" kosong.';
   const raw = await askJson({ system: systemPrompt(), user, maxTokens: 300 });
   const reply = raw ? parseBrain(raw)?.reply : null;
   if (!reply || reply.length > 600) return null;

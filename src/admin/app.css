@@ -24,6 +24,7 @@
   /* Warna tahap lead (app.js: STAGE_COLOR). Kontras teks di atas latarnya >= 4,5:1 di kedua tema. */
   --stage-baru-bg: var(--blue-soft); --stage-baru-fg: var(--blue);
   --stage-dihubungi-bg: #fdebdd; --stage-dihubungi-fg: #b4480c;
+  --stage-link-bg: #efe7fb; --stage-link-fg: #6d3fc0;
   --stage-closing-bg: var(--ok-soft); --stage-closing-fg: var(--ok);
   --stage-batal-bg: var(--chip); --stage-batal-fg: var(--muted);
 }
@@ -40,6 +41,7 @@
   --skel: #2a2f33; --skel-hi: #343a3f;
   --stage-baru-fg: var(--blue-dark);
   --stage-dihubungi-bg: #3d2a1a; --stage-dihubungi-fg: #f0a06b;
+  --stage-link-bg: #2c2140; --stage-link-fg: #c4a8f5;
 }
 :root[data-theme=dark] .topbar, :root[data-theme=dark] aside, :root[data-theme=dark] .strip { background: var(--card); }
 :root[data-theme=dark] .btn.ghost, :root[data-theme=dark] .btn.danger { background: var(--card); }
@@ -247,10 +249,11 @@ table.grid textarea.cellbox { display: block; width: 100%; resize: none; field-s
 table.grid textarea.cellbox:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--field); }
 table.grid .hc input[type=text] { flex: 1; min-width: 0; }
 /* Lebar kolom per tabel; kolom tanpa lebar berbagi sisanya. */
-#products th:nth-child(1) { width: 18%; }
-#products th:nth-child(3), #products th:nth-child(4) { width: 12%; }
-#products th:nth-child(5) { width: 120px; }
-#products th:nth-child(6) { width: 170px; }
+#products th:nth-child(1) { width: 14%; }
+#products th:nth-child(3), #products th:nth-child(4) { width: 10%; }
+#products th:nth-child(5), #products th:nth-child(6) { width: 13%; }
+#products th:nth-child(7) { width: 120px; }
+#products th:nth-child(8) { width: 170px; }
 #fields th:nth-child(1) { width: 20%; }
 #fields th:nth-child(4) { width: 70px; }
 #recipients th:nth-child(2) { width: 130px; }
@@ -373,6 +376,7 @@ table.list tr.skel-row td { height: 40px; padding: 0 12px; vertical-align: middl
 /* Satu sumber warna: tiap kelas tahap mengisi --st-bg / --st-fg dari token di :root (terang dan gelap). */
 .stage-baru { --st-bg: var(--stage-baru-bg); --st-fg: var(--stage-baru-fg); }
 .stage-dihubungi { --st-bg: var(--stage-dihubungi-bg); --st-fg: var(--stage-dihubungi-fg); }
+.stage-link { --st-bg: var(--stage-link-bg); --st-fg: var(--stage-link-fg); }
 .stage-closing { --st-bg: var(--stage-closing-bg); --st-fg: var(--stage-closing-fg); }
 .stage-batal { --st-bg: var(--stage-batal-bg); --st-fg: var(--stage-batal-fg); }
 /* Chip tahap di Beranda: satu baris yang membungkus di HP; angkanya tebal dan lebih besar. */
@@ -579,7 +583,7 @@ div.sub.sub-first { margin-top: 0; }
 }
 /* Layar sempit: tabel isian yang banyak kolomnya diberi lebar minimum, jadi wadahnya yang bergulung ke samping. */
 @media (max-width: 720px) {
-  #products { min-width: 900px; }
+  #products { min-width: 1200px; }
   #fields, #recipients { min-width: 600px; }
 }
 @media (max-width: 420px) {
