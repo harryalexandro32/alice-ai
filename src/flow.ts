@@ -677,8 +677,9 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
 
 /**
  * Manusia mengambil alih chat ini: bot mundur (jeda + tanda "admin membalas"),
- * pesannya dicatat sebagai pesan manusia, follow-up yang menunggu batal, dan
- * lead yang masih "baru" atau "menunggu" (tim) pindah ke "dihubungi". Dipakai balasan dari HP
+ * pesannya dicatat sebagai pesan manusia, follow-up yang menunggu batal, tanda
+ * "perlu staf" lepas (staf sudah menjawab), dan lead yang masih "baru" atau
+ * "menunggu" (tim) pindah ke "dihubungi". Dipakai balasan dari HP
  * (handleHumanReply) dan dari dashboard, supaya keduanya selalu sama persis.
  * Mengembalikan kontak dan id pesan yang dicatat, atau null kalau alamat ini
  * belum dikenal.
@@ -693,7 +694,7 @@ export async function applyHumanReply(
   const messageId = await addMessage(c.phone, 'human', text || '[bukan teks]', at, null, kind);
   // Balasan yang menunggu jam tenang batal: manusia sudah menjawabnya.
   const contact = await updateContact(c.phone, {
-    last_dir: 'human', followup_state: 'idle', deferred_until: null,
+    last_dir: 'human', followup_state: 'idle', deferred_until: null, needs_sales: 0,
     ...(c.stage === 'baru' || c.stage === 'menunggu' ? { stage: 'dihubungi' as const } : {}),
   });
   return { contact, messageId };
