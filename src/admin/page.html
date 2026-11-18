@@ -95,6 +95,16 @@
   </form>
 </div>
 
+<div class="modal" id="linkDlg">
+  <form id="linkForm" novalidate>
+    <h2 data-en="Marketplace link">Tautan marketplace</h2>
+    <p class="help" id="linkFor"></p>
+    <input type="text" id="linkUrl" inputmode="url" autocomplete="off" placeholder="https://www.tokopedia.com/…">
+    <p class="help" style="margin-top:8px" data-en="Tokopedia or Shopee. The marketplace is recognized from the link. The bot sends this link when a customer wants to buy this product.">Tokopedia atau Shopee. Marketplace-nya dikenali dari tautannya. Bot mengirim tautan ini saat pelanggan ingin membeli produk ini.</p>
+    <div class="actions"><button class="btn ghost" type="button" id="linkCancel" data-en="Close">Tutup</button><button class="btn" id="linkAdd"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Add">Tambah</span></button></div>
+  </form>
+</div>
+
 <!-- Bilah atas + bilah keadaan: satu kepala tetap (position: fixed). Tingginya diukur app.js ke --chrome-h. -->
 <header class="chrome" id="chrome">
 <div class="topbar">
@@ -284,7 +294,7 @@
       <!-- ================= Pengetahuan: Produk ================= -->
       <section data-page="produk">
         <div class="card">
-          <div class="ch"><h2 data-en="Product list">Daftar produk</h2><p class="help" data-en="One row per product. Fill in price and stock so the bot can answer them; leave them empty and the bot hands those questions to your team. Photos and the PDF are what the bot can send to customers on WhatsApp. You can paste rows straight from Excel.">Satu baris per produk. Isi harga dan stok supaya bot bisa menjawabnya; kalau dikosongkan, bot menyerahkan pertanyaan itu ke tim Anda. Foto dan PDF adalah yang bisa dikirim bot ke pelanggan lewat WhatsApp. Baris bisa ditempel langsung dari Excel.</p></div>
+          <div class="ch"><h2 data-en="Product list">Daftar produk</h2><p class="help" data-en="One row per product. Fill in price and stock so the bot can answer them; leave them empty and the bot hands those questions to your team. Photos and the PDF are what the bot can send to customers on WhatsApp. Marketplace links are sent when a customer wants to buy. You can paste rows straight from Excel.">Satu baris per produk. Isi harga dan stok supaya bot bisa menjawabnya; kalau dikosongkan, bot menyerahkan pertanyaan itu ke tim Anda. Foto dan PDF adalah yang bisa dikirim bot ke pelanggan lewat WhatsApp. Tautan marketplace dikirim saat pelanggan ingin membeli. Baris bisa ditempel langsung dari Excel.</p></div>
           <div class="cb"><div class="scroll"><table class="grid" id="products"></table></div></div>
           <div class="cardfoot"><button class="btn ghost" id="addProduct" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Product">Produk</span></button><span id="knowLen"></span></div>
         </div>
