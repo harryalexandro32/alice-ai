@@ -1532,14 +1532,14 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
   onWidth(plot, draw);
 }
 
-const STAGES = ['baru', 'dihubungi', 'link', 'closing', 'batal'];
-const stageLabel = (s) => ({ baru: T('Baru', 'New'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
+const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'closing', 'batal'];
+const stageLabel = (s) => ({ baru: T('Baru', 'New'), menunggu: T('Menunggu tim', 'Waiting for team'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
 /**
  * Warna tiap tahap: satu sumber untuk chip Beranda, saringan Percakapan, dan pilihan tahap.
  * Kelasnya ada di app.css (.stage-baru …) dan mengisi --st-bg / --st-fg untuk tema terang dan gelap:
- * baru biru, dihubungi oranye, link ungu, closing hijau, batal abu-abu.
+ * baru biru, menunggu tim kuning, dihubungi oranye, link ungu, closing hijau, batal abu-abu.
  */
-const STAGE_COLOR = { baru: 'stage-baru', dihubungi: 'stage-dihubungi', link: 'stage-link', closing: 'stage-closing', batal: 'stage-batal' };
+const STAGE_COLOR = { baru: 'stage-baru', menunggu: 'stage-menunggu', dihubungi: 'stage-dihubungi', link: 'stage-link', closing: 'stage-closing', batal: 'stage-batal' };
 const stageClass = (s) => STAGE_COLOR[s] || STAGE_COLOR.baru;
 /** Pilihan tahap berwarna sesuai tahap yang terpilih. */
 function paintStage(sel) {
@@ -1594,7 +1594,7 @@ async function loadLeads() {
 }
 
 const FILTERS = () => [
-  ['semua', T('Semua', 'All')], ['baru', stageLabel('baru')], ['dihubungi', stageLabel('dihubungi')], ['link', stageLabel('link')],
+  ['semua', T('Semua', 'All')], ['baru', stageLabel('baru')], ['menunggu', stageLabel('menunggu')], ['dihubungi', stageLabel('dihubungi')], ['link', stageLabel('link')],
   ['closing', stageLabel('closing')], ['batal', stageLabel('batal')], ['staf', T('Perlu staf', 'Needs staff')],
 ];
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);

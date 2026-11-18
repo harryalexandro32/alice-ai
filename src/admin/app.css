@@ -23,6 +23,7 @@
   --skel: #e9eaec; --skel-hi: #f5f6f7;
   /* Warna tahap lead (app.js: STAGE_COLOR). Kontras teks di atas latarnya >= 4,5:1 di kedua tema. */
   --stage-baru-bg: var(--blue-soft); --stage-baru-fg: var(--blue);
+  --stage-menunggu-bg: #fbf1cf; --stage-menunggu-fg: #7a5200; --stage-menunggu-dot: #e0a800;
   --stage-dihubungi-bg: #fdebdd; --stage-dihubungi-fg: #b4480c;
   --stage-link-bg: #efe7fb; --stage-link-fg: #6d3fc0;
   --stage-closing-bg: var(--ok-soft); --stage-closing-fg: var(--ok);
@@ -40,6 +41,7 @@
   --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500; --viz-track: #184f95;
   --skel: #2a2f33; --skel-hi: #343a3f;
   --stage-baru-fg: var(--blue-dark);
+  --stage-menunggu-bg: #352b10; --stage-menunggu-fg: #e8c25a; --stage-menunggu-dot: #e8c25a;
   --stage-dihubungi-bg: #3d2a1a; --stage-dihubungi-fg: #f0a06b;
   --stage-link-bg: #2c2140; --stage-link-fg: #c4a8f5;
 }
@@ -410,6 +412,7 @@ table.list tr.skel-row td { height: 40px; padding: 0 12px; vertical-align: middl
 /* ---- tahap lead ---- */
 /* Satu sumber warna: tiap kelas tahap mengisi --st-bg / --st-fg dari token di :root (terang dan gelap). */
 .stage-baru { --st-bg: var(--stage-baru-bg); --st-fg: var(--stage-baru-fg); }
+.stage-menunggu { --st-bg: var(--stage-menunggu-bg); --st-fg: var(--stage-menunggu-fg); --st-dot: var(--stage-menunggu-dot); }
 .stage-dihubungi { --st-bg: var(--stage-dihubungi-bg); --st-fg: var(--stage-dihubungi-fg); }
 .stage-link { --st-bg: var(--stage-link-bg); --st-fg: var(--stage-link-fg); }
 .stage-closing { --st-bg: var(--stage-closing-bg); --st-fg: var(--stage-closing-fg); }
@@ -434,7 +437,7 @@ select.stagesel option { background-color: var(--field); color: var(--ink); font
 .filters button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .filters button small { opacity: .75; font-size: 11px; font-variant-numeric: tabular-nums; }
 /* Saringan tahap: tidak aktif tetap netral dengan titik berwarna tahapnya; aktif memakai warna tahapnya. */
-.filters button .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-fg); flex: none; }
+.filters button .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-dot, var(--st-fg)); flex: none; }
 .filters button[data-stage].on, :root[data-theme=dark] .filters button[data-stage].on { background: var(--st-bg); border-color: var(--st-fg); color: var(--st-fg); }
 .badge { display: none; align-items: center; justify-content: center; margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; background: var(--danger); color: #fff; border-radius: 99px;
   text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: .04em; line-height: 1; font-variant-numeric: tabular-nums; }

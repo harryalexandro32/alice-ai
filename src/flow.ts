@@ -196,8 +196,10 @@ export async function switchBot(phone: string, mode: 'on' | 'off', at: number): 
 
 /** "Sudah ditangani": tanda "perlu staf" dihapus sampai pelanggan itu butuh staf lagi. */
 export async function markHandled(phone: string, at: number): Promise<boolean> {
-  if (!(await getContact(phone))) return false;
-  await updateContact(phone, { needs_sales: 0, handled_at: at });
+  const c = await getContact(phone);
+  if (!c) return false;
+  // Staf sudah menangani permintaannya: yang menunggu tim kini sudah dihubungi.
+  await updateContact(phone, { needs_sales: 0, handled_at: at, ...(c.stage === 'menunggu' ? { stage: 'dihubungi' as const } : {}) });
   console.log(`[alur] ${phone}: ditandai sudah ditangani lewat dashboard`);
   return true;
 }
@@ -270,6 +272,11 @@ async function notifyStaff(c: Contact, kind: string, lastMessage: string, at: nu
  * di dashboard dan jawabannya masuk ke pengetahuan bot. Gagal mencatat tidak
  * boleh menghentikan balasan ke pelanggan.
  */
+/** Bot menyerahkan chat ini ke tim: tahap "baru" pindah ke "menunggu" (menunggu tim). Tahap lain tidak disentuh. */
+async function awaitTeam(c: Contact): Promise<Contact> {
+  return c.stage === 'baru' ? updateContact(c.phone, { stage: 'menunggu' }) : c;
+}
+
 async function recordQuestion(phone: string, question: string, at: number): Promise<void> {
   try {
     await addHandoff(phone, question, at);
@@ -507,7 +514,7 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     }
   }
   if (media && !image && !heard) {
-    c = await updateContact(c.phone, { needs_sales: 1 });
+    c = await awaitTeam(await updateContact(c.phone, { needs_sales: 1 }));
     c = await notifyStaff(c, `Kirim ${media}`, stored, at);
   }
   if (!text && !image) {
@@ -637,8 +644,11 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
           console.error(`[alur] ${c.phone}: tautan beli ${name} gagal terkirim: ${e instanceof Error ? e.message : e}`);
         }
       }
-      if (sentLink && (c.stage === 'baru' || c.stage === 'dihubungi')) c = await updateContact(c.phone, { stage: 'link' });
+      if (sentLink && (c.stage === 'baru' || c.stage === 'menunggu' || c.stage === 'dihubungi')) c = await updateContact(c.phone, { stage: 'link' });
     }
+
+    // Dioper ke tim (tidak bisa dijawab, minta orang, atau balasannya ditolak pagar): tahap jadi "menunggu".
+    if (handoff || result?.intent === 'handoff') c = await awaitTeam(c);
 
     // Pertanyaan yang tidak bisa dijawab bot sendiri (dioper ke staf, atau
     // topik yang harus dijawab manusia) dicatat untuk halaman Pengetahuan.
@@ -668,7 +678,7 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
 /**
  * Manusia mengambil alih chat ini: bot mundur (jeda + tanda "admin membalas"),
  * pesannya dicatat sebagai pesan manusia, follow-up yang menunggu batal, dan
- * lead yang masih "baru" pindah ke "dihubungi". Dipakai balasan dari HP
+ * lead yang masih "baru" atau "menunggu" (tim) pindah ke "dihubungi". Dipakai balasan dari HP
  * (handleHumanReply) dan dari dashboard, supaya keduanya selalu sama persis.
  * Mengembalikan kontak dan id pesan yang dicatat, atau null kalau alamat ini
  * belum dikenal.
@@ -683,7 +693,8 @@ export async function applyHumanReply(
   const messageId = await addMessage(c.phone, 'human', text || '[bukan teks]', at, null, kind);
   // Balasan yang menunggu jam tenang batal: manusia sudah menjawabnya.
   const contact = await updateContact(c.phone, {
-    last_dir: 'human', followup_state: 'idle', deferred_until: null, ...(c.stage === 'baru' ? { stage: 'dihubungi' as const } : {}),
+    last_dir: 'human', followup_state: 'idle', deferred_until: null,
+    ...(c.stage === 'baru' || c.stage === 'menunggu' ? { stage: 'dihubungi' as const } : {}),
   });
   return { contact, messageId };
 }

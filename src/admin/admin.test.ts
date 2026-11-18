@@ -837,7 +837,7 @@ const PNG = Buffer.from(
       const { day: _today, ...todayMsgs } = m.messagesByDay[6];
       assert.deepEqual(todayMsgs, { in: 2, out: 1, human: 1 });
       // Tahap lead: semua kontak proyek, tidak dibatasi jendela.
-      assert.deepEqual(m.stages, { baru: 1, dihubungi: 0, link: 0, closing: 1, batal: 0 });
+      assert.deepEqual(m.stages, { baru: 1, menunggu: 0, dihubungi: 0, link: 0, closing: 1, batal: 0 });
       // ?days=: jendela lain untuk grafik, paling banyak 90; yang tidak sah kembali ke 7.
       const m14 = (await call('/api/metrik/metrics?days=14')).body;
       assert.deepEqual([m14.windowDays, m14.days.length, m14.messagesByDay.length], [14, 14, 14]);

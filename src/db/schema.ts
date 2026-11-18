@@ -111,7 +111,7 @@ export const contacts = pgTable(
     handled_at: ms('handled_at'),
     imported: integer('imported').notNull().default(0),
     pending_off: integer('pending_off').notNull().default(0),
-    /** Tahap pipeline: baru | dihubungi | link | closing | batal (lihat STAGES di src/store.ts). */
+    /** Tahap pipeline: baru | menunggu | dihubungi | link | closing | batal (lihat STAGES di src/store.ts). */
     stage: text('stage').notNull().default('baru'),
     /** Catatan staf tentang pelanggan ini. */
     note: text('note'),
