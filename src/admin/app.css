@@ -26,7 +26,9 @@
   --stage-menunggu-bg: #fbf1cf; --stage-menunggu-fg: #7a5200; --stage-menunggu-dot: #e0a800;
   --stage-dihubungi-bg: #fdebdd; --stage-dihubungi-fg: #b4480c;
   --stage-link-bg: #efe7fb; --stage-link-fg: #6d3fc0;
-  --stage-closing-bg: var(--ok-soft); --stage-closing-fg: var(--ok);
+  --stage-payment-bg: #d7f3ee; --stage-payment-fg: #0b6158; --stage-payment-dot: #14a8a0;
+  --stage-dikirim-bg: #fbe3ef; --stage-dikirim-fg: #a3246b;
+  --stage-selesai-bg: var(--ok-soft); --stage-selesai-fg: var(--ok);
   --stage-batal-bg: var(--chip); --stage-batal-fg: var(--muted);
 }
 :root[data-theme=dark] {
@@ -42,6 +44,8 @@
   --skel: #2a2f33; --skel-hi: #343a3f;
   --stage-baru-fg: var(--blue-dark);
   --stage-menunggu-bg: #352b10; --stage-menunggu-fg: #e8c25a; --stage-menunggu-dot: #e8c25a;
+  --stage-payment-bg: #10302c; --stage-payment-fg: #5fd4c4; --stage-payment-dot: #5fd4c4;
+  --stage-dikirim-bg: #3a1a2b; --stage-dikirim-fg: #f08cc0;
   --stage-dihubungi-bg: #3d2a1a; --stage-dihubungi-fg: #f0a06b;
   --stage-link-bg: #2c2140; --stage-link-fg: #c4a8f5;
 }
@@ -417,7 +421,9 @@ table.list tr.skel-row td { height: 40px; padding: 0 12px; vertical-align: middl
 .stage-menunggu { --st-bg: var(--stage-menunggu-bg); --st-fg: var(--stage-menunggu-fg); --st-dot: var(--stage-menunggu-dot); }
 .stage-dihubungi { --st-bg: var(--stage-dihubungi-bg); --st-fg: var(--stage-dihubungi-fg); }
 .stage-link { --st-bg: var(--stage-link-bg); --st-fg: var(--stage-link-fg); }
-.stage-closing { --st-bg: var(--stage-closing-bg); --st-fg: var(--stage-closing-fg); }
+.stage-payment { --st-bg: var(--stage-payment-bg); --st-fg: var(--stage-payment-fg); --st-dot: var(--stage-payment-dot); }
+.stage-dikirim { --st-bg: var(--stage-dikirim-bg); --st-fg: var(--stage-dikirim-fg); }
+.stage-selesai { --st-bg: var(--stage-selesai-bg); --st-fg: var(--stage-selesai-fg); }
 .stage-batal { --st-bg: var(--stage-batal-bg); --st-fg: var(--stage-batal-fg); }
 /* Chip tahap di Beranda: satu baris yang membungkus di HP; angkanya tebal dan lebih besar. */
 .stagechips { display: flex; flex-wrap: wrap; gap: 8px; }

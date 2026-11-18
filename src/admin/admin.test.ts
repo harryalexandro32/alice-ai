@@ -711,11 +711,13 @@ const PNG = Buffer.from(
       assert.match((await putLead({ stage: 'menang' })).body.error, /Tahap/);
       assert.equal((await putLead({})).status, 400);
       assert.match((await putLead({ note: 'x'.repeat(2001) })).body.error, /terlalu panjang/);
-      const st = await putLead({ stage: 'closing', note: '  minta penawaran Senin  ' });
-      assert.deepEqual([st.status, st.body.stage, st.body.note], [200, 'closing', 'minta penawaran Senin']);
-      assert.deepEqual([(await getContact(P))?.stage, (await getContact(P))?.note], ['closing', 'minta penawaran Senin']);
+      assert.match((await putLead({ stage: 'closing' })).body.error, /Tahap/, '"closing" sudah diganti tiga tahap pesanan');
+      for (const stage of ['dikirim', 'selesai']) assert.equal((await putLead({ stage })).body.stage, stage);
+      const st = await putLead({ stage: 'payment', note: '  minta penawaran Senin  ' });
+      assert.deepEqual([st.status, st.body.stage, st.body.note], [200, 'payment', 'minta penawaran Senin']);
+      assert.deepEqual([(await getContact(P))?.stage, (await getContact(P))?.note], ['payment', 'minta penawaran Senin']);
       const row = (await call('/api/gfan/leads')).body.rows.find((r: { phone: string }) => r.phone === P);
-      assert.deepEqual([row.stage, row.note], ['closing', 'minta penawaran Senin'], 'tahap dan catatan tampil di daftar');
+      assert.deepEqual([row.stage, row.note], ['payment', 'minta penawaran Senin'], 'tahap dan catatan tampil di daftar');
       assert.equal((await putLead({ note: '' })).body.note, null, 'catatan bisa dikosongkan');
       await putLead({ stage: 'baru' });
 
@@ -818,7 +820,7 @@ const PNG = Buffer.from(
         await addMessage(A, 'out', 'Ada, Pak.', t);
         await addMessage(B, 'in', 'bisa custom?', t - 20_000);
         await addMessage(B, 'human', 'Bisa, Pak. Saya bantu.', t - 10_000);
-        await updateContact(B, { needs_sales: 1, stage: 'closing' });
+        await updateContact(B, { needs_sales: 1, stage: 'payment' });
       });
       const m = (await call('/api/metrik/metrics')).body;
       assert.equal(m.windowDays, 7);
@@ -837,7 +839,7 @@ const PNG = Buffer.from(
       const { day: _today, ...todayMsgs } = m.messagesByDay[6];
       assert.deepEqual(todayMsgs, { in: 2, out: 1, human: 1 });
       // Tahap lead: semua kontak proyek, tidak dibatasi jendela.
-      assert.deepEqual(m.stages, { baru: 1, menunggu: 0, dihubungi: 0, link: 0, closing: 1, batal: 0 });
+      assert.deepEqual(m.stages, { baru: 1, menunggu: 0, dihubungi: 0, link: 0, payment: 1, dikirim: 0, selesai: 0, batal: 0 });
       // ?days=: jendela lain untuk grafik, paling banyak 90; yang tidak sah kembali ke 7.
       const m14 = (await call('/api/metrik/metrics?days=14')).body;
       assert.deepEqual([m14.windowDays, m14.days.length, m14.messagesByDay.length], [14, 14, 14]);

@@ -628,7 +628,7 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
 
     // Tautan beli: pesan sendiri per produk, ditulis kode dari daftar produk
     // (LLM hanya memilih produknya), lalu tahap lead jadi "link". Tahap yang
-    // sudah lebih jauh (closing, batal) tidak diturunkan.
+    // sudah lebih jauh (payment, dikirim, selesai, batal) tidak diturunkan.
     if (result && !rejected && result.buy.length) {
       let sentLink = false;
       for (const name of result.buy) {
