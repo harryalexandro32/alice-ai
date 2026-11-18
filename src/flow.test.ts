@@ -1163,16 +1163,54 @@ const tests: [string, () => Promise<void>][] = [
     await updateContact(A, { stage: 'closing' });
     await say('kirim lagi linknya');
     assert.equal((await getContact(A))?.stage, 'closing');
-    await updateContact(A, { stage: 'dihubungi' });
-    await say('linknya mana');
-    assert.equal((await getContact(A))?.stage, 'link');
+    for (const from of ['dihubungi', 'menunggu'] as const) {
+      await updateContact(A, { stage: from });
+      await say('linknya mana');
+      assert.equal((await getContact(A))?.stage, 'link', `${from} -> link`);
+    }
 
-    // Tanpa tautan yang terkirim, tahap tidak berubah.
+    // Tanpa tautan yang terkirim, tahap tidak jadi "link": pesanannya dioper ke tim.
     next = () => R('Untuk GFAF-20A tim kami yang bantu pesanannya ya.', {}, 'handoff', [], [], '', ['GFAF-20A']);
     const B = '+6281211110002';
     await say('halo', B);
     await say('mau beli GFAF-20A', B);
-    assert.equal((await getContact(B))?.stage, 'baru');
+    assert.equal((await getContact(B))?.stage, 'menunggu');
+  }],
+
+  ['dioper ke tim: tahap "baru" jadi "menunggu"; balasan admin, "sudah ditangani", atau tautan beli memindahkannya', async () => {
+    // Pertanyaan biasa: tahap tetap.
+    await say('halo');
+    next = () => R('GFAF-40A dayanya 130 W.');
+    await say('GFAF-40A berapa watt?');
+    assert.equal((await getContact(A))?.stage, 'baru');
+    // Bot tidak tahu (harga): menunggu tim.
+    next = () => R('Untuk harga, tim kami yang akan menginfokan ya.', {}, 'handoff');
+    await say('harganya berapa?');
+    assert.deepEqual([(await getContact(A))?.stage, (await getContact(A))?.needs_sales], ['menunggu', 1]);
+    // Admin membalas: dihubungi.
+    await handleHumanReply({ address: A, text: 'Halo pak, harganya Rp 450.000' });
+    assert.equal((await getContact(A))?.stage, 'dihubungi');
+
+    // Minta bicara dengan orang: menunggu tim; ditandai "sudah ditangani": dihubungi.
+    const B = '+6281211110003';
+    await say('halo', B);
+    next = () => R('Baik, kami sambungkan ke tim ya.', {}, 'human');
+    await say('saya mau bicara dengan admin', B);
+    assert.equal((await getContact(B))?.stage, 'menunggu');
+    await markHandled(B, now());
+    assert.deepEqual([(await getContact(B))?.stage, (await getContact(B))?.needs_sales], ['dihubungi', 0]);
+
+    // Kiriman yang tidak bisa dilihat bot (dokumen): menunggu tim.
+    const C = '+6281211110004';
+    await say('halo', C);
+    await handleInbound({ phone: C, address: C, text: null, media: 'dokumen' });
+    assert.equal((await getContact(C))?.stage, 'menunggu');
+
+    // Tahap yang lebih jauh tidak turun ke "menunggu".
+    await updateContact(A, { stage: 'closing' });
+    next = () => R('Untuk ongkir, tim kami yang akan menginfokan ya.', {}, 'handoff');
+    await say('ongkir ke Bekasi berapa?');
+    assert.equal((await getContact(A))?.stage, 'closing');
   }],
 
   ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {

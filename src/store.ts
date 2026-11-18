@@ -26,10 +26,12 @@ export type { PairingRequest, Project, ProjectStatus };
 export type Dir = 'in' | 'out' | 'human';
 export type FollowupState = 'idle' | 'pending';
 /**
- * Tahap pipeline lead. Yang berubah otomatis hanya "baru" -> "dihubungi"
- * (manusia membalas) dan "baru"/"dihubungi" -> "link" (bot mengirim tautan beli).
+ * Tahap pipeline lead. Yang berubah otomatis: "baru" -> "menunggu" (bot
+ * menyerahkan chat ke tim), "baru"/"menunggu" -> "dihubungi" (manusia membalas
+ * atau menandai sudah ditangani), dan "baru"/"menunggu"/"dihubungi" -> "link"
+ * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis.
  */
-export const STAGES = ['baru', 'dihubungi', 'link', 'closing', 'batal'] as const;
+export const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'closing', 'batal'] as const;
 export type Stage = (typeof STAGES)[number];
 
 export interface Contact {
