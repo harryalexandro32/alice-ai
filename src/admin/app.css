@@ -249,11 +249,11 @@ table.grid textarea.cellbox { display: block; width: 100%; resize: none; field-s
 table.grid textarea.cellbox:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--field); }
 table.grid .hc input[type=text] { flex: 1; min-width: 0; }
 /* Lebar kolom per tabel; kolom tanpa lebar berbagi sisanya. */
-#products th:nth-child(1) { width: 14%; }
-#products th:nth-child(3), #products th:nth-child(4) { width: 10%; }
+#products th:nth-child(1) { width: 12%; }
+#products th:nth-child(3), #products th:nth-child(4) { width: 9%; }
 #products th:nth-child(5) { width: 110px; }
 #products th:nth-child(6) { width: 160px; }
-#products th:nth-child(7) { width: 140px; }
+#products th:nth-child(7) { width: 190px; }
 #fields th:nth-child(1) { width: 20%; }
 #fields th:nth-child(4) { width: 70px; }
 #recipients th:nth-child(2) { width: 130px; }
@@ -268,15 +268,18 @@ table.grid td.center { text-align: center; padding: 0 10px; }
 .thumbs img { width: 30px; height: 30px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); display: block; cursor: zoom-in; background: var(--code); }
 .thumbs .th button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; border: 0; background: var(--inverse); color: #fff; font-size: 11px; line-height: 16px; padding: 0; cursor: pointer; display: none; }
 .thumbs .th:hover button, .thumbs .th button:focus { display: inline-flex; }
-.thumbs .add, .links .add { width: 30px; height: 30px; flex: none; border: 1px dashed var(--dash); border-radius: 4px; background: var(--field); color: var(--blue); cursor: pointer; font-size: 17px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-.thumbs .add:hover, .links .add:hover { border-color: var(--blue); background: var(--blue-soft); }
-/* Kolom Marketplace: satu baris per tautan, lalu "+" selama masih ada marketplace yang kosong. */
-.links { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 4px 6px 10px; }
-.links .ln { display: flex; align-items: center; gap: 2px; width: 100%; min-width: 0; }
-.links .ln a { display: inline-flex; align-items: center; gap: 6px; color: var(--blue); text-decoration: none; flex: 1; min-width: 0; font-size: 13px; }
-.links .ln a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.links .ln a img { width: 16px; height: 16px; flex: none; object-fit: contain; }
-.links .ln a:hover span { text-decoration: underline; }
+.thumbs .add { width: 30px; height: 30px; flex: none; border: 1px dashed var(--dash); border-radius: 4px; background: var(--field); color: var(--blue); cursor: pointer; font-size: 17px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.thumbs .add:hover { border-color: var(--blue); background: var(--blue-soft); }
+/* Kolom Marketplace: selalu satu baris per marketplace, tingginya sama (link, atau tombol tambah). */
+.mkt { display: flex; flex-direction: column; padding: 4px 4px 4px 10px; }
+.mkt .ln { display: flex; align-items: center; gap: 2px; height: 28px; min-width: 0; }
+.mkt .ln a, .mkt .addlink { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: 100%; font-size: 13px; text-decoration: none; }
+.mkt .ln a { color: var(--blue); }
+.mkt .ln span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkt .ln img, .mkt .addlink .i { width: 16px; height: 16px; flex: none; object-fit: contain; }
+.mkt .ln a:hover span, .mkt .addlink:hover span { text-decoration: underline; }
+.mkt .addlink { border: 0; background: none; padding: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+.mkt .addlink:hover { color: var(--blue); }
 .pdf { display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; min-width: 0; }
 .pdf a { color: var(--blue); text-decoration: none; min-width: 0; flex: 1; font-size: 13px; }
 .pdf a:hover { text-decoration: underline; }
@@ -592,7 +595,7 @@ div.sub.sub-first { margin-top: 0; }
 }
 /* Layar sempit: tabel isian yang banyak kolomnya diberi lebar minimum, jadi wadahnya yang bergulung ke samping. */
 @media (max-width: 720px) {
-  #products { min-width: 1050px; }
+  #products { min-width: 1100px; }
   #fields, #recipients { min-width: 600px; }
 }
 @media (max-width: 420px) {
