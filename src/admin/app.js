@@ -1403,8 +1403,9 @@ function renderLeads() {
     const who = el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }),
       c.note ? el('span', { className: 'note-ico', textContent: ' ✎', title: c.note }) : null,
       name ? el('small', { textContent: c.phone }) : null);
-    const status = el('td', {}, el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }),
-      c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff'), style: 'margin-left:4px' }) : null);
+    const status = el('td', {}, el('div', { className: 'chiprow' },
+      el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }),
+      c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff') }) : null));
     const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
       el('td', { className: 'sum', textContent: c.summary || '-' }), status,
       el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: why }) : null)),
