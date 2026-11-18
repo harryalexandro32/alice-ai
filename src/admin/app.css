@@ -103,6 +103,28 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--focus); out
 /* Wordmark (simbol #brand-wordmark): "Alice" ikut --ink lewat currentColor. overflow: visible supaya font yang lebih lebar tidak terpotong. */
 .wordmark { height: 24px; width: auto; display: block; color: var(--ink); overflow: visible; }
 .topbar .spacer { flex: 1; }
+/* Tombol pencarian cepat di bilah atas: tampak seperti kotak cari, dengan pintasan keyboard di kanan. */
+.btn.ghost.qs-open { width: 220px; justify-content: flex-start; gap: 8px; padding: 0 8px 0 10px; color: var(--muted); font-weight: 400; }
+.btn.ghost.qs-open:hover { color: var(--ink); background: var(--hover); border-color: var(--field-line); }
+kbd { font: 500 11px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; padding: 3px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--surface2); color: var(--muted); }
+.qs-open kbd { margin-left: auto; }
+/* Dialog pencarian cepat: panel di sepertiga atas layar, daftar hasil per kelompok. */
+.qs { position: fixed; inset: 0; z-index: 30; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
+.qs-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
+.qs-panel { position: relative; width: 100%; max-width: 640px; max-height: 70vh; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); overflow: hidden; }
+.qs-in { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.qs-in input, .qs-in input:focus { flex: 1; min-width: 0; height: 52px; border: 0; outline: 0; background: transparent; padding: 0; font-size: 16px; color: var(--ink); }
+.qs-list { overflow-y: auto; padding: 6px; overscroll-behavior: contain; }
+.qs-h { padding: 10px 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); }
+.qs-o { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.qs-o.on { background: var(--blue-soft); color: var(--blue); }
+.qs-t { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.qs-l { color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 60%; }
+.qs-s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qs-st { flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 2px 8px; border-radius: 999px; background: var(--st-bg); color: var(--st-fg); }
+.qs-empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.qs-foot { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.qs-foot kbd { margin-right: 3px; }
 /* Pemilih proyek: bingkai tombolnya ada di .projwrap, isinya ikon (atau logo proyek) lalu pilihan tanpa bingkai. */
 .projwrap { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; height: var(--control-h); padding-left: 10px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); }
@@ -575,6 +597,11 @@ div.sub.sub-first { margin-top: 0; }
   .tiles.four { grid-template-columns: 1fr 1fr; }
   /* Layar sempit: hanya tanda oranye (preserveAspectRatio="xMinYMid slice" memotong teksnya), seperti sebelumnya. */
   .topbar .wordmark { width: 24px; overflow: hidden; }
+  /* Layar sempit: tombol pencarian cepat jadi ikon saja. */
+  .btn.ghost.qs-open { width: var(--control-h); padding: 0; justify-content: center; flex: none; }
+  .qs-open .lbl, .qs-open kbd { display: none; }
+  .qs { padding-top: 8vh; }
+  .qs-foot { display: none; }
   .topbar { padding: 0 12px; gap: 6px; }
   .projsel { max-width: 46vw; }
   .bubble { max-width: 90%; }

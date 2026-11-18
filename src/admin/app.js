@@ -1003,6 +1003,220 @@ document.addEventListener('keydown', (e) => {
   else if ($('linkDlg').classList.contains('on')) $('linkDlg').classList.remove('on');
 });
 
+// ---------- pencarian cepat (QuickSwitch) ----------
+// Satu kotak cari untuk seluruh dashboard: halaman dan bagiannya, percakapan, produk, proyek, dan beberapa
+// aksi. Dibuka dengan tombol Cari di bilah atas, Ctrl+K / ⌘K, atau "/" selama tidak sedang mengetik.
+// Semua dicari di peramban dari data yang sudah dimuat; daftar percakapan dimuat saat kotak dibuka kalau belum ada.
+
+const QS_PAGES = ['beranda', 'percakapan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'lanjutan'];
+/** Urutan kelompok hasil, dan berapa hasil paling banyak per kelompok. */
+const QS_GROUPS = [
+  ['page', () => T('Halaman', 'Pages'), 9], ['chat', () => T('Percakapan', 'Conversations'), 8],
+  ['product', () => T('Produk', 'Products'), 6], ['project', () => T('Proyek', 'Projects'), 5], ['action', () => T('Aksi', 'Actions'), 5],
+];
+$('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
+
+/** Kata lain yang biasa diketik orang untuk satu halaman (mis. "wa" untuk WhatsApp). */
+const QS_KEYS = {
+  beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt',
+  produk: 'katalog harga stok marketplace tokopedia shopee', brosur: 'pdf katalog', pengaturan: 'proyek follow-up',
+  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'email penerima sales', lanjutan: 'biaya llm error warning mode uji',
+};
+/** Huruf kecil tanpa aksen, untuk dicocokkan. */
+const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+/** Nomor dalam bentuk yang biasa diketik orang: +62812…, 62812…, dan 0812…. */
+function phoneKeys(phone) {
+  const d = String(phone).replace(/\D/g, '');
+  return phone + ' ' + d + (d.startsWith('62') ? ' 0' + d.slice(2) : '');
+}
+/** Ikon menu samping untuk satu halaman. */
+const navIcon = (pg) => {
+  const u = document.querySelector('#nav [data-nav="' + pg + '"] use');
+  return u ? u.getAttribute('href').replace('#i-', '') : 'file-text';
+};
+
+/** Semua yang bisa dicari sekarang: { group, icon, label, sub, hay, run, stage? }. */
+function qsItems() {
+  const items = [];
+  const add = (x) => items.push({ ...x, hay: fold([x.label, x.sub, x.keys].join(' ')), words: fold([x.label, x.keys].join(' ')).split(/[^a-z0-9+]+/) });
+  for (const pg of QS_PAGES) {
+    const [group, title] = PAGES[pg]();
+    const icon = navIcon(pg);
+    add({ group: 'page', icon, label: title, sub: group, keys: QS_KEYS[pg], run: () => go(pathOf(pg)) });
+    const sec = document.querySelector('section[data-page="' + pg + '"]');
+    for (const s of sec ? sectionsOf(sec, false) : []) {
+      add({ group: 'page', icon, label: s.label, sub: [group, title].filter(Boolean).join(' › '), section: true, run: () => go(pathOf(pg) + '#' + s.node.id) });
+    }
+  }
+  for (const c of (leadData && leadData.rows) || []) {
+    const name = nameOf(c);
+    add({
+      group: 'chat', icon: 'message-circle', label: name || c.phone, sub: [name ? c.phone : '', ...Object.values(c.lead || {}).filter((v) => v !== name)].filter(Boolean).join(' · '),
+      keys: [phoneKeys(c.phone), c.waName, c.note].join(' '), stage: c.stage || 'baru', run: () => go(convPath(c.phone)),
+    });
+  }
+  ((profile && profile.products) || []).forEach((p, i) => {
+    if (!p.name) return;
+    add({ group: 'product', icon: 'package', label: p.name, sub: p.description, run: () => go(pathOf('produk')).then(() => focusProduct(i, 0)) });
+  });
+  if (projects.length > 1) {
+    for (const p of projects) {
+      if (p.id === project) continue;
+      add({ group: 'project', icon: 'layers', label: p.name, sub: T('Pindah ke proyek ', 'Switch to project ') + p.id, keys: p.id,
+        run: () => go(pathOf(ROUTES[page] !== undefined ? page : 'beranda', p.id)) });
+    }
+  }
+  add({ group: 'action', icon: theme === 'dark' ? 'sun' : 'moon', label: theme === 'dark' ? T('Mode terang', 'Light mode') : T('Mode gelap', 'Dark mode'),
+    keys: 'tema theme gelap terang dark light', run: () => $('theme').click() });
+  add({ group: 'action', icon: 'globe', label: lang === 'en' ? 'Bahasa Indonesia' : 'English', keys: 'bahasa language',
+    run: () => $('lang').querySelector('[data-lang="' + (lang === 'en' ? 'id' : 'en') + '"]').click() });
+  add({ group: 'action', icon: 'message-square', label: T('Coba chat', 'Try chat'), sub: T('Uji jawaban bot', 'Test the bot\'s answers'),
+    run: () => (KNOWLEDGE.includes(page) ? Promise.resolve() : go(pathOf('behavior'))).then(openTry) });
+  add({ group: 'action', icon: 'log-out', label: T('Keluar', 'Sign out'), keys: 'logout', run: () => $('logout').click() });
+  return items;
+}
+
+/** Hasil untuk teks ini: per kelompok, yang paling cocok dulu. Tanpa teks: halaman utama dan aksi. */
+function qsFilter(items, q) {
+  const words = fold(q).split(/\s+/).filter(Boolean);
+  const scored = [];
+  for (const x of items) {
+    if (!words.length) {
+      if (!x.section && (x.group === 'page' || x.group === 'action')) scored.push({ x, score: 0 });
+      continue;
+    }
+    if (!words.every((w) => x.hay.includes(w))) continue;
+    const label = fold(x.label);
+    const all = words.join(' ');
+    // Judul yang diawali teksnya > kata di judul (atau kata lainnya) yang diawali kata pertama > ada di judul > hanya di keterangan.
+    const score = label.startsWith(all) ? 4 : x.words.some((t) => t.startsWith(words[0])) ? 3 : label.includes(words[0]) ? 2 : 1;
+    scored.push({ x, score: score - (x.section ? 0.5 : 0) });
+  }
+  const out = [];
+  for (const [g, , max] of QS_GROUPS) {
+    out.push(...scored.filter((r) => r.x.group === g).sort((a, b) => b.score - a.score).slice(0, max).map((r) => r.x));
+  }
+  return out;
+}
+
+let qsAll = [];
+let qsShown = [];
+let qsActive = 0;
+let qsReturn = null;
+
+function renderQs() {
+  qsShown = qsFilter(qsAll, $('qsInput').value);
+  qsActive = Math.min(qsActive, Math.max(0, qsShown.length - 1));
+  const list = $('qsList');
+  if (!qsShown.length) {
+    list.replaceChildren(el('div', { className: 'qs-empty', textContent: T('Tidak ada yang cocok.', 'Nothing matches.') }));
+    $('qsInput').removeAttribute('aria-activedescendant');
+    return;
+  }
+  const kids = [];
+  let group = '';
+  qsShown.forEach((x, i) => {
+    if (x.group !== group) {
+      group = x.group;
+      kids.push(el('div', { className: 'qs-h', role: 'presentation', textContent: QS_GROUPS.find((g) => g[0] === group)[1]() }));
+    }
+    const o = el('div', { className: 'qs-o' + (i === qsActive ? ' on' : ''), id: 'qs-o-' + i, role: 'option' },
+      ico(x.icon), el('div', { className: 'qs-t' }, el('span', { className: 'qs-l', textContent: x.label }), x.sub ? el('span', { className: 'qs-s', textContent: x.sub }) : null),
+      x.stage ? el('span', { className: 'qs-st ' + stageClass(x.stage), textContent: stageLabel(x.stage) }) : null);
+    o.setAttribute('aria-selected', String(i === qsActive));
+    o.addEventListener('mousemove', () => { if (qsActive !== i) { qsActive = i; markQs(); } });
+    o.addEventListener('click', () => runQs(i));
+    kids.push(o);
+  });
+  list.replaceChildren(...kids);
+  markQs();
+}
+
+function markQs() {
+  for (const o of $('qsList').querySelectorAll('.qs-o')) {
+    const on = o.id === 'qs-o-' + qsActive;
+    o.classList.toggle('on', on);
+    o.setAttribute('aria-selected', String(on));
+    if (on) o.scrollIntoView({ block: 'nearest' });
+  }
+  $('qsInput').setAttribute('aria-activedescendant', 'qs-o-' + qsActive);
+}
+
+function openQs() {
+  if (!project || $('app').hidden || !$('qs').hidden) return;
+  qsReturn = document.activeElement;
+  $('qsPanel').setAttribute('aria-label', T('Cari', 'Search'));
+  $('qsList').setAttribute('aria-label', T('Hasil', 'Results'));
+  $('qsInput').placeholder = T('Cari halaman, pelanggan, produk, pengaturan…', 'Search pages, customers, products, settings…');
+  $('qsFoot').replaceChildren(
+    el('span', {}, el('kbd', { textContent: '↑' }), el('kbd', { textContent: '↓' }), ' ' + T('pilih', 'move')),
+    el('span', {}, el('kbd', { textContent: 'Enter' }), ' ' + T('buka', 'open')),
+    el('span', {}, el('kbd', { textContent: 'Esc' }), ' ' + T('tutup', 'close')));
+  $('qsInput').value = '';
+  qsActive = 0;
+  qsAll = qsItems();
+  $('qs').hidden = false;
+  renderQs();
+  $('qsInput').focus();
+  // Daftar percakapan belum pernah dimuat di proyek ini: muat sekarang, lalu cari ulang.
+  if (!leadData) {
+    void loadLeads().then(() => {
+      if ($('qs').hidden) return;
+      qsAll = qsItems();
+      renderQs();
+    });
+  }
+}
+
+function closeQs() {
+  if ($('qs').hidden) return;
+  $('qs').hidden = true;
+  if (qsReturn && document.contains(qsReturn)) qsReturn.focus();
+  qsReturn = null;
+}
+
+function runQs(i) {
+  const x = qsShown[i];
+  if (!x) return;
+  closeQs();
+  void Promise.resolve(x.run()).catch((e) => toast(e.message, true));
+}
+
+$('qsOpen').addEventListener('click', openQs);
+$('qsBg').addEventListener('click', closeQs);
+$('qsInput').addEventListener('input', () => { qsActive = 0; renderQs(); });
+$('qsInput').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!qsShown.length) return;
+    qsActive = (qsActive + (e.key === 'ArrowDown' ? 1 : -1) + qsShown.length) % qsShown.length;
+    markQs();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    runQs(qsActive);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeQs();
+  } else if (e.key === 'Tab') {
+    e.preventDefault(); // fokus tetap di kotak cari selama terbuka
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if ($('qs').hidden) openQs(); else closeQs();
+    return;
+  }
+  // "/" membuka pencarian hanya kalau tidak sedang mengetik dan tidak ada dialog lain yang terbuka.
+  const t = e.target;
+  const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !document.querySelector('.modal.on, #uji.on')) {
+    e.preventDefault();
+    openQs();
+  }
+});
+
 // ---------- bantu tampilan ----------
 const when = (at) => new Date(at).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 const clock = (at) => new Date(at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
@@ -2441,15 +2655,16 @@ function tocTitle(n) {
   return now ? [h.dataset.id !== undefined ? h.dataset.id : now, now] : null;
 }
 
-/** Bagian halaman yang sedang tampil, urut seperti di halaman. Bagian tanpa id diberi id. */
-function tocEntries() {
-  const sec = document.querySelector('section[data-page].on');
-  if (!sec) return [];
+/**
+ * Bagian berjudul satu halaman (section[data-page]), urut seperti di halaman. Bagian tanpa id diberi id.
+ * `visible` = hanya yang sedang terlihat; tanpa itu, semua kecuali yang disembunyikan dengan atribut hidden.
+ */
+function sectionsOf(sec, visible) {
   const out = [];
   for (const n of sec.querySelectorAll('.card, [data-toc]')) {
     // Kartu di dalam kartu atau blok lain (mis. grafik di kartu biaya, grafik Beranda) ikut induknya.
     if (n.parentElement.closest('.card, [data-toc], section[data-page]') !== sec) continue;
-    if (!n.getClientRects().length) continue; // tersembunyi
+    if (visible ? !n.getClientRects().length : n.closest('[hidden]')) continue; // tersembunyi
     const title = tocTitle(n);
     if (!title) continue;
     if (!n.id) {
@@ -2461,6 +2676,12 @@ function tocEntries() {
     out.push({ node: n, label: title[1] });
   }
   return out;
+}
+
+/** Bagian halaman yang sedang tampil. */
+function tocEntries() {
+  const sec = document.querySelector('section[data-page].on');
+  return sec ? sectionsOf(sec, true) : [];
 }
 
 /** Bagian yang sedang diamati (kosong = daftar tidak tampil). */

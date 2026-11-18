@@ -73,6 +73,9 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
 
 - **Pemilih proyek** di bilah atas: pindah proyek (tetap di menu yang sama), atau
   **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`, nomor WA bot, nomor sales).
+- **Cari** (QuickSwitch) di bilah atas, atau Ctrl+K / ⌘K / `/`: satu kotak cari untuk halaman dan
+  bagiannya, percakapan (nama, nomor 08… atau +62…, isian lead), produk, proyek lain, dan aksi
+  (tema, bahasa, Coba chat). ↑↓ memilih, Enter membuka, Esc menutup.
 - **Bilah keadaan** di atas tiap halaman: WhatsApp tersambung atau belum, **Bot dijeda**,
   **MODE UJI**, dan perkiraan biaya LLM bulan ini. Tiap tanda adalah tautan ke pengaturannya.
 - **Percakapan**: tiap pelanggan punya **tahap** (baru, dihubungi, link terkirim, closing, batal) dan
