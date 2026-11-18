@@ -369,6 +369,8 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .plot .mark.hot { opacity: .8; }
 .viz1 { fill: var(--viz-1); background: var(--viz-1); } .viz2 { fill: var(--viz-2); background: var(--viz-2); }
 .viz3 { fill: var(--viz-3); background: var(--viz-3); } .viz4 { fill: var(--viz-4); background: var(--viz-4); }
+/* Penjelasan singkat (app.js: hint) di saringan dan chip tahap: teks pendek yang membungkus. */
+.hint { position: fixed; z-index: 25; max-width: 300px; pointer-events: none; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 4px 14px rgba(0,0,0,.14); padding: 8px 10px; font-size: 12px; line-height: 1.5; }
 .tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 8px rgba(0,0,0,.12); padding: 7px 10px; font-size: 12px; line-height: 1.5; white-space: nowrap; }
 .tip .t { color: var(--muted); font-weight: 600; margin-bottom: 2px; }
 .tip .r { display: flex; align-items: center; gap: 6px; }

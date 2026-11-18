@@ -1217,6 +1217,40 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------- penjelasan singkat (tooltip) ----------
+// Satu kotak untuk semua: tampil saat elemennya disorot tetikus atau difokus papan ketik, hilang saat
+// tetikus pergi, diklik, digulung, atau Esc. Isinya juga dibacakan pembaca layar (aria-describedby).
+const hintBox = el('div', { className: 'hint', id: 'hint', role: 'tooltip', hidden: true });
+document.body.append(hintBox);
+/** Elemen yang penjelasannya sedang tampil. */
+let hintFor = null;
+const hideHint = () => { hintBox.hidden = true; hintFor = null; };
+/** Pasang penjelasan singkat di elemen ini; mengembalikan elemennya. */
+function hint(node, text) {
+  if (!text) return node;
+  node.setAttribute('aria-describedby', 'hint');
+  const show = () => {
+    hintFor = node;
+    hintBox.textContent = text;
+    hintBox.hidden = false;
+    const r = node.getBoundingClientRect();
+    const w = hintBox.offsetWidth;
+    const h = hintBox.offsetHeight;
+    // Di bawah elemennya, atau di atas kalau tidak muat; tidak keluar dari layar di kiri dan kanan.
+    const below = r.bottom + 8 + h <= window.innerHeight;
+    hintBox.style.top = (below ? r.bottom + 8 : r.top - 8 - h) + 'px';
+    hintBox.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8)) + 'px';
+  };
+  node.addEventListener('mouseenter', show);
+  node.addEventListener('focus', show);
+  for (const ev of ['mouseleave', 'blur', 'click']) node.addEventListener(ev, hideHint);
+  return node;
+}
+window.addEventListener('scroll', hideHint, { passive: true });
+// Elemennya digambar ulang selagi penjelasannya tampil (mis. daftar dimuat ulang): mouseleave tidak datang lagi.
+document.addEventListener('pointermove', () => { if (hintFor && !hintFor.isConnected) hideHint(); }, { passive: true });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideHint(); });
+
 // ---------- bantu tampilan ----------
 const when = (at) => new Date(at).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 const clock = (at) => new Date(at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
@@ -1597,6 +1631,20 @@ const FILTERS = () => [
   ['semua', T('Semua', 'All')], ['baru', stageLabel('baru')], ['menunggu', stageLabel('menunggu')], ['dihubungi', stageLabel('dihubungi')], ['link', stageLabel('link')],
   ['closing', stageLabel('closing')], ['batal', stageLabel('batal')], ['staf', T('Perlu staf', 'Needs staff')],
 ];
+/** Arti tiap saringan (tooltip di saringan Percakapan dan chip tahap di Beranda). */
+const FILTER_HELP = () => ({
+  semua: T('Semua pelanggan yang pernah chat.', 'Every customer who has chatted.'),
+  baru: T('Belum ada staf yang ikut. Bot masih melayani sendiri.', 'No staff member has stepped in. The bot handles the chat alone.'),
+  menunggu: T('Bot sudah menyerahkan chat ini ke tim, dan belum ada staf yang membalas. Pindah ke Dihubungi saat staf membalas atau menandai Sudah ditangani.',
+    'The bot passed this chat to the team, and no staff member has replied yet. It moves to Contacted when staff reply or mark it as handled.'),
+  dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari web.', 'A staff member has replied to this customer, from the phone or the web.'),
+  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang menandai Closing atau Batal, karena bot tidak melihat pesanan di marketplace.',
+    'The bot sent a Tokopedia or Shopee link. Staff mark Closing or Cancelled, because the bot cannot see marketplace orders.'),
+  closing: T('Pelanggan jadi membeli. Hanya diubah staf.', 'The customer bought. Only staff set this.'),
+  batal: T('Pelanggan tidak jadi membeli. Hanya diubah staf.', 'The customer did not buy. Only staff set this.'),
+  staf: T('Bukan tahap. Bot meminta bantuan staf dan belum ada yang menandai Sudah ditangani, di tahap apa pun. Tetap di sini walau staf sudah membalas, sampai ditandai.',
+    'Not a stage. The bot asked staff for help and nobody has marked it as handled, at any stage. It stays here after staff reply, until someone marks it.'),
+});
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);
 
 function visibleLeads() {
@@ -1619,6 +1667,7 @@ function renderFilters(loading = false) {
     if (stage) b.dataset.stage = k;
     b.setAttribute('aria-pressed', String(k === leadFilter));
     b.addEventListener('click', () => { leadFilter = k; renderLeads(); });
+    hint(b, FILTER_HELP()[k]);
     return b;
   }));
 }
@@ -2105,8 +2154,8 @@ function renderHome() {
       { key: 'human', label: T('Dibalas admin', 'Replied by an admin'), slot: 3 }] });
 
   // Tahap lead: satu chip per tahap (semua kontak), tiap chip membuka daftarnya.
-  $('stageChips').replaceChildren(...(errors.trend ? [errorNote(errors.trend)] : STAGES.map((s) => el('a', { className: 'stagechip ' + stageClass(s), href: pathOf('percakapan') + '?stage=' + s },
-    el('span', { textContent: stageLabel(s) }), t ? el('b', { textContent: int(Number(t.stages[s]) || 0) }) : skelText('00')))));
+  $('stageChips').replaceChildren(...(errors.trend ? [errorNote(errors.trend)] : STAGES.map((s) => hint(el('a', { className: 'stagechip ' + stageClass(s), href: pathOf('percakapan') + '?stage=' + s },
+    el('span', { textContent: stageLabel(s) }), t ? el('b', { textContent: int(Number(t.stages[s]) || 0) }) : skelText('00')), FILTER_HELP()[s]))));
 
   // Perlu perhatian: pelanggan yang menunggu staf, lalu masalah bot 24 jam terakhir.
   if (loading || errors.leads) {
