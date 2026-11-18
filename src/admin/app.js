@@ -645,25 +645,67 @@ $('addRule').addEventListener('click', () => {
 });
 
 // ---------- daftar produk ----------
-// Kolom teks yang bisa diisi dan ditempel dari Excel. Tautan marketplace ada di p.links (src/business/types.ts: MARKETS).
-const P_COLS = ['name', 'description', 'price', 'stock', 'tokopedia', 'shopee'];
-const MARKETS = ['tokopedia', 'shopee'];
-const pGet = (p, k) => (MARKETS.includes(k) ? (p.links || {})[k] : p[k]);
-const pSet = (p, k, v) => { if (MARKETS.includes(k)) (p.links ||= { tokopedia: '', shopee: '' })[k] = v; else p[k] = v; };
+const P_COLS = ['name', 'description', 'price', 'stock'];
+// Sama dengan MARKETS dan MARKET_HOSTS di src/business (server memeriksanya lagi saat menyimpan).
+const MARKETS = [
+  { key: 'tokopedia', label: 'Tokopedia', host: /(^|\.)(tokopedia\.com|tokopedia\.link)$/i },
+  { key: 'shopee', label: 'Shopee', host: /(^|\.)(shopee\.co\.id|shp\.ee|shope\.ee)$/i },
+];
+/** Marketplace dari sebuah tautan, atau null kalau bukan tautan marketplace yang dikenal. */
+function marketOf(url) {
+  try { const h = new URL(url).hostname; return MARKETS.find((m) => m.host.test(h)) || null; } catch { return null; }
+}
 const blankProduct = () => ({ name: '', description: '', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: '', shopee: '' } });
 const touchProducts = () => { setDirty(true, 'products'); updateKnowLen(); };
 let focusProduct = () => {};
 
+// Dialog tambah tautan marketplace untuk satu produk.
+let linkTarget = null;
+function openLinkDlg(p) {
+  linkTarget = p;
+  $('linkFor').textContent = p.name || T('Produk tanpa nama', 'Unnamed product');
+  $('linkUrl').value = '';
+  $('linkDlg').classList.add('on');
+  $('linkUrl').focus();
+}
+$('linkCancel').addEventListener('click', () => $('linkDlg').classList.remove('on'));
+$('linkForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const url = $('linkUrl').value.trim();
+  const m = marketOf(url);
+  if (!m) return toast(T('Tempel tautan produk dari Tokopedia atau Shopee.', 'Paste a product link from Tokopedia or Shopee.'), true);
+  if (!url.startsWith('https://')) return toast(T('Tautannya harus diawali https://', 'The link must start with https://'), true);
+  const links = (linkTarget.links ||= { tokopedia: '', shopee: '' });
+  if (links[m.key]) return toast(T('Produk ini sudah punya tautan ', 'This product already has a link for ') + m.label + T('. Hapus dulu yang lama.', '. Remove the old one first.'), true);
+  links[m.key] = url;
+  $('linkDlg').classList.remove('on');
+  touchProducts();
+  renderProducts();
+});
+
+/** Kolom Marketplace: satu baris per tautan (buka / hapus), lalu "+" selama masih ada marketplace yang kosong. */
+function marketCell(p) {
+  const links = p.links || {};
+  const rows = MARKETS.filter((m) => links[m.key]).map((m) => {
+    const a = el('a', { href: links[m.key], target: '_blank', rel: 'noopener', title: links[m.key], textContent: m.label });
+    return el('div', { className: 'ln' }, a, xBtn(T('Hapus tautan ', 'Remove link ') + m.label, () => { links[m.key] = ''; touchProducts(); renderProducts(); }, 'x'));
+  });
+  if (rows.length === MARKETS.length) return el('div', { className: 'links' }, ...rows);
+  const add = el('button', { className: 'add', type: 'button', title: T('Tambah tautan marketplace', 'Add marketplace link') }, ico('plus'));
+  add.setAttribute('aria-label', add.title);
+  add.addEventListener('click', () => openLinkDlg(p));
+  return el('div', { className: 'links' }, ...rows, add);
+}
+
 function renderProducts() {
   const list = profile.products;
   const pdfs = pdfLibrary();
-  const ph = [T('mis. GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('mis. Rp 450.000', 'e.g. Rp 450.000'), T('mis. ada / 12 unit', 'e.g. ada / 12 unit'),
-    'https://www.tokopedia.com/…', 'https://shopee.co.id/…'];
+  const ph = [T('mis. GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('mis. Rp 450.000', 'e.g. Rp 450.000'), T('mis. ada / 12 unit', 'e.g. ada / 12 unit')];
 
   const body = el('tbody', {}, ...list.map((p, ri) => {
     const cells = P_COLS.map((k, ci) => {
       const make = k === 'description' ? cellText : cellInput;
-      const input = make(pGet(p, k), (v) => { pSet(p, k, v); touchProducts(); }, ri === 0 || !p.name ? ph[ci] : '');
+      const input = make(p[k], (v) => { p[k] = v; touchProducts(); }, ri === 0 || !p.name ? ph[ci] : '');
       input.dataset.r = ri;
       input.dataset.c = ci;
       return el('td', { className: ci === 0 ? 'first' : '' }, input);
@@ -719,10 +761,10 @@ function renderProducts() {
     }
 
     const del = xBtn(T('Hapus produk', 'Delete product'), () => { list.splice(ri, 1); touchProducts(); renderProducts(); });
-    return el('tr', {}, ...cells, el('td', {}, thumbs), el('td', {}, pdf), el('td', { className: 'act' }, del));
+    return el('tr', {}, ...cells, el('td', {}, thumbs), el('td', {}, pdf), el('td', {}, marketCell(p)), el('td', { className: 'act' }, del));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 9, style: 'padding:12px;color:var(--muted)', textContent: T('Belum ada produk.', 'No products yet.') })));
-  $('products').replaceChildren(headRow([T('Nama', 'Name'), T('Keterangan', 'Description'), T('Harga', 'Price'), T('Stok', 'Stock'), 'Tokopedia', 'Shopee', T('Foto', 'Photos'), 'PDF']), body);
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 8, style: 'padding:12px;color:var(--muted)', textContent: T('Belum ada produk.', 'No products yet.') })));
+  $('products').replaceChildren(headRow([T('Nama', 'Name'), T('Keterangan', 'Description'), T('Harga', 'Price'), T('Stok', 'Stock'), T('Foto', 'Photos'), 'PDF', 'Marketplace']), body);
   updateKnowLen();
 }
 
@@ -731,7 +773,7 @@ focusProduct = gridKeys($('products'), {
   count: () => profile.products.length,
   cols: () => P_COLS.length,
   addRow: () => { profile.products.push(blankProduct()); },
-  set: (r, c, v) => { pSet(profile.products[r], P_COLS[c], v); },
+  set: (r, c, v) => { profile.products[r][P_COLS[c]] = v; },
   redraw: () => { touchProducts(); renderProducts(); },
 });
 
@@ -746,7 +788,7 @@ $('addProduct').addEventListener('click', () => {
 // Sama dengan rakitan di server (src/business/catalog.ts): ini yang dibaca bot.
 function knowledgeLength() {
   const v = (s) => s || '-';
-  const buy = (x) => [['tokopedia', 'Tokopedia'], ['shopee', 'Shopee']].filter(([m]) => (x.links || {})[m]).map(([, l]) => l).join(', ');
+  const buy = (x) => MARKETS.filter((m) => (x.links || {})[m.key]).map((m) => m.label).join(', ');
   const products = profile.products.map((x) => [x.name, v(x.description), v(x.price), v(x.stock), v(x.photos.join(', ')), v(x.pdf), v(buy(x))].join(' | ')).join('\n');
   const catalog = profile.catalog
     .map((s) => {
@@ -954,6 +996,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if ($('uji').classList.contains('on')) closeTry();
   else if ($('importDlg').classList.contains('on')) $('importDlg').classList.remove('on');
+  else if ($('linkDlg').classList.contains('on')) $('linkDlg').classList.remove('on');
 });
 
 // ---------- bantu tampilan ----------
