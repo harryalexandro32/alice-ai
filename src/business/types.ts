@@ -71,6 +71,18 @@ export interface Product {
   links: Record<Market, string>;
 }
 
+/**
+ * Pelajaran dari percakapan nyata, ditulis pemilik lewat "Ajari bot" di
+ * Pertanyaan yang belum terjawab: arti pesan seperti ini dan yang harus
+ * dilakukan bot. Bot membacanya di tiap balasan.
+ */
+export interface Lesson {
+  /** Kata-kata pemilik, mis. "Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan." */
+  rule: string;
+  /** Contoh nyata asalnya: pesan bot sebelumnya dan pesan pelanggan, atau ''. */
+  example: string;
+}
+
 /** Satu tabel produk: baris = produk, kolom pertama = kode/modelnya. */
 export interface CatalogTable {
   title: string;
@@ -90,6 +102,8 @@ export type Intent = 'info' | 'handoff' | 'human' | 'other';
 
 export interface EvalCase {
   q: string;
+  /** Percakapan sebelumnya, terlama dulu (bawaan: pesan pertama). */
+  history?: { dir: 'in' | 'out' | 'human'; text: string }[];
   /** Semua pola ini harus muncul di balasan. */
   has?: RegExp[];
   intent?: Intent;
@@ -150,6 +164,8 @@ export interface Business {
    * ("pakai kalimat positif", "jangan basa-basi", contoh kalimat yang disukai).
    */
   styleRules: string[];
+  /** Pelajaran dari percakapan nyata (lihat Lesson). */
+  lessons: Lesson[];
   /**
    * True = begitu admin manusia membalas atau mengirimi seorang pelanggan dari
    * HP, bot tidak ikut campur lagi di chat itu (tanpa batas waktu). False =
@@ -181,7 +197,7 @@ export interface Business {
 /** Kunci yang boleh diubah pemilik lewat dashboard. */
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions', 'styleRules',
-  'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
+  'lessons', 'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
   'files', 'logo', 'stopAfterHuman', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 

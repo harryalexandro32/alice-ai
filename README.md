@@ -102,9 +102,17 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi warning
   `kiriman-gagal`.
 - **Pertanyaan yang belum terjawab**: tiap pertanyaan yang dioper bot ke staf dicatat (tabel
-  `handoffs`) dan dikelompokkan. Tulis jawabannya sekali di Pengetahuan bot > Produk, lalu
-  **Tambahkan ke pengetahuan**: tanya-jawabnya masuk ke "Pengetahuan lain" dan bot memakainya
-  mulai pesan berikutnya.
+  `handoffs`) dan dikelompokkan, dengan pesan bot sebelumnya dan balasan bot sesudahnya. Di
+  Pengetahuan bot > Produk ada tiga pilihan:
+  - **Tambahkan ke pengetahuan**: tulis jawabannya sekali; tanya-jawabnya masuk ke "Pengetahuan
+    lain".
+  - **Ajari bot**: kalau bot salah paham maksud pesannya, tulis artinya dan yang harus dilakukan
+    bot. **Bantu jelaskan** meminta LLM menjelaskan kenapa pesannya dioper dan mengusulkan
+    pelajarannya; **Coba lagi** menjalankan ulang giliran itu dengan pelajaran yang belum disimpan.
+    Pelajaran yang disimpan masuk ke "Pelajaran dari percakapan" di Cara bot bicara.
+  - **Abaikan**.
+
+  Bot memakai jawaban dan pelajaran baru mulai pesan berikutnya.
 - **Pengaturan > WhatsApp**: tautkan nomor proyek itu dari dashboard — pindai QR yang tampil, atau
   minta **kode pairing** 8 huruf. Setelah tersambung yang tampil hanya "Tersambung sebagai
   <nomor>". **Putuskan & tautkan ulang** untuk ganti nomor. Di bawahnya **Keadaan bot**, termasuk

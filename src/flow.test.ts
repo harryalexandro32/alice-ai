@@ -979,6 +979,9 @@ const tests: [string, () => Promise<void>][] = [
     assert.match(systemPrompt(), /Jangan\s+menawarkannya dulu/);
     assert.match(systemPrompt(), /minta foto tetapi kolom Foto produk itu "-" sedangkan PDF-nya\s+ada: langsung lampirkan PDF-nya/);
     assert.match(systemPrompt(), /Jangan pernah memakai tanda pisah panjang/);
+    // Handoff hanya untuk pertanyaan pelanggan, bukan kalimat penutup bot sendiri.
+    assert.match(systemPrompt(), /Kalau pelanggan MENANYAKAN salah satunya/);
+    assert.match(systemPrompt(), /"handoff" HANYA kalau pesan terbaru pelanggan menanyakan[\s\S]*BUKAN handoff[\s\S]*Jawaban pelanggan atas pertanyaanmu sendiri/);
   }],
 
   ['tombol bot per pelanggan: dimatikan, lalu dikembalikan ke bot', async () => {

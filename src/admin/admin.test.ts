@@ -27,7 +27,7 @@ import {
   recentMessages, saveProfile, updateContact, updateProject,
 } from '../store';
 import type { Transport, TransportState } from '../transport/types';
-import { setAdminBrain, startAdmin, stopAdmin } from './server';
+import { setAdminBrain, setAdminExplainer, startAdmin, stopAdmin } from './server';
 import { localStore } from './store-local';
 import { OLD_ROUTES, renamedPath, ROUTES } from './routes';
 
@@ -801,6 +801,68 @@ const PNG = Buffer.from(
       assert.deepEqual((await call('/api/gfan/handoffs')).body.groups, []);
       assert.equal((await put({ notes: notesBefore })).status, 200);
       assert.equal((await call('/api/gfan/handoffs', {}, false)).status, 401);
+    }
+
+    // --- "Ajari bot": konteks, Bantu jelaskan, Coba lagi, simpan pelajaran ---
+    {
+      const C3 = '+6281211119003';
+      const t0 = Date.now() - 60_000;
+      const ASK = 'Biasanya berapa orang yang ada di ruangan itu?';
+      const Q = 'biasa bisa sampai 10-12 orang lah';
+      const REPLY = 'Dengan 10-12 orang, pakai 2 unit GFC15-18A.';
+      await createContact(C3, C3, t0);
+      await addMessage(C3, 'in', 'ruang karaoke 5x5x3 m', t0);
+      await addMessage(C3, 'out', ASK, t0 + 1000);
+      await addMessage(C3, 'in', Q, t0 + 2000);
+      await addMessage(C3, 'out', REPLY, t0 + 30_000);
+      await addMessage(C3, 'out', '[pdf:d0000000c] Ceiling Fan A', t0 + 31_000);
+      assert.equal(await addHandoff(C3, Q, t0 + 2000), true);
+      const g = (await call('/api/gfan/handoffs?status=open')).body.groups.find((x: { phone: string }) => x.phone === C3);
+      assert.deepEqual(g.context, { before: ASK, reply: REPLY }, 'pesan bot sebelumnya dan balasan bot, tanpa tanda lampiran');
+
+      // Bantu jelaskan: LLM menerima riwayat, pesannya, dan balasan bot saat itu.
+      let seen: { question: string; history: { text: string }[]; reply: string } | null = null;
+      setAdminExplainer(async (i) => {
+        seen = i;
+        return { why: 'Pesan itu jawaban atas pertanyaan bot sendiri.', lesson: 'Jumlah orang adalah jawaban atas pertanyaan pemakaian ruangan.' };
+      });
+      const ex = await post(`/api/gfan/handoffs/${g.id}/explain`, {});
+      assert.deepEqual([ex.status, ex.body.lesson], [200, 'Jumlah orang adalah jawaban atas pertanyaan pemakaian ruangan.']);
+      assert.deepEqual([seen!.question, seen!.reply, seen!.history.map((h) => h.text)], [Q, REPLY, ['ruang karaoke 5x5x3 m', ASK]]);
+      assert.equal((await post('/api/gfan/handoffs/999999/explain', {})).status, 404);
+
+      // Coba lagi: giliran yang sama, dengan pelajaran yang belum disimpan.
+      let input: Parameters<Parameters<typeof setAdminBrain>[0]>[0] | null = null;
+      setAdminBrain(async (i) => {
+        input = i;
+        return { reply: 'Untuk 10-12 orang, 2 unit GFC15-18A sudah cukup.', fields: {}, intent: 'info', photos: [], docs: [], buy: [], summary: '' };
+      });
+      const tr = await post(`/api/gfan/handoffs/${g.id}/retry`, { lesson: 'Jumlah orang = jawaban soal pemakaian ruangan.' });
+      assert.deepEqual([tr.status, tr.body.intent, tr.body.rejected], [200, 'info', null]);
+      assert.equal(input!.text, Q);
+      assert.deepEqual(input!.history.map((h) => h.text), ['ruang karaoke 5x5x3 m', ASK], 'riwayat sampai sebelum pesan itu');
+      assert.deepEqual(input!.lessons, [{ rule: 'Jumlah orang = jawaban soal pemakaian ruangan.', example: `Bot: "${ASK}" Pelanggan: "${Q}"` }]);
+      assert.ok(!biz.lessons.length, 'Coba lagi tidak menyimpan apa pun');
+      assert.match(systemPrompt(input!.lessons), /PELAJARAN DARI PERCAKAPAN NYATA[^\n]*\n- Jumlah orang = jawaban soal pemakaian ruangan\.\n  Contoh: Bot: "Biasanya berapa orang/);
+
+      // Simpan pelajaran: masuk profil, bot membacanya di tiap balasan.
+      const resolve = (body: unknown) => post(`/api/gfan/handoffs/${g.id}/resolve`, body);
+      assert.match((await resolve({ resolution: 'diajarkan' })).body.error, /pelajarannya/);
+      const saved = await resolve({ resolution: 'diajarkan', lesson: '  Jumlah orang adalah jawaban atas pertanyaan pemakaian ruangan.  ' });
+      assert.deepEqual([saved.status, saved.body.resolved], [200, 1]);
+      assert.deepEqual(biz.lessons, [{ rule: 'Jumlah orang adalah jawaban atas pertanyaan pemakaian ruangan.', example: `Bot: "${ASK}" Pelanggan: "${Q}"` }]);
+      assert.deepEqual(saved.body.profile.lessons, biz.lessons);
+      assert.match(systemPrompt(), /\n- Jumlah orang adalah jawaban atas pertanyaan pemakaian ruangan\.\n  Contoh: Bot: "/);
+      const done = (await call('/api/gfan/handoffs?status=resolved')).body.groups.find((x: { phone: string }) => x.phone === C3);
+      assert.deepEqual([done.resolution, done.answer], ['diajarkan', 'Jumlah orang adalah jawaban atas pertanyaan pemakaian ruangan.']);
+
+      // Daftar pelajaran di "Cara bot bicara": baris kosong dibuang, yang terlalu panjang ditolak.
+      assert.match((await put({ lessons: [{ rule: 'x'.repeat(601) }] })).body.error, /600/);
+      assert.equal((await put({ lessons: [{ rule: '  ' }, { rule: 'Sapa dengan Kak.', example: '' }] })).status, 200);
+      assert.deepEqual(biz.lessons, [{ rule: 'Sapa dengan Kak.', example: '' }]);
+      assert.match(systemPrompt(), /\n- Sapa dengan Kak\.(\n\n|$)/);
+      assert.equal((await put({ lessons: [] })).status, 200);
+      assert.ok(!/PELAJARAN DARI PERCAKAPAN NYATA/.test(systemPrompt()), 'tanpa pelajaran, bagiannya tidak ada');
     }
 
     // --- empat angka Beranda (proyek sendiri supaya datanya pasti) ---

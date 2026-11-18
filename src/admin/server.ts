@@ -30,8 +30,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
-import { checkReply, llmBrain, type Brain } from '../brain';
-import { biz, editableView, fileById, loadProject, referencedFiles, setPdfText, TEMPLATES, validate } from '../business';
+import { checkReply, explainHandoff, llmBrain, type Brain, type Explainer } from '../brain';
+import { biz, editableView, fileById, LESSON_LIMITS, loadProject, referencedFiles, setPdfText, TEMPLATES, validate, validateLessons } from '../business';
 import { buyMessage, isPdf } from '../business/catalog';
 import type { MediaFile } from '../business/types';
 import { cfg, normPhone, parseSalesNumber } from '../config';
@@ -42,7 +42,7 @@ import { llmEnabled } from '../llm/provider';
 import { currentProject, withProject } from '../project';
 import { MAX_REPLY_ATTEMPTS, type ReplyPayload } from '../sinks/outbox';
 import {
-  countImported, getContact, getHandoff, getProject, importContact, listHandoffs, listProjects, messagePage, metrics, normQuestion,
+  countImported, getContact, getHandoff, getProject, importContact, listHandoffs, listProjects, messagePage, messagesAround, metrics, normQuestion,
   outboxAdd, pendingReplies, readAllStatus, readStatus, resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
   type HandoffRow, type Project, type ProjectPatch, type Stage,
 } from '../store';
@@ -62,6 +62,12 @@ let brain: Brain = llmBrain;
 /** Tes: ganti otak yang dipakai tombol "Uji". */
 export function setAdminBrain(fn: Brain): void {
   brain = fn;
+}
+
+let explainer: Explainer = explainHandoff;
+/** Tes: ganti penjelas yang dipakai "Bantu jelaskan" di Pertanyaan yang belum terjawab. */
+export function setAdminExplainer(fn: Explainer): void {
+  explainer = fn;
 }
 
 const sha = (s: string): Buffer => createHash('sha256').update(s).digest();
@@ -239,6 +245,28 @@ function monthCost(u: UsageReport | null): { usd: number; idr: number } {
     .reduce((a, d) => a + ((d.promptTokens - d.cachedTokens) * u.price.in + d.cachedTokens * u.price.cached + d.completionTokens * u.price.out) / 1e6, 0);
   return { usd, idr: Math.round(usd * u.usdIdr) };
 }
+
+/** Pesan yang dicatat dengan tanda di awal (berkas, tautan beli, kiriman yang tidak bisa dibaca), bukan teks balasan. */
+const isMark = (t: string): boolean => /^\[[a-z ,]+(:[^\]]*)?\]/i.test(t);
+const oneLine = (t: string, max: number): string => {
+  const s = t.replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+};
+
+/**
+ * Konteks satu pertanyaan yang dioper ke tim: pesan bot (atau admin) tepat
+ * sebelumnya, balasan bot sesudahnya, dan riwayat sebelumnya untuk "Coba lagi".
+ */
+async function questionContext(row: { phone: string; at: number }) {
+  const m = await messagesAround(row.phone, row.at);
+  const before = [...m.before].reverse().find((x) => x.dir !== 'in' && !isMark(x.text))?.text ?? '';
+  const reply = m.after.find((x) => x.dir === 'out' && !isMark(x.text))?.text ?? '';
+  return { before, reply, history: m.before.map((x) => ({ dir: x.dir, text: x.text })) };
+}
+
+/** Contoh nyata untuk sebuah pelajaran: pesan bot sebelumnya dan pesan pelanggan. */
+const lessonExample = (before: string, question: string): string =>
+  (before ? `Bot: "${oneLine(before, 160)}" ` : '') + `Pelanggan: "${oneLine(question, 160)}"`;
 
 /** Kelompokkan pertanyaan yang sama (setelah dinormalkan); baris masuk terbaru dulu. */
 function groupHandoffs(rows: HandoffRow[]) {
@@ -622,16 +650,61 @@ export function createAdminHandler(store: AdminStore) {
     // Pertanyaan yang dioper ke staf, dikelompokkan per pertanyaan yang sama.
     if (path === '/handoffs' && method === 'GET') {
       const resolved = url.searchParams.get('status') === 'resolved';
-      return json(200, { groups: groupHandoffs(await listHandoffs(resolved, resolved ? 500 : 2000)) });
+      const groups = groupHandoffs(await listHandoffs(resolved, resolved ? 500 : 2000));
+      if (resolved) return json(200, { groups });
+      // Pertanyaan yang masih terbuka: dengan pesan bot sebelumnya dan balasan bot sesudahnya.
+      const withContext = await Promise.all(groups.map(async (g, i) => {
+        if (i >= 50) return g;
+        const { before, reply } = await questionContext({ phone: g.phone, at: g.last_at });
+        return { ...g, context: { before, reply } };
+      }));
+      return json(200, { groups: withContext });
     }
 
-    // Jawab satu pertanyaan (masuk ke "Pengetahuan lain") atau abaikan; semua
-    // pertanyaan yang sama di kelompoknya ikut selesai.
+    // "Coba lagi": jalankan ulang giliran itu dengan profil sekarang, ditambah pelajaran yang belum disimpan.
+    const retry = path.match(/^\/handoffs\/(\d{1,10})\/retry$/);
+    if (retry && method === 'POST') {
+      const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as { lesson?: unknown };
+      if (!llmEnabled() && brain === llmBrain) return json(400, { error: 'LLM belum diatur (LLM_API_KEY kosong).' });
+      const row = await getHandoff(Number(retry[1]));
+      if (!row) return json(404, { error: 'Pertanyaan tidak ditemukan.' });
+      const ctx = await questionContext(row);
+      const rule = String(body.lesson ?? '').trim().slice(0, LESSON_LIMITS.rule);
+      for (const f of biz.files) if (isPdf(f) && f.read) setPdfText(f.id, await textOfPdf(f));
+      const result = await brain({
+        text: row.question, known: (await getContact(row.phone))?.lead ?? {}, history: ctx.history, justGreeted: false,
+        ...(rule ? { lessons: [{ rule, example: lessonExample(ctx.before, row.question) }] } : {}),
+      });
+      if (!result) return json(502, { error: 'LLM tidak menjawab. Coba lagi.' });
+      return json(200, {
+        reply: result.reply,
+        intent: result.intent,
+        photos: result.photos.map(fileById).filter(Boolean),
+        docs: result.docs.map(fileById).filter(Boolean),
+        buy: result.buy.map((name) => biz.products.find((p) => p.name === name)).map((p) => p && buyMessage(p)).filter(Boolean),
+        rejected: checkReply(result.reply, row.question),
+      });
+    }
+
+    // "Bantu jelaskan": kenapa bot menyerahkan pesan ini ke tim, dan usulan pelajarannya.
+    const explain = path.match(/^\/handoffs\/(\d{1,10})\/explain$/);
+    if (explain && method === 'POST') {
+      if (!llmEnabled() && explainer === explainHandoff) return json(400, { error: 'LLM belum diatur (LLM_API_KEY kosong).' });
+      const row = await getHandoff(Number(explain[1]));
+      if (!row) return json(404, { error: 'Pertanyaan tidak ditemukan.' });
+      const ctx = await questionContext(row);
+      const r = await explainer({ question: row.question, history: ctx.history, reply: ctx.reply });
+      if (!r) return json(502, { error: 'LLM tidak menjawab. Coba lagi.' });
+      return json(200, r);
+    }
+
+    // Jawab satu pertanyaan (masuk ke "Pengetahuan lain"), ajari bot (jadi
+    // pelajaran), atau abaikan; semua pertanyaan yang sama di kelompoknya ikut selesai.
     const resolve = path.match(/^\/handoffs\/(\d{1,10})\/resolve$/);
     if (resolve && method === 'POST') {
-      const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as { answer?: unknown; resolution?: unknown };
-      if (body.resolution !== 'ditambahkan' && body.resolution !== 'diabaikan') {
-        return json(400, { error: 'resolution harus "ditambahkan" atau "diabaikan".' });
+      const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as { answer?: unknown; resolution?: unknown; lesson?: unknown };
+      if (body.resolution !== 'ditambahkan' && body.resolution !== 'diajarkan' && body.resolution !== 'diabaikan') {
+        return json(400, { error: 'resolution harus "ditambahkan", "diajarkan", atau "diabaikan".' });
       }
       const row = await getHandoff(Number(resolve[1]));
       if (!row) return json(404, { error: 'Pertanyaan tidak ditemukan.' });
@@ -642,6 +715,21 @@ export function createAdminHandler(store: AdminStore) {
       if (body.resolution === 'diabaikan') {
         await resolveHandoffs(ids, 'diabaikan', null, at);
         return json(200, { ok: true, resolved: ids.length });
+      }
+      if (body.resolution === 'diajarkan') {
+        const rule = String(body.lesson ?? '').replace(/\r\n/g, '\n').trim();
+        if (!rule) return json(400, { error: 'Tulis pelajarannya dulu.' });
+        const ctx = await questionContext(row);
+        let lessons;
+        try {
+          lessons = validateLessons([...biz.lessons, { rule, example: lessonExample(ctx.before, row.question) }]);
+        } catch (e) {
+          return json(400, { error: e instanceof Error ? e.message : 'Pelajaran tidak sah.' });
+        }
+        await store.save({ lessons });
+        await resolveHandoffs(ids, 'diajarkan', rule, at);
+        console.log(`[dashboard] ${currentProject().id}: pelajaran dari "${row.question.slice(0, 60)}" ditambahkan (${ids.length} pertanyaan)`);
+        return json(200, { ok: true, resolved: ids.length, profile: editableView() });
       }
       const answer = String(body.answer ?? '').replace(/\r\n/g, '\n').trim();
       if (!answer) return json(400, { error: 'Tulis jawabannya dulu.' });
