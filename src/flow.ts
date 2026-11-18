@@ -19,7 +19,7 @@ import { localMinutes, localStamp, now } from './clock';
 import { llmEnabled } from './llm/provider';
 import { sttEnabled, transcribe } from './llm/stt';
 import { plausibleName } from './names';
-import { deliverExternal, recipientPhones } from './notify';
+import { recipientPhones } from './notify';
 import { currentProject } from './project';
 import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
@@ -660,8 +660,6 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     if (complete && !c.lead_sent_at) {
       const p = leadPayload(c, 'Lead lengkap', said);
       await outboxAdd('sales', p, at);
-      // WhatsApp lewat antrean di atas; email langsung.
-      void deliverExternal('lead', `🔔 ${ALERT_TITLES.lead} | ${biz.brand}`, salesText(p));
       signalDashboard();
       c = await updateContact(c.phone, { lead_sent_at: at });
     } else if (handoff) {

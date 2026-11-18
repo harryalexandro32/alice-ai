@@ -52,18 +52,17 @@ function record(chunk: Buffer | string): void {
 }
 
 /**
- * Kabari penerima "bot mati" lewat email (WhatsApp tidak mungkin:
- * botnya sedang mati). Profil dibaca dari database tiap kali, jadi penerima
- * yang baru diatur di dashboard langsung berlaku. Tidak pernah melempar.
+ * Catat "bot berhenti" sebagai warning di dashboard (WhatsApp tidak mungkin:
+ * botnya sedang mati). Tidak pernah melempar.
  */
 async function tell(text: string): Promise<void> {
   try {
     const { openDb, closeDb } = await import('./db');
-    const { biz, initBiz } = await import('./business');
+    const { initBiz } = await import('./business');
     await openDb();
     await initBiz(undefined, { requireEnabled: false });
-    const { deliverExternal } = await import('./notify');
-    await deliverExternal('bot-mati', `⚠️ Bot berhenti | ${biz.brand}`, text);
+    const { raiseAlert } = await import('./alerts');
+    await raiseAlert('bot-mati', text, { whatsapp: false });
     await closeDb();
   } catch (e) {
     say(`kabar "bot mati" tidak terkirim: ${e instanceof Error ? e.message : e}`);

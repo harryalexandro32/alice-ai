@@ -809,9 +809,11 @@ export function createAdminHandler(store: AdminStore) {
     if (path === '/wa/pair' && method === 'POST') {
       if (project.row.transport !== 'baileys') return json(400, { error: 'Jalur Cloud API tidak memakai kode pairing.' });
       const body = JSON.parse((await readBody(req, 500)).toString('utf8') || '{}') as { number?: string };
-      const raw = String(body.number ?? project.row.wa_number ?? '').trim();
+      const raw = String(body.number || project.row.wa_number || '').trim();
       const number = normPhone(raw);
       if (!number) return json(400, { error: raw ? `Nomor "${raw}" tidak sah.` : 'Isi nomor WhatsApp bot dulu.' });
+      // Nomor bot hanya diatur di halaman WhatsApp: nomor yang dipakai untuk pairing ikut disimpan.
+      if (number !== project.row.wa_number) await updateProject(project.id, { wa_number: number });
       await setPairingRequest(project.id, { number: number.slice(1), at: Date.now() });
       console.log(`[dashboard] ${project.id}: kode pairing diminta untuk ${number}`);
       return json(200, { ok: true });

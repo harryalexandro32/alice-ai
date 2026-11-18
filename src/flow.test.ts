@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { loadProject, refreshBiz, seedCtx } from './business';
+import { buildCtx, loadProject, refreshBiz, seedCtx } from './business';
 
 import { makeSalesNotifier } from './app';
 import { checkReply, parseBrain, systemPrompt, type BrainInput, type BrainResult } from './brain';
@@ -71,7 +71,6 @@ async function fresh(): Promise<void> {
   setDefaultProject((await loadProject('gfan'))!);
   setNow(T0);
   cfg.tz = 'Asia/Jakarta';
-  cfg.salesNumber = SALES;
   cfg.followupAfterHours = 23;
   cfg.followupAfterHoursMax = 23;
   cfg.followupStartHour = 8;
@@ -92,7 +91,7 @@ async function fresh(): Promise<void> {
   biz.files = [];
   biz.products = SEED_PRODUCTS;
   biz.stopAfterHuman = true;
-  biz.recipients = [];
+  biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }];
   biz.notifyRoutes = {};
   cfg.llmVision = true;
   cfg.sttApiKey = '';
@@ -447,9 +446,9 @@ const tests: [string, () => Promise<void>][] = [
     const STAFF1 = '+6281100000002';
     const STAFF2 = '+6281100000003';
     biz.recipients = [
-      { name: 'Pak Harry', role: 'owner', phone: OWNER, email: 'owner@contoh.com' },
-      { name: 'Rina', role: 'staff', phone: STAFF1, email: '' },
-      { name: 'Dedi', role: 'staff', phone: STAFF2, email: 'dedi@contoh.com' },
+      { name: 'Pak Harry', role: 'owner', phone: OWNER },
+      { name: 'Rina', role: 'staff', phone: STAFF1 },
+      { name: 'Dedi', role: 'staff', phone: STAFF2 },
     ];
     assert.deepEqual(waTargets('lead'), [STAFF1, STAFF2], 'lead -> staf (bawaan)');
     assert.deepEqual(waTargets('butuh-staf'), [STAFF1, STAFF2]);
@@ -458,7 +457,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.deepEqual(waTargets('lead'), [OWNER, STAFF1, STAFF2]);
     assert.deepEqual(waTargets('butuh-staf'), [OWNER]);
     assert.deepEqual(waTargets('llm'), []);
-    assert.deepEqual(recipientsFor('lead').map((r) => r.email).filter(Boolean), ['owner@contoh.com', 'dedi@contoh.com']);
+    assert.deepEqual(recipientsFor('lead').map((r) => r.name), ['Pak Harry', 'Rina', 'Dedi']);
 
     // Notifikasi WA lewat antrean sampai ke semua nomor rutenya.
     const t = fakeTransport('baileys', '+6281255550000', true);
@@ -473,11 +472,23 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(STAFF1)), undefined);
     assert.equal(sent.length, 0);
 
-    // Daftar kosong: kembali ke nomor sales proyek untuk semua jenis kabar.
-    biz.recipients = [];
+    // Tidak ada yang berperan sesuai rutenya: semua penerima mendapatkannya, supaya kabar tidak hilang.
+    biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }];
     biz.notifyRoutes = {};
     assert.deepEqual(waTargets('lead'), [SALES]);
-    assert.deepEqual(waTargets('wa-putus'), [SALES]);
+    assert.deepEqual(waTargets('llm'), [SALES], 'urusan pemilik, tapi tidak ada pemilik');
+    biz.notifyRoutes = { llm: 'none' };
+    assert.deepEqual(waTargets('llm'), [], '"tidak dikirim" tetap tidak dikirim');
+    // Daftar kosong: tidak ada yang dikabari.
+    biz.recipients = [];
+    assert.deepEqual(waTargets('lead'), []);
+
+    // Nomor sales dari kartu Proyek yang lama: tampil sebagai satu penerima selama daftarnya kosong.
+    const row = { ...seedCtx('gfan').row, sales_number: '0812 9999 0001' };
+    assert.deepEqual(buildCtx(row).biz.recipients, [{ name: 'Sales', role: 'staff', phone: '+6281299990001' }]);
+    assert.deepEqual(buildCtx({ ...row, sales_number: 'self' }).biz.recipients, [{ name: 'Sales', role: 'staff', phone: 'self' }]);
+    assert.deepEqual(buildCtx(row, { recipients: [{ name: 'Rina', role: 'owner', phone: '+6281100000009' }] }).biz.recipients,
+      [{ name: 'Rina', role: 'owner', phone: '+6281100000009' }], 'daftar yang sudah ada tidak ditambah');
   }],
 
   ['nama profil WhatsApp: nama orang dipastikan, julukan dan inisial diabaikan', async () => {
@@ -1279,10 +1290,11 @@ const tests: [string, () => Promise<void>][] = [
     }
   }],
 
-  ['nomor sales = nomor bot: Baileys kirim ke diri sendiri, Cloud API melewatkan', async () => {
+  ['penerima = nomor bot: Baileys kirim ke diri sendiri, Cloud API melewatkan', async () => {
     const BOT = '+6281255550000';
-    // Nomor sales diisi sama dengan nomor bot.
-    cfg.salesNumber = BOT;
+    const only = (phone: string) => { biz.recipients = [{ name: 'Sales', role: 'staff', phone }]; };
+    // Nomor penerima sama dengan nomor bot.
+    only(BOT);
     const b = fakeTransport('baileys', BOT, true);
     assert.equal(await makeSalesNotifier(b.t)('lead'), true);
     assert.deepEqual(b.out, [{ phone: BOT, text: 'lead', notify: true }]);
@@ -1290,21 +1302,21 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await makeSalesNotifier(c.t)('lead'), false, 'dilewat, bukan gagal');
     assert.equal(c.out.length, 0);
 
-    // Nomor sales "self": ikut nomor bot, siapa pun itu.
-    cfg.salesNumber = 'self';
+    // Penerima "self": ikut nomor bot, siapa pun itu.
+    only('self');
     const b2 = fakeTransport('baileys', BOT, true);
     await makeSalesNotifier(b2.t)('lead');
     assert.equal(b2.out[0]?.phone, BOT);
     const b3 = fakeTransport('baileys', null, true);
     await assert.rejects(makeSalesNotifier(b3.t)('lead'), /belum diketahui/, 'belum tersambung = coba lagi nanti');
 
-    // Nomor sales berbeda: dikirim biasa di kedua jalur.
-    cfg.salesNumber = SALES;
+    // Nomor penerima berbeda: dikirim biasa di kedua jalur.
+    only(SALES);
     const c2 = fakeTransport('cloud', BOT, false);
     assert.equal(await makeSalesNotifier(c2.t)('lead'), true);
     assert.deepEqual(c2.out, [{ phone: SALES, text: 'lead', notify: true }]);
 
-    cfg.salesNumber = null;
+    biz.recipients = [];
     assert.equal(await makeSalesNotifier(c2.t)('lead'), false);
   }],
 

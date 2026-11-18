@@ -9,6 +9,7 @@ import { cfg } from './config';
 import { openDb } from './db';
 import { markStopped } from './heartbeat';
 import { llmEnabled } from './llm/provider';
+import { waTargets } from './notify';
 
 async function main() {
   await openDb();
@@ -18,9 +19,8 @@ async function main() {
   console.log(
     `[bot] LLM: ${llmEnabled() ? `${cfg.llmModel} @ ${cfg.llmBaseUrl}` : 'MATI (LLM_API_KEY kosong) — pertanyaan dioper ke manusia'}`
   );
-  console.log(
-    `[bot] notifikasi sales: ${cfg.salesNumber === 'self' ? 'nomor bot sendiri' : (cfg.salesNumber ?? 'BELUM DIATUR')}`
-  );
+  const phones = waTargets('lead');
+  console.log(`[bot] kabar lead lewat WA ke: ${phones.length ? phones.join(', ') : 'BELUM DIATUR (dashboard > Pengaturan > Notifikasi)'}`);
   console.log(
     `[bot] follow-up setelah ${cfg.followupAfterHours}–${Math.max(cfg.followupAfterHours, cfg.followupAfterHoursMax)} jam diam (diacak), jam ${cfg.followupStartHour}–${cfg.followupEndHour}` +
       (cfg.followupMaxHours ? `, paling lambat jam ke-${cfg.followupMaxHours}` : '')

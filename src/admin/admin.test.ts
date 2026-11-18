@@ -374,38 +374,38 @@ const PNG = Buffer.from(
       // --- Pengaturan: penerima, rute, dan setelan yang menimpa .env ---
       const rec = await put({
         recipients: [
-          { name: ' Pak Harry ', role: 'owner', phone: '0811 0000 0001', email: 'owner@contoh.com' },
-          { name: 'Rina', role: 'apa saja', phone: 'self', email: '' },
-          { name: '', role: 'staff', phone: '', email: '' },
+          { name: ' Pak Harry ', role: 'owner', phone: '0811 0000 0001' },
+          { name: 'Rina', role: 'apa saja', phone: 'self' },
+          { name: '', role: 'staff', phone: '' },
         ],
         notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner' },
       });
       assert.equal(rec.status, 200);
       assert.deepEqual(biz.recipients, [
-        { name: 'Pak Harry', role: 'owner', phone: '+6281100000001', email: 'owner@contoh.com' },
-        { name: 'Rina', role: 'staff', phone: 'self', email: '' },
+        { name: 'Pak Harry', role: 'owner', phone: '+6281100000001' },
+        { name: 'Rina', role: 'staff', phone: 'self' },
       ]);
       assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none' });
       assert.match((await put({ recipients: [{ name: 'X', phone: '12' }] })).body.error, /nomor WhatsApp/);
-      assert.match((await put({ recipients: [{ name: 'X', email: 'bukan-email' }] })).body.error, /email/);
-      assert.match((await put({ recipients: [{ name: 'X' }] })).body.error, /minimal satu jalur/);
+      assert.match((await put({ recipients: [{ name: 'X' }] })).body.error, /isi nomor WhatsApp/);
 
-      // Kompatibilitas: profil lama masih membawa jalur telegram (sudah dihapus). Penerima yang hanya
+      // Kompatibilitas: profil lama masih membawa jalur email atau telegram (sudah dihapus). Penerima yang hanya
       // punya jalur itu dibuang tanpa pesan, kolomnya tidak disimpan, dan dashboard tetap bisa memuat profilnya.
       const legacyRows = [
         { name: 'Lama', role: 'owner', phone: '', email: '', telegram: '123456' },
-        { name: 'Campur', role: 'staff', phone: '0811 0000 0002', email: '', telegram: '654321' },
+        { name: 'Surel', role: 'owner', phone: '', email: 'owner@contoh.com' },
+        { name: 'Campur', role: 'staff', phone: '0811 0000 0002', email: 'campur@contoh.com', telegram: '654321' },
       ];
       const old = await put({ recipients: legacyRows });
       assert.equal(old.status, 200, 'penerima lama tidak membuat simpan gagal');
-      assert.deepEqual(biz.recipients, [{ name: 'Campur', role: 'staff', phone: '+6281100000002', email: '' }]);
+      assert.deepEqual(biz.recipients, [{ name: 'Campur', role: 'staff', phone: '+6281100000002' }]);
       const keptProfile = await getProfile('gfan');
       await saveProfile('gfan', { ...keptProfile, recipients: legacyRows });
       await refreshBiz(true);
-      assert.deepEqual(biz.recipients, [{ name: 'Campur', role: 'staff', phone: '0811 0000 0002', email: '' }], 'profil tersimpan: jalur lama dibuang saat dimuat');
+      assert.deepEqual(biz.recipients, [{ name: 'Campur', role: 'staff', phone: '0811 0000 0002' }], 'profil tersimpan: jalur lama dibuang saat dimuat');
       const legacyState = await call('/api/gfan/state');
       assert.equal(legacyState.status, 200);
-      assert.ok(legacyState.body.profile.recipients.every((r: Record<string, unknown>) => !('telegram' in r)), 'dashboard tidak menerima jalur lama');
+      assert.ok(legacyState.body.profile.recipients.every((r: Record<string, unknown>) => !('telegram' in r) && !('email' in r)), 'dashboard tidak menerima jalur lama');
       assert.equal(legacyState.body.status.channels?.telegram, undefined);
       await saveProfile('gfan', keptProfile);
       await refreshBiz(true);
@@ -478,10 +478,9 @@ const PNG = Buffer.from(
       assert.match((await pp('gfan', { transport: 'telepati' })).body.error, /Jalur/);
       assert.equal((await pp('gfan', { paused: true, sales_number: '0812 9999 0001' })).body.project.paused, true);
       assert.equal((await getProject('gfan'))?.paused, true);
-      assert.equal(cfg.salesNumber, '+6281299990001', 'bot memakai nomor sales yang baru');
+      assert.equal((await getProject('gfan'))?.sales_number, '+6281299990001', 'API lama tetap menerima nomor sales');
       assert.equal((await call('/api/projects')).body.projects[0].paused, true);
       assert.equal((await pp('gfan', { paused: false, sales_number: '' })).body.project.paused, false);
-      assert.equal(cfg.salesNumber, null);
     }
 
     // --- WhatsApp: laporan bot, kode pairing, tautkan ulang ---
@@ -516,6 +515,7 @@ const PNG = Buffer.from(
         assert.match((await post('/api/gfan/wa/pair', { number: 'abc' })).body.error, /tidak sah/);
         assert.equal((await post('/api/gfan/wa/pair', { number: '0812 3456 0001' })).status, 200);
         assert.deepEqual((await getProject('gfan'))?.pairing_request?.number, '6281234560001');
+        assert.equal((await getProject('gfan'))?.wa_number, '+6281234560001', 'nomor bot diatur di halaman WhatsApp: ikut disimpan');
         assert.equal((await call('/api/gfan/wa')).body.pending, 'pair');
         await handlePairingRequest(fake);
         assert.deepEqual(asked, ['6281234560001']);

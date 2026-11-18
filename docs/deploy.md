@@ -13,7 +13,7 @@ pemilik ──▶ Vercel  https://alice.lukicenturi.com  (hanya meneruskan, tanp
 ```
 
 - **Proyek** = satu bisnis = satu nomor WhatsApp, dengan lead, profil, berkas, pengaturan, dan
-  nomor sales sendiri. Semua baris di database membawa kolom `project`.
+  penerima notifikasi sendiri. Semua baris di database membawa kolom `project`.
 - **Satu database PostgreSQL** (`DATABASE_URL` di `.env`) untuk semua proyek. Tabelnya dibuat dan
   diperbarui oleh migrasi di `drizzle/` (otomatis saat start, dan oleh `deploy.sh`).
 - **Satu bot per proyek**: `alice-bot@<proyek>.service` (`PROJECT=<proyek> npm run bot`).
@@ -23,8 +23,8 @@ pemilik ──▶ Vercel  https://alice.lukicenturi.com  (hanya meneruskan, tanp
   sendiri; keadaan bot (WhatsApp, QR, kode pairing, jatah LLM) dibaca dari tabel `project_status`
   yang ditulis tiap bot tiap 30 detik.
 - **`.env`** hanya berisi yang dipakai bersama: `DATABASE_URL`, `LLM_*`, `ADMIN_PASSWORD`,
-  `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_ORIGINS`, `DATA_DIR`, `BOT_TZ`, SMTP/STT, `LOG_*`.
-  Jalur WhatsApp, nomor bot, nomor sales, mode uji, dan follow-up diatur per proyek di dashboard.
+  `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_ORIGINS`, `DATA_DIR`, `BOT_TZ`, STT, `LOG_*`.
+  Jalur WhatsApp, nomor bot, penerima notifikasi, mode uji, dan follow-up diatur per proyek di dashboard.
 - **Vercel** hanya memberi alamat `alice.lukicenturi.com`: `vercel.json` meneruskan semua
   permintaan ke server. Karena itu `.env` berisi `ADMIN_ORIGINS=https://alice.lukicenturi.com`, dan
   `ADMIN_HOST` tetap `127.0.0.1` (Caddy yang membukanya ke internet, lewat HTTPS).
@@ -61,7 +61,7 @@ Lalu:
 
 1. DNS: `alice-api` → A record ke IP server (`vercel dns add lukicenturi.com alice-api A <IP>`).
    Caddy mengurus sertifikat HTTPS sendiri begitu DNS-nya mengarah.
-2. Isi `LLM_API_KEY` (dan SMTP/STT kalau dipakai) di `/opt/alice-ai/.env`, lalu
+2. Isi `LLM_API_KEY` (dan STT kalau dipakai) di `/opt/alice-ai/.env`, lalu
    `systemctl restart alice-admin 'alice-bot@*'`.
 3. Buka `https://alice.lukicenturi.com/gfan/settings/whatsapp` dan tautkan nomornya (lihat di bawah).
 
@@ -76,7 +76,8 @@ Di dashboard: pemilih proyek di bilah atas → **＋ Proyek baru…**. Isi:
   `favicon.ico`, `conversations`, `knowledge`, `settings`, `percakapan`, `pengetahuan`,
   `pengaturan`) ditolak.
 - **Nama**, **bibit profil** (`generic` = mulai kosong; `gfan` = menyalin data produk GFAN),
-  **nomor WA bot**, **nomor sales** (`self` = nomor bot sendiri).
+  lalu nomor bot di Pengaturan > WhatsApp (saat menautkan) dan penerima kabar di Pengaturan >
+  Notifikasi (`self` = nomor bot sendiri).
 
 Dalam ±1 menit `alice-reconcile.timer` menyalakan `alice-bot@<id>`, dan dashboard membuka
 `/<id>/settings/whatsapp` untuk menautkan nomornya. Lead proyek baru mulai kosong.

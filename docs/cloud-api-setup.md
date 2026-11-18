@@ -147,10 +147,10 @@ Dua pilihan:
 - **Jendela 24 jam.** Teks bebas hanya boleh dalam 24 jam sejak pesan terakhir pelanggan. Karena
   itu follow-up bawaannya jam ke-23, dan di jalur `cloud` yang jatuh malam hari **dimajukan** ke
   sore, bukan ditunda. Follow-up setelah 24 jam butuh **template marketing** berbayar.
-- **Nomor sales = nomor bot** (nomor sales `self` di dashboard). Cloud API tidak bisa mengirimi dirinya sendiri,
+- **Penerima = nomor bot** (penerima `self` di Pengaturan > Notifikasi). Cloud API tidak bisa mengirimi dirinya sendiri,
   jadi tidak ada notifikasi WA. Dengan Coexistence itu wajar: percakapannya sudah tampil di aplikasi
   sales, dan tiap lead tercatat di dashboard.
-- **Nomor sales berbeda.** Notifikasi teks biasa hanya sampai kalau sales mengirim pesan ke nomor
+- **Nomor penerima berbeda.** Notifikasi teks biasa hanya sampai kalau penerimanya mengirim pesan ke nomor
   bot dalam 24 jam terakhir. Supaya selalu sampai: buat template **utility** dengan satu variabel,
   mis. nama `lead_baru`, isi `Lead baru: {{1}}`, lalu isi `WA_LEAD_TEMPLATE=lead_baru`.
 - **Versi Graph API.** Bawaan `v23.0`; contoh di dokumen Coexistence sudah memakai versi lebih baru.
