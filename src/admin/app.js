@@ -1597,6 +1597,12 @@ async function putStage(phone, stage) {
   return r;
 }
 
+/**
+ * Sebutan isian lead sebagai judul (kolom, CSV, label di halaman chat): huruf pertamanya besar. Sebutannya
+ * sendiri tetap huruf kecil, karena bot memakainya di tengah kalimat ("boleh diinfokan kota/alamat").
+ */
+const sentenceCase = (s) => (s ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : s);
+
 /** Nama pelanggan: isian "nama" dari bot, lalu nama profil WhatsApp-nya. */
 function nameOf(c) {
   const key = profile && (profile.leadFields.find((f) => f.isName) || {}).key;
@@ -1693,7 +1699,7 @@ function renderLeads() {
   const nameKey = (profile.leadFields.find((f) => f.isName) || {}).key;
   const fields = r.fields.filter((f) => f.key !== nameKey);
   const head = el('tr', {}, el('th', { textContent: T('Pelanggan', 'Customer') }), el('th', { textContent: T('Tahap', 'Stage') }),
-    ...fields.map((f) => el('th', { textContent: f.label })),
+    ...fields.map((f) => el('th', { textContent: sentenceCase(f.label) })),
     el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
     el('th', { textContent: T('Terakhir chat', 'Last message') }));
   const list = visibleLeads();
@@ -1752,7 +1758,7 @@ $('leadExport').addEventListener('click', () => {
   if (!leadData) return;
   const r = leadData;
   const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const lines = [[T('Nomor', 'Number'), ...r.fields.map((f) => f.label), T('Tahap', 'Stage'), T('Catatan', 'Note'), T('Ringkasan', 'Summary'), T('Lengkap', 'Complete'),
+  const lines = [[T('Nomor', 'Number'), ...r.fields.map((f) => sentenceCase(f.label)), T('Tahap', 'Stage'), T('Catatan', 'Note'), T('Ringkasan', 'Summary'), T('Lengkap', 'Complete'),
     T('Perlu staf', 'Needs staff'), 'Bot', T('Terakhir chat', 'Last message')]];
   for (const c of visibleLeads()) {
     lines.push([c.phone, ...r.fields.map((f) => c.lead[f.key] || ''), stageLabel(c.stage || 'baru'), c.note || '', c.summary || '', c.complete ? T('ya', 'yes') : T('tidak', 'no'),
@@ -1869,7 +1875,7 @@ function renderConvHead() {
   paintStage($('convStage'));
   // Catatan yang sedang diketik tidak ditimpa oleh pembaruan berkala.
   if (document.activeElement !== $('convNote') && !noteTimer) $('convNote').value = c.note || '';
-  const facts = conv.fields.map((f) => [f.label, c.lead[f.key]]).filter(([, v]) => v);
+  const facts = conv.fields.map((f) => [sentenceCase(f.label), c.lead[f.key]]).filter(([, v]) => v);
   $('convLead').replaceChildren(...[
     ...facts.flatMap(([k, v], i) => [i ? ' · ' : '', el('b', { textContent: k + ': ' }), v]),
     c.summary ? el('div', { style: 'flex-basis:100%', textContent: T('Ringkasan: ', 'Summary: ') + c.summary }) : null,
