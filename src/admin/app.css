@@ -270,9 +270,10 @@ table.grid td.center { text-align: center; padding: 0 10px; }
 .thumbs .th:hover button, .thumbs .th button:focus { display: inline-flex; }
 .thumbs .add { width: 30px; height: 30px; flex: none; border: 1px dashed var(--dash); border-radius: 4px; background: var(--field); color: var(--blue); cursor: pointer; font-size: 17px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .thumbs .add:hover { border-color: var(--blue); background: var(--blue-soft); }
-/* Kolom Marketplace: selalu satu baris per marketplace, tingginya sama (link, atau tombol tambah). */
-.mkt { display: flex; flex-direction: column; padding: 4px 4px 4px 10px; }
-.mkt .ln { display: flex; align-items: center; gap: 2px; height: 28px; min-width: 0; }
+/* Kolom Marketplace: selalu satu baris per marketplace, tingginya sama (link, atau tombol tambah), dengan garis pemisah. */
+.mkt { display: flex; flex-direction: column; }
+.mkt .ln { display: flex; align-items: center; gap: 2px; height: 32px; padding: 0 4px 0 10px; min-width: 0; box-sizing: border-box; }
+.mkt .ln + .ln { border-top: 1px solid var(--line-soft); }
 .mkt .ln a, .mkt .addlink { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: 100%; font-size: 13px; text-decoration: none; }
 .mkt .ln a { color: var(--blue); }
 .mkt .ln span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
