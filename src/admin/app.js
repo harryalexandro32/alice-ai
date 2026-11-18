@@ -1566,14 +1566,15 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
   onWidth(plot, draw);
 }
 
-const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'closing', 'batal'];
-const stageLabel = (s) => ({ baru: T('Baru', 'New'), menunggu: T('Menunggu tim', 'Waiting for team'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), closing: 'Closing', batal: T('Batal', 'Cancelled') })[s] || s;
+const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'payment', 'dikirim', 'selesai', 'batal'];
+const stageLabel = (s) => ({ baru: T('Baru', 'New'), menunggu: T('Menunggu tim', 'Waiting for team'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), payment: 'Payment', dikirim: T('Barang terkirim', 'Shipped'), selesai: 'Order complete', batal: T('Batal', 'Cancelled') })[s] || s;
 /**
  * Warna tiap tahap: satu sumber untuk chip Beranda, saringan Percakapan, dan pilihan tahap.
  * Kelasnya ada di app.css (.stage-baru …) dan mengisi --st-bg / --st-fg untuk tema terang dan gelap:
- * baru biru, menunggu tim kuning, dihubungi oranye, link ungu, closing hijau, batal abu-abu.
+ * baru biru, menunggu tim kuning, dihubungi oranye, link ungu, payment hijau toska, barang terkirim merah muda,
+ * order complete hijau, batal abu-abu.
  */
-const STAGE_COLOR = { baru: 'stage-baru', menunggu: 'stage-menunggu', dihubungi: 'stage-dihubungi', link: 'stage-link', closing: 'stage-closing', batal: 'stage-batal' };
+const STAGE_COLOR = { baru: 'stage-baru', menunggu: 'stage-menunggu', dihubungi: 'stage-dihubungi', link: 'stage-link', payment: 'stage-payment', dikirim: 'stage-dikirim', selesai: 'stage-selesai', batal: 'stage-batal' };
 const stageClass = (s) => STAGE_COLOR[s] || STAGE_COLOR.baru;
 /** Pilihan tahap berwarna sesuai tahap yang terpilih. */
 function paintStage(sel) {
@@ -1629,7 +1630,7 @@ async function loadLeads() {
 
 const FILTERS = () => [
   ['semua', T('Semua', 'All')], ['baru', stageLabel('baru')], ['menunggu', stageLabel('menunggu')], ['dihubungi', stageLabel('dihubungi')], ['link', stageLabel('link')],
-  ['closing', stageLabel('closing')], ['batal', stageLabel('batal')], ['staf', T('Perlu staf', 'Needs staff')],
+  ['payment', stageLabel('payment')], ['dikirim', stageLabel('dikirim')], ['selesai', stageLabel('selesai')], ['batal', stageLabel('batal')], ['staf', T('Perlu staf', 'Needs staff')],
 ];
 /** Arti tiap saringan (tooltip di saringan Percakapan dan chip tahap di Beranda). */
 const FILTER_HELP = () => ({
@@ -1638,9 +1639,11 @@ const FILTER_HELP = () => ({
   menunggu: T('Bot sudah menyerahkan chat ini ke tim, dan belum ada staf yang membalas. Pindah ke Dihubungi saat staf membalas atau menandai Sudah ditangani.',
     'The bot passed this chat to the team, and no staff member has replied yet. It moves to Contacted when staff reply or mark it as handled.'),
   dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari web.', 'A staff member has replied to this customer, from the phone or the web.'),
-  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang menandai Closing atau Batal, karena bot tidak melihat pesanan di marketplace.',
-    'The bot sent a Tokopedia or Shopee link. Staff mark Closing or Cancelled, because the bot cannot see marketplace orders.'),
-  closing: T('Pelanggan jadi membeli. Hanya diubah staf.', 'The customer bought. Only staff set this.'),
+  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Payment atau Batal, karena bot tidak melihat pesanan di marketplace.',
+    'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, because the bot cannot see marketplace orders.'),
+  payment: T('Pelanggan sedang membayar atau sudah membayar. Hanya diubah staf.', 'The customer is paying or has paid. Only staff set this.'),
+  dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya diubah staf.', 'The goods are on the way to the customer. Only staff set this.'),
+  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Hanya diubah staf.', 'The order is complete: the customer received the goods. Only staff set this.'),
   batal: T('Pelanggan tidak jadi membeli. Hanya diubah staf.', 'The customer did not buy. Only staff set this.'),
   staf: T('Bukan tahap. Bot meminta bantuan staf dan belum ada yang menandai Sudah ditangani, di tahap apa pun. Tetap di sini walau staf sudah membalas, sampai ditandai.',
     'Not a stage. The bot asked staff for help and nobody has marked it as handled, at any stage. It stays here after staff reply, until someone marks it.'),

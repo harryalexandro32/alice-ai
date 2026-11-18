@@ -1133,9 +1133,9 @@ const tests: [string, () => Promise<void>][] = [
     const c = await getContact(A);
     assert.deepEqual([c?.stage, c?.last_dir, c?.followup_state], ['dihubungi', 'human', 'idle']);
     assert.equal((await recentMessages(A, 1))[0]?.dir, 'human');
-    await updateContact(A, { stage: 'closing' });
+    await updateContact(A, { stage: 'payment' });
     await handleHumanReply({ address: A, text: 'sudah saya kirim penawarannya' });
-    assert.equal((await getContact(A))?.stage, 'closing', 'hanya "baru" yang berpindah otomatis');
+    assert.equal((await getContact(A))?.stage, 'payment', 'hanya "baru" yang berpindah otomatis');
   }],
 
   ['tautan beli: dikirim kode dari daftar produk, tahap lead jadi "link"', async () => {
@@ -1160,9 +1160,9 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await recentMessages(A, 1))[0]?.text, `[link:GFAF-40AB] Tokopedia: ${TOKO}`, 'tercatat di riwayat, jadi model tahu tautannya sudah terkirim');
 
     // Tahap yang sudah lebih jauh tidak diturunkan; "dihubungi" naik ke "link".
-    await updateContact(A, { stage: 'closing' });
+    await updateContact(A, { stage: 'payment' });
     await say('kirim lagi linknya');
-    assert.equal((await getContact(A))?.stage, 'closing');
+    assert.equal((await getContact(A))?.stage, 'payment');
     for (const from of ['dihubungi', 'menunggu'] as const) {
       await updateContact(A, { stage: from });
       await say('linknya mana');
@@ -1207,10 +1207,27 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(C))?.stage, 'menunggu');
 
     // Tahap yang lebih jauh tidak turun ke "menunggu".
-    await updateContact(A, { stage: 'closing' });
+    await updateContact(A, { stage: 'payment' });
     next = () => R('Untuk ongkir, tim kami yang akan menginfokan ya.', {}, 'handoff');
     await say('ongkir ke Bekasi berapa?');
-    assert.equal((await getContact(A))?.stage, 'closing');
+    assert.equal((await getContact(A))?.stage, 'payment');
+  }],
+
+  ['tahap pesanan (payment, barang terkirim, order complete) hanya diubah staf', async () => {
+    const TOKO = 'https://www.tokopedia.com/kipashisap/axial-wall-fan-16-inch-industrial-ventilation-fan-gfaf-40ab';
+    biz.products = [{ name: 'GFAF-40AB', description: '', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: TOKO, shopee: '' } }];
+    await say('halo');
+    for (const stage of ['payment', 'dikirim', 'selesai'] as const) {
+      await updateContact(A, { stage });
+      next = () => R('Untuk ongkir, tim kami yang akan menginfokan ya.', {}, 'handoff');
+      await say('ongkirnya berapa?');
+      next = () => R('Ini link pembeliannya ya.', {}, 'info', [], [], '', ['GFAF-40AB']);
+      await say('minta link lagi');
+      await handleHumanReply({ address: A, text: 'siap pak' });
+      await markHandled(A, now());
+      assert.equal((await getContact(A))?.stage, stage, `${stage}: handoff, tautan beli, balasan admin, dan sudah ditangani tidak mengubahnya`);
+      await switchBot(A, 'on', now());
+    }
   }],
 
   ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {

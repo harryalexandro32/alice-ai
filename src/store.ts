@@ -29,9 +29,10 @@ export type FollowupState = 'idle' | 'pending';
  * Tahap pipeline lead. Yang berubah otomatis: "baru" -> "menunggu" (bot
  * menyerahkan chat ke tim), "baru"/"menunggu" -> "dihubungi" (manusia membalas
  * atau menandai sudah ditangani), dan "baru"/"menunggu"/"dihubungi" -> "link"
- * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis.
+ * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis. Tahap pesanan
+ * (payment, dikirim, selesai) dan batal hanya diubah staf.
  */
-export const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'closing', 'batal'] as const;
+export const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'payment', 'dikirim', 'selesai', 'batal'] as const;
 export type Stage = (typeof STAGES)[number];
 
 export interface Contact {

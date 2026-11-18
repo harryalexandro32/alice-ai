@@ -20,7 +20,7 @@ export interface LeadRow {
   summary?: string;
   /** Kenapa bot diam di chat ini (lihat flow.holdReason); null/kosong = bot aktif. */
   hold?: 'berhenti' | 'tombol' | 'admin' | 'tenang' | null;
-  /** Tahap pipeline: baru | menunggu | dihubungi | link | closing | batal. */
+  /** Tahap pipeline: baru | menunggu | dihubungi | link | payment | dikirim | selesai | batal. */
   stage: string;
   /** Catatan staf ('' = belum ada). */
   note: string;
