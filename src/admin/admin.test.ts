@@ -21,7 +21,7 @@ import { humanHolds } from '../flow';
 import { handlePairingRequest, reportState, resetWaNumberCheck, startHeartbeat } from '../heartbeat';
 import { pickDelayMs, typingMs } from '../pace';
 import { withProject } from '../project';
-import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender } from '../sinks/outbox';
+import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setTestSender } from '../sinks/outbox';
 import {
   addHandoff, addMessage, addUsage, createContact, getContact, getProfile, getProject, humanSeenAt, pendingReplies, readStatus, recentAlerts,
   recentMessages, saveProfile, updateContact, updateProject,
@@ -372,6 +372,8 @@ const PNG = Buffer.from(
       assert.equal((await put({ greetingKnown: '' })).status, 200, 'boleh dikosongkan');
 
       // --- Pengaturan: penerima, rute, dan setelan yang menimpa .env ---
+      assert.equal((await put({ recipients: [] })).status, 200);
+      assert.match((await post('/api/gfan/notify/test', {})).body.error, /Belum ada penerima/);
       const rec = await put({
         recipients: [
           { name: ' Pak Harry ', role: 'owner', phone: '0811 0000 0001' },
@@ -386,6 +388,20 @@ const PNG = Buffer.from(
         { name: 'Rina', role: 'staff', phone: 'self' },
       ]);
       assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none' });
+
+      // "Kirim tes": satu pesan per nomor penerima, isinya kabar apa saja yang diterima nomor itu.
+      const tq = await post('/api/gfan/notify/test', {});
+      assert.deepEqual([tq.status, tq.body.phones], [200, ['+6281100000001', 'self']]);
+      const sentTests: [string, string][] = [];
+      setTestSender(async (phone, text) => { sentTests.push([phone, text]); return true; });
+      await deliverOutbox(['test']);
+      assert.deepEqual(sentTests.map(([p]) => p), ['+6281100000001', 'self']);
+      assert.match(sentTests[0]![1], /^🔔 \*Tes notifikasi\* \| GFAN Indonesia\nIni pesan tes dari dashboard\. Kalau pesan ini sampai, nomor ini akan menerima kabar: lead baru\.$/,
+        'pemilik: hanya lead (rutenya keduanya); butuh staf ke staf');
+      assert.match(sentTests[1]![1], /menerima kabar: lead baru, pelanggan butuh staf\.$/, 'staf; LLM "tidak dikirim" tidak disebut');
+      const st = await call(`/api/gfan/notify/test?ids=${tq.body.ids.join(',')}`);
+      assert.deepEqual(st.body.items.map((x: { done: boolean }) => x.done), [true, true]);
+      setTestSender(null);
       assert.match((await put({ recipients: [{ name: 'X', phone: '12' }] })).body.error, /nomor WhatsApp/);
       assert.match((await put({ recipients: [{ name: 'X' }] })).body.error, /isi nomor WhatsApp/);
 
@@ -748,13 +764,13 @@ const PNG = Buffer.from(
       // Proses bot mengirimnya; setelah itu tidak lagi "menunggu terkirim".
       const out: string[] = [];
       setReplySender(async (to, text) => void out.push(`${to.address}: ${text}`));
-      await deliverOutbox('reply');
+      await deliverOutbox(['reply']);
       assert.deepEqual(out, [`${c?.address}: Halo Pak, saya Rina dari GFAN.\nAda yang bisa dibantu?`]);
       assert.deepEqual((await lead()).body.pending_replies, []);
       // Yang terus gagal: tampil "gagal" di percakapan dan jadi warning.
       setReplySender(async () => { throw new Error('tidak tersambung'); });
       await reply('yang ini gagal');
-      for (let i = 0; i < MAX_REPLY_ATTEMPTS; i++) await deliverOutbox('reply');
+      for (let i = 0; i < MAX_REPLY_ATTEMPTS; i++) await deliverOutbox(['reply']);
       assert.equal((await lead()).body.pending_replies[0].failed, true);
       assert.ok((await recentAlerts(20)).some((a) => a.kind === 'kiriman-gagal'));
       setReplySender(null);

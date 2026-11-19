@@ -22,7 +22,7 @@ import { waTargets } from './notify';
 import { handleHumanReply, handleInbound, runDeferredTurn, setBeforeTurn, setSender } from './flow';
 import { startHeartbeat, transportConnected } from './heartbeat';
 import { runFollowups } from './followup';
-import { deliverOutbox, setReplySender, setSalesNotifier, type SalesNotifier } from './sinks/outbox';
+import { deliverOutbox, QUICK_KINDS, setReplySender, setSalesNotifier, setTestSender, type SalesNotifier } from './sinks/outbox';
 import { raiseAlert, setAlertWhatsApp } from './alerts';
 import { installErrorLog } from './errlog';
 import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
@@ -230,6 +230,8 @@ export async function startApp(raw: Transport): Promise<void> {
   // Notifikasi ke sales dan kabar "butuh staf": hanya antre (lihat makeWaSender).
   const toSales = makeSalesNotifier(transport);
   setSalesNotifier(toSales);
+  // Pesan tes dari Pengaturan > Notifikasi: ke satu nomor, seperti kabar lain.
+  setTestSender(makeWaSender(transport));
   // Balasan staf dari dashboard: isinya apa adanya; mikir singkat lalu mengetik
   // sesuai panjangnya, lalu lewat pengaman nomor di transport.
   setReplySender(
@@ -288,7 +290,7 @@ export async function startApp(raw: Transport): Promise<void> {
   setInterval(() => {
     if (replying) return;
     replying = true;
-    void deliverOutbox('reply')
+    void deliverOutbox(QUICK_KINDS)
       .catch((e) => console.error('[outbox] balasan dashboard:', e instanceof Error ? e.message : e))
       .finally(() => (replying = false));
   }, REPLY_POLL_MS);

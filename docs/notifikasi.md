@@ -41,6 +41,10 @@ begitu daftarnya disimpan.
 
 ## Memeriksa
 
+- **Kirim tes** (di bawah tabel penerima): bot mengirim pesan tes dari nomornya ke tiap penerima
+  yang sudah disimpan. Isinya menyebut kabar apa saja yang akan diterima nomor itu. Di sebelah
+  tombolnya tampil "Terkirim ke N dari M nomor"; selama WhatsApp bot belum tersambung, pesannya
+  menunggu.
 - Saat bot start, log-nya menulis `[bot] kabar lead lewat WA ke: …`.
 - Dashboard → Pengaturan → **Lanjutan** → **Catatan error**: kiriman yang gagal muncul dengan
   alasannya.

@@ -325,6 +325,38 @@ function renderRecipients() {
       return el('tr', {}, el('td', { textContent: label() }), el('td', {}, sel));
     })));
 }
+// "Kirim tes": bot mengirim pesan tes ke tiap penerima yang sudah disimpan; di sini ditunggu kabarnya (±1 menit).
+$('testNotify').addEventListener('click', async () => {
+  if (changed.has('recipients') || changed.has('notifyRoutes')) {
+    return toast(T('Simpan dulu perubahan penerima sebelum mengirim tes.', 'Save your recipient changes before sending a test.'), true);
+  }
+  const btn = $('testNotify');
+  const out = $('testNotifyState');
+  btn.disabled = true;
+  out.textContent = T('Mengantre pesan tes…', 'Queuing the test…');
+  try {
+    const r = await api('notify/test', { method: 'POST', body: '{}' });
+    const total = r.ids.length;
+    let done = 0;
+    let failed = 0;
+    for (let i = 0; i < 30 && done + failed < total; i++) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      const s = await api('notify/test?ids=' + r.ids.join(','));
+      done = s.items.filter((x) => x.done).length;
+      // Berhenti dicoba setelah 5 kali gagal (MAX_REPLY_ATTEMPTS di src/sinks/outbox.ts).
+      failed = s.items.filter((x) => !x.done && x.attempts >= 5).length;
+      out.textContent = T('Terkirim ke ', 'Sent to ') + done + T(' dari ', ' of ') + total + T(' nomor.', ' numbers.');
+    }
+    if (done === total) out.textContent += T(' Cek WhatsApp di nomor penerima.', ' Check WhatsApp on the recipient numbers.');
+    else if (failed) out.textContent += T(' Sebagian gagal; lihat Pengaturan › Lanjutan › Catatan error.', ' Some failed; see Settings › Advanced › Error log.');
+    else out.textContent += T(' Sisanya menunggu WhatsApp bot tersambung (Pengaturan › WhatsApp).', ' The rest waits for the bot\'s WhatsApp to connect (Settings › WhatsApp).');
+  } catch (e) {
+    out.textContent = '';
+    toast(e.message, true);
+  }
+  btn.disabled = false;
+});
+
 $('addRecipient').addEventListener('click', () => {
   if (profile.recipients.length >= 20) return toast(T('Maksimal 20 orang.', '20 people max.'), true);
   profile.recipients.push({ name: '', role: 'staff', phone: '' });

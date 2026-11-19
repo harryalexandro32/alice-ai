@@ -70,7 +70,8 @@ export interface Contact {
   opted_out_at: number | null;
 }
 
-export type OutboxKind = 'sales' | 'reply';
+/** sales = lead dan "butuh staf"; reply = balasan dari dashboard; test = pesan tes ke satu penerima notifikasi. */
+export type OutboxKind = 'sales' | 'reply' | 'test';
 
 export interface OutboxRow {
   id: number;
@@ -386,11 +387,11 @@ export async function outboxAdd(kind: OutboxKind, payload: unknown, at: number):
 }
 
 /** Baris antrean yang belum terkirim; `only` = hanya satu jenis (mis. balasan dari dashboard). */
-export async function outboxPending(maxAttempts: number, only?: OutboxKind): Promise<OutboxRow[]> {
+export async function outboxPending(maxAttempts: number, only?: readonly OutboxKind[]): Promise<OutboxRow[]> {
   const rows = await db()
     .select({ id: outbox.id, kind: outbox.kind, payload: outbox.payload, attempts: outbox.attempts })
     .from(outbox)
-    .where(and(eq(outbox.project, pid()), isNull(outbox.done_at), lt(outbox.attempts, maxAttempts), ...(only ? [eq(outbox.kind, only)] : [])))
+    .where(and(eq(outbox.project, pid()), isNull(outbox.done_at), lt(outbox.attempts, maxAttempts), ...(only ? [inArray(outbox.kind, [...only])] : [])))
     .orderBy(outbox.id);
   return rows.map((r) => ({ ...r, kind: r.kind as OutboxKind }));
 }
@@ -401,6 +402,16 @@ export async function pendingReplies(phone: string): Promise<{ id: number; paylo
     .select({ id: outbox.id, payload: outbox.payload, attempts: outbox.attempts, created_at: outbox.created_at })
     .from(outbox)
     .where(and(eq(outbox.project, pid()), eq(outbox.kind, 'reply'), isNull(outbox.done_at), sql`${outbox.payload}->>'phone' = ${phone}`))
+    .orderBy(outbox.id);
+}
+
+/** Keadaan beberapa baris antrean (pesan tes): sudah terkirim, atau berapa kali gagal. */
+export async function outboxState(ids: number[]): Promise<{ id: number; done_at: number | null; attempts: number }[]> {
+  if (!ids.length) return [];
+  return db()
+    .select({ id: outbox.id, done_at: outbox.done_at, attempts: outbox.attempts })
+    .from(outbox)
+    .where(and(eq(outbox.project, pid()), inArray(outbox.id, ids)))
     .orderBy(outbox.id);
 }
 
