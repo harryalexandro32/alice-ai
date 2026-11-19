@@ -9,6 +9,8 @@
  * Balasan dari dashboard (jenis `reply`) ditulis dashboard, dikirim bot: proses
  * bot memeriksanya tiap beberapa detik (app.ts). Selama WhatsApp belum
  * tersambung balasan itu menunggu; yang terus gagal dicatat sebagai warning.
+ * Pesan tes notifikasi (jenis `test`, tombol "Kirim tes" di Pengaturan >
+ * Notifikasi) berjalan dengan cara yang sama: satu baris per nomor penerima.
  */
 
 import { raiseAlert } from '../alerts';
@@ -31,6 +33,18 @@ export interface LeadPayload {
  * diatur, atau jalurnya tidak bisa); melempar = gagal, coba lagi nanti.
  */
 export type SalesNotifier = (text: string, kind?: 'lead' | 'butuh-staf') => Promise<boolean>;
+
+/** Pesan tes ke satu penerima notifikasi ("self" = nomor bot sendiri). */
+export interface TestPayload {
+  phone: string;
+  text: string;
+}
+
+/** Mengirim teks ke satu penerima notifikasi. False = sengaja tidak dikirim; melempar = gagal. */
+export type TestSender = (phone: string, text: string) => Promise<boolean>;
+
+/** Jenis yang diperiksa bot tiap beberapa detik (balasan dari dashboard dan pesan tes). */
+export const QUICK_KINDS: readonly OutboxKind[] = ['reply', 'test'];
 
 /** Balasan staf dari dashboard, dikirim bot apa adanya. */
 export interface ReplyPayload {
@@ -69,6 +83,12 @@ export function setSalesNotifier(fn: SalesNotifier): void {
   notify = fn;
 }
 
+let testSender: TestSender | null = null;
+/** Dipasang app.ts: cara mengirim pesan tes ke satu penerima notifikasi. */
+export function setTestSender(fn: TestSender | null): void {
+  testSender = fn;
+}
+
 /**
  * Dipasang app.ts: cara mengirim balasan dari dashboard, dan apakah WhatsApp
  * sedang tersambung. Selama `ready()` false, balasan menunggu tanpa dihitung gagal.
@@ -92,6 +112,18 @@ export function salesText(p: LeadPayload): string {
   );
 }
 
+async function deliverTest(id: number, p: TestPayload): Promise<void> {
+  try {
+    if (!testSender) throw new Error('pengirim pesan tes belum terpasang');
+    const sent = await testSender(p.phone, p.text);
+    await outboxDone(id, now());
+    console.log(`[outbox] pesan tes #${id} ${sent ? 'terkirim ke' : 'dilewat untuk'} ${p.phone}`);
+  } catch (e) {
+    await outboxFailed(id).catch(() => {});
+    console.error(`[outbox] pesan tes #${id} ke ${p.phone} gagal: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
 async function deliverReply(id: number, attempts: number, p: ReplyPayload): Promise<void> {
   try {
     if (!replySender) throw new Error('pengirim balasan belum terpasang');
@@ -108,11 +140,16 @@ async function deliverReply(id: number, attempts: number, p: ReplyPayload): Prom
   }
 }
 
-async function deliverOnce(only?: OutboxKind): Promise<void> {
+async function deliverOnce(only?: readonly OutboxKind[]): Promise<void> {
   for (const row of await outboxPending(MAX_ATTEMPTS, only)) {
     if (row.kind === 'reply') {
       // Belum tersambung: menunggu, tidak dihitung gagal.
       if (row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverReply(row.id, row.attempts, row.payload as ReplyPayload);
+      continue;
+    }
+    if (row.kind === 'test') {
+      // Seperti balasan: menunggu selama belum tersambung, berhenti dicoba setelah beberapa kali gagal.
+      if (row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverTest(row.id, row.payload as TestPayload);
       continue;
     }
     if (row.kind !== 'sales') {
@@ -144,7 +181,7 @@ let queuedFull: Promise<void> | null = null;
  * dari dashboard); putaran penuh yang diminta selagi putaran itu berjalan
  * menunggu di belakangnya, supaya lead tidak tertunda sampai putaran berikutnya.
  */
-export function deliverOutbox(only?: OutboxKind): Promise<void> {
+export function deliverOutbox(only?: readonly OutboxKind[]): Promise<void> {
   const full = !only;
   if (current && (current.full || !full)) return current.run;
   if (current) {

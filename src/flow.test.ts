@@ -18,11 +18,11 @@ import { recipientsFor, waTargets } from './notify';
 import { missingFields, greetingFor, setGreetingRandom, timeOpener, handleHumanReply, handleInbound, holdReason, isOptOut, runDeferred, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
-import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, type ReplyPayload } from './sinks/outbox';
+import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, setTestSender, type ReplyPayload } from './sinks/outbox';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
-import { getContact, listHandoffs, outboxAdd, pendingReplies, recentAlerts, recentMessages, releaseToBot, updateContact, updateProject, importContact } from './store';
+import { getContact, listHandoffs, outboxAdd, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, updateContact, updateProject, importContact } from './store';
 import { handoffText, NON_TEXT, noDash, followupText, OPT_OUT_ACK } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
@@ -1257,6 +1257,32 @@ const tests: [string, () => Promise<void>][] = [
     }
   }],
 
+  ['pesan tes notifikasi: menunggu selama belum tersambung, gagal dicoba lagi, lalu terkirim', async () => {
+    const id = await outboxAdd('test', { phone: SALES, text: 'tes' }, now());
+    const got: string[] = [];
+    let fail = true;
+    setTestSender(async (phone, text) => {
+      if (fail) throw new Error('socket tertutup');
+      got.push(`${phone}: ${text}`);
+      return true;
+    });
+    try {
+      setReplySender(async () => {}, () => false);
+      await deliverOutbox(['test']);
+      assert.deepEqual((await outboxState([id]))[0], { id, done_at: null, attempts: 0 }, 'belum tersambung: menunggu, tidak dihitung gagal');
+      setReplySender(async () => {}, () => true);
+      await deliverOutbox(['test']);
+      assert.equal((await outboxState([id]))[0]?.attempts, 1, 'gagal: dicoba lagi nanti');
+      fail = false;
+      await deliverOutbox(['reply', 'test']);
+      assert.deepEqual(got, [`${SALES}: tes`]);
+      assert.notEqual((await outboxState([id]))[0]?.done_at, null);
+    } finally {
+      setTestSender(null);
+      setReplySender(null);
+    }
+  }],
+
   ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {
     await say('halo');
     const out: { phone: string; address: string; text: string }[] = [];
@@ -1269,11 +1295,11 @@ const tests: [string, () => Promise<void>][] = [
     try {
       const payload: ReplyPayload = { phone: A, address: A, text: 'Halo, ini dari dashboard', by: 'dashboard', message_id: null };
       await outboxAdd('reply', payload, T0);
-      await deliverOutbox('reply');
+      await deliverOutbox(['reply']);
       assert.equal(out.length, 0, 'WhatsApp belum tersambung: balasan menunggu');
       assert.equal((await pendingReplies(A))[0]?.attempts, 0, 'menunggu tidak dihitung gagal');
       ready = true;
-      await deliverOutbox('reply');
+      await deliverOutbox(['reply']);
       assert.deepEqual(out, [{ phone: A, address: A, text: 'Halo, ini dari dashboard' }]);
       assert.equal((await pendingReplies(A)).length, 0, 'terkirim = selesai');
       await deliverOutbox();
@@ -1281,7 +1307,7 @@ const tests: [string, () => Promise<void>][] = [
 
       fail = true;
       await outboxAdd('reply', { ...payload, text: 'yang ini gagal' }, T0);
-      for (let i = 0; i < MAX_REPLY_ATTEMPTS + 2; i++) await deliverOutbox('reply');
+      for (let i = 0; i < MAX_REPLY_ATTEMPTS + 2; i++) await deliverOutbox(['reply']);
       assert.equal((await pendingReplies(A))[0]?.attempts, MAX_REPLY_ATTEMPTS, 'berhenti mencoba setelah batas');
       const alert = (await recentAlerts(10)).find((x) => x.kind === 'kiriman-gagal');
       assert.match(alert?.text ?? '', /yang ini gagal[\s\S]*socket tertutup/);

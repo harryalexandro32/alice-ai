@@ -342,7 +342,8 @@ details.fold > .fold-body { padding: 14px 16px 6px; background: var(--surface2);
 .series-body { padding: 14px 16px 16px; }
 .tblhead { display: flex; gap: 8px; align-items: center; margin: 16px 0 6px; }
 .tblhead input { max-width: 320px; font-weight: 600; }
-.tblfoot { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.tblfoot { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+.tblfoot .help { margin: 0; }
 
 /* ---- angka ---- */
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }

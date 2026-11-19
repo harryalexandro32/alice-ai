@@ -39,11 +39,12 @@ import { ensureProject } from '../db/seed';
 import { localDay } from '../clock';
 import { applyHumanReply, holdReason, markHandled, switchBot } from '../flow';
 import { llmEnabled } from '../llm/provider';
+import { recipientsFor } from '../notify';
 import { currentProject, withProject } from '../project';
 import { MAX_REPLY_ATTEMPTS, type ReplyPayload } from '../sinks/outbox';
 import {
   countImported, getContact, getHandoff, getProject, importContact, listHandoffs, listProjects, messagePage, messagesAround, metrics, normQuestion,
-  outboxAdd, pendingReplies, readAllStatus, readStatus, resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
+  outboxAdd, outboxState, pendingReplies, readAllStatus, readStatus, resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
   type HandoffRow, type Project, type ProjectPatch, type Stage,
 } from '../store';
 import { matchProducts, pdfPlain, squash } from './pdftext';
@@ -573,6 +574,31 @@ export function createAdminHandler(store: AdminStore) {
         }
       }
       return json(200, { ok: true, profile: editableView(), autoPdf });
+    }
+
+    // "Kirim tes" di Pengaturan > Notifikasi: satu pesan tes per nomor penerima, dikirim bot
+    // lewat antrean (seperti balasan dari dashboard). Isinya menyebut kabar apa saja yang diterima nomor itu.
+    if (path === '/notify/test' && method === 'POST') {
+      const phones = [...new Set(biz.recipients.map((r) => r.phone).filter(Boolean))];
+      if (!phones.length) return json(400, { error: 'Belum ada penerima. Tambahkan dulu, lalu simpan.' });
+      const KINDS = [['lead', 'lead baru'], ['butuh-staf', 'pelanggan butuh staf'], ['llm', 'LLM bermasalah']] as const;
+      const at = Date.now();
+      const ids: number[] = [];
+      for (const phone of phones) {
+        const gets = KINDS.filter(([k]) => recipientsFor(k).some((r) => r.phone === phone)).map(([, label]) => label);
+        const text =
+          `🔔 *Tes notifikasi* | ${biz.brand}\n` +
+          'Ini pesan tes dari dashboard. ' +
+          (gets.length ? `Kalau pesan ini sampai, nomor ini akan menerima kabar: ${gets.join(', ')}.` : 'Nomor ini belum menerima kabar apa pun; atur di Pengaturan > Notifikasi.');
+        ids.push(await outboxAdd('test', { phone, text }, at));
+      }
+      console.log(`[dashboard] ${currentProject().id}: pesan tes notifikasi diantre untuk ${phones.join(', ')}`);
+      return json(200, { ids, phones });
+    }
+    if (path === '/notify/test' && method === 'GET') {
+      const ids = (url.searchParams.get('ids') ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 40);
+      const rows = await outboxState(ids);
+      return json(200, { items: rows.map((r) => ({ id: r.id, done: r.done_at !== null, attempts: r.attempts })) });
     }
 
     if (path === '/leads' && method === 'GET') {
