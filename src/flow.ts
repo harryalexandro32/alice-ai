@@ -289,7 +289,10 @@ export async function handleInbound(m: Inbound): Promise<void> {
   // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
   await beforeTurn();
   // Pemilik dan staf itu penerima notifikasi, bukan calon pelanggan.
-  if (recipientPhones().has(m.phone)) return;
+  if (recipientPhones().has(m.phone)) {
+    console.log(`[alur] ${m.phone}: pesan dari penerima notifikasi (Pengaturan > Notifikasi), tidak dianggap pelanggan; dilewat`);
+    return;
+  }
   // Mode uji: selain nomor yang didaftarkan, tidak ada yang dibalas maupun
   // dicatat — pelanggan sungguhan di nomor itu tidak boleh ikut jadi bahan uji.
   if (cfg.onlyNumbers.length && !cfg.onlyNumbers.includes(m.phone)) {

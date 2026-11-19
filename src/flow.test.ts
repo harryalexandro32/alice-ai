@@ -467,10 +467,18 @@ const tests: [string, () => Promise<void>][] = [
     await makeSalesNotifier(t2.t)('tolong', 'butuh-staf');
     assert.deepEqual(t2.out.map((o) => o.phone), [OWNER]);
 
-    // Pesan dari pemilik/staf bukan pesan calon pelanggan.
-    await say('tes dari staf', STAFF1);
+    // Pesan dari pemilik/staf bukan pesan calon pelanggan, dan log-nya menyebut alasannya.
+    const logs: string[] = [];
+    const log = console.log;
+    console.log = (...a: unknown[]) => void logs.push(a.join(' '));
+    try {
+      await say('tes dari staf', STAFF1);
+    } finally {
+      console.log = log;
+    }
     assert.equal((await getContact(STAFF1)), undefined);
     assert.equal(sent.length, 0);
+    assert.ok(logs.includes(`[alur] ${STAFF1}: pesan dari penerima notifikasi (Pengaturan > Notifikasi), tidak dianggap pelanggan; dilewat`));
 
     // Tidak ada yang berperan sesuai rutenya: semua penerima mendapatkannya, supaya kabar tidak hilang.
     biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }];
