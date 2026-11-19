@@ -15,7 +15,7 @@ import { biz } from './business';
 import { advance, now, setNow } from './clock';
 import { cfg, HOUR, MINUTE } from './config';
 import { recipientsFor, waTargets } from './notify';
-import { missingFields, greetingFor, setGreetingRandom, timeOpener, handleHumanReply, handleInbound, holdReason, isOptOut, runDeferred, markHandled, setBrain, setSender, switchBot } from './flow';
+import { missingFields, quoteNote, greetingFor, setGreetingRandom, timeOpener, handleHumanReply, handleInbound, holdReason, isOptOut, runDeferred, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
 import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, setTestSender, type ReplyPayload } from './sinks/outbox';
@@ -598,6 +598,29 @@ const tests: [string, () => Promise<void>][] = [
     setNow(wib(20));
     await say('halo');
     assert.ok(sent[0]?.startsWith('Halo, selamat malam, terima kasih'), sent[0]);
+  }],
+
+  ['pelanggan membalas (mengutip) pesan: kutipannya ikut ke LLM, tersimpan, dan ikut ke balasan pagi', async () => {
+    await say('halo');
+    const photo = { text: 'GFAF-40AB', by: 'us' as const, media: 'foto' as const };
+    await handleInbound({ phone: A, address: A, text: 'ada ukuran lain?', quote: photo });
+    assert.match(brainCalls.at(-1)!.note ?? '', /BALASAN yang mengutip pesan KITA: foto "GFAF-40AB"\. Pahami "ini"[\s\S]*nama produk atau berkasnya\./);
+    const lastIn = async () => (await recentMessages(A, 10)).filter((r) => r.dir === 'in').at(-1);
+    assert.deepEqual((await lastIn())?.quote, photo, 'tersimpan bersama pesannya (untuk halaman chat)');
+    await say('oke');
+    assert.ok(!/mengutip/.test(brainCalls.at(-1)!.note ?? ''), 'pesan tanpa kutipan: tanpa catatan');
+    assert.equal((await lastIn())?.quote, null);
+    assert.match(quoteNote({ text: 'dapur 3x4x4', by: 'customer' }), /mengutip pesannya sendiri sebelumnya: "dapur 3x4x4"/);
+    assert.match(quoteNote({ text: '', by: null, media: 'stiker' }), /mengutip pesan sebelumnya: stiker \(tanpa teks\)/);
+
+    // Jam tenang: kutipannya dibawa ke giliran pagi.
+    const wib = (d: number, h: number, m = 0) => Date.UTC(2026, 10, d, h - 7, m);
+    setNow(wib(11, 2));
+    await handleInbound({ phone: A, address: A, text: 'yang ini masih ada?', quote: { text: 'GFC15-20A', by: 'us' } });
+    assert.ok(!brainCalls.at(-1)!.note?.includes('GFC15-20A'), 'belum dijawab di jam tenang');
+    setNow(wib(11, 7, 1));
+    await runDeferred();
+    assert.match(brainCalls.at(-1)!.note ?? '', /mengutip pesan KITA: "GFC15-20A"/);
   }],
 
   ['jam tenang: pesan malam ditunda, lalu dijawab sekali dengan isi yang digabung', async () => {

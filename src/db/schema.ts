@@ -139,6 +139,8 @@ export const messages = pgTable(
     wa_id: text('wa_id'),
     /** Jenis kiriman khusus: 'followup' (pengingat bot) atau 'dashboard' (dibalas staf dari web); null = biasa. */
     kind: text('kind'),
+    /** Pesan yang dikutip pelanggan saat membalas (fitur "balas" WhatsApp); null = tidak mengutip. */
+    quote: jsonb('quote').$type<import('../transport/types').Quote | null>(),
   },
   (t) => [index('messages_phone').on(t.project, t.phone, t.id), unique('messages_wa_id').on(t.project, t.wa_id)]
 );

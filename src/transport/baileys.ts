@@ -35,7 +35,8 @@ import qrcode from 'qrcode-terminal';
 import { cfg } from '../config';
 import { recordError } from '../errlog';
 import { antibanPaused, guardedSend, onDisconnect, onOpen, setAntiBan } from './sendguard';
-import type { MediaKind, SendOptions, Transport, TransportHandlers, TransportState } from './types';
+import type { SendOptions, Transport, TransportHandlers, TransportState } from './types';
+import { mediaOf, quoteOf, textOf, unwrap } from './wamessage';
 
 /** Jarak minimum antar kiriman. Jeda "manusiawi" yang panjang diatur di app.ts. */
 const MIN_GAP_MS = 1200;
@@ -81,47 +82,6 @@ const unread = new Map<string, NonNullable<Parameters<WASocket['readMessages']>[
 function jidToE164(jid: string | null | undefined): string | null {
   const m = (jid ?? '').match(/^(\d{7,15})(?::\d+)?@s\.whatsapp\.net$/);
   return m?.[1] ? `+${m[1]}` : null;
-}
-
-function textOf(msg: Record<string, unknown> | null | undefined): string | null {
-  if (!msg) return null;
-  const m = msg as {
-    conversation?: string;
-    extendedTextMessage?: { text?: string };
-    ephemeralMessage?: { message?: Record<string, unknown> };
-    viewOnceMessage?: { message?: Record<string, unknown> };
-  };
-  if (m.conversation) return m.conversation;
-  if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
-  for (const inner of unwrap(msg)) return textOf(inner);
-  // Keterangan yang diketik bersama foto / video / dokumen.
-  const cap = msg as Record<string, { caption?: string } | undefined>;
-  return cap.imageMessage?.caption || cap.videoMessage?.caption || cap.documentMessage?.caption || null;
-}
-
-/** Pesan yang dibungkus (pesan sementara, sekali lihat, dokumen berketerangan). */
-function unwrap(msg: Record<string, unknown>): Record<string, unknown>[] {
-  const out: Record<string, unknown>[] = [];
-  for (const k of ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'documentWithCaptionMessage']) {
-    const inner = (msg[k] as { message?: Record<string, unknown> } | undefined)?.message;
-    if (inner) out.push(inner);
-  }
-  return out;
-}
-
-const MEDIA: Record<string, MediaKind> = {
-  imageMessage: 'foto', videoMessage: 'video', ptvMessage: 'video', audioMessage: 'suara', documentMessage: 'dokumen',
-  stickerMessage: 'stiker', locationMessage: 'lokasi', liveLocationMessage: 'lokasi', contactMessage: 'kontak', contactsArrayMessage: 'kontak',
-};
-
-function mediaOf(msg: Record<string, unknown> | null | undefined): MediaKind | undefined {
-  if (!msg) return undefined;
-  for (const k of Object.keys(msg)) if (MEDIA[k]) return MEDIA[k];
-  for (const inner of unwrap(msg)) {
-    const found = mediaOf(inner);
-    if (found) return found;
-  }
-  return undefined;
 }
 
 /** Isi yang bukan percakapan: tidak dibalas, dan tidak dihitung "manusia membalas". */
@@ -412,10 +372,12 @@ async function connect(): Promise<void> {
       if (unread.size > 500) unread.delete(unread.keys().next().value as string);
       console.log(`[wa] diproses: ${phone} ${tag}`);
       const media = mediaOf(m.message as Record<string, unknown> | null);
+      const quote = quoteOf(m.message as Record<string, unknown> | null, [sock?.user?.id, sock?.user?.lid], sentIds);
       handlers.onInbound({
         phone, address: jid, text, waId: m.key.id ?? null,
         ...(m.pushName ? { profileName: m.pushName } : {}),
         ...(media ? { media } : {}),
+        ...(quote ? { quote } : {}),
         ...(media === 'foto' || media === 'suara'
           ? {
               fetchMedia: async () => {

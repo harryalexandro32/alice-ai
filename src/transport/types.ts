@@ -6,6 +6,16 @@
 /** Isi pesan yang bukan teks. Bot tidak bisa melihat/mendengarnya; staf yang bisa. */
 export type MediaKind = 'foto' | 'video' | 'suara' | 'dokumen' | 'stiker' | 'lokasi' | 'kontak';
 
+/** Pesan yang dikutip pelanggan saat membalas (fitur "balas" WhatsApp). */
+export interface Quote {
+  /** Teks, keterangan, atau nama berkas pesan yang dikutip; '' kalau tidak ada (mis. stiker). */
+  text: string;
+  /** Pengirim pesan yang dikutip: kita (bot atau admin), pelanggan sendiri, atau tidak diketahui. */
+  by: 'us' | 'customer' | null;
+  /** Pesan yang dikutip membawa foto, PDF, dsb. */
+  media?: MediaKind;
+}
+
 export interface TransportInbound {
   /** "+62…", atau "lid:…" kalau nomornya tidak diberikan. */
   phone: string;
@@ -17,6 +27,8 @@ export interface TransportInbound {
   profileName?: string;
   /** Diisi kalau pesannya membawa foto, suara, dan sejenisnya. */
   media?: MediaKind;
+  /** Pesan yang dikutip (pelanggan membalas pesan tertentu), kalau ada. */
+  quote?: Quote;
   /** Untuk foto dan pesan suara: unduh isinya (baru dipanggil kalau memang akan dipakai). */
   fetchMedia?: () => Promise<{ data: Buffer; mime: string } | null>;
   waId: string | null;
