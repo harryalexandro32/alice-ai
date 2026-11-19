@@ -833,6 +833,11 @@ const PNG = Buffer.from(
       await addMessage(C3, 'out', REPLY, t0 + 30_000);
       await addMessage(C3, 'out', '[pdf:d0000000c] Ceiling Fan A', t0 + 31_000);
       assert.equal(await addHandoff(C3, Q, t0 + 2000), true);
+      // Halaman chat: pesan yang mengutip membawa kutipannya.
+      await addMessage(C3, 'in', 'yang ini ready?', t0 + 40_000, null, undefined, { text: 'Ceiling Fan A', by: 'us', media: 'dokumen' });
+      const thread = (await call(`/api/gfan/leads/${encodeURIComponent(C3)}`)).body.messages;
+      assert.deepEqual(thread.at(-1).quote, { text: 'Ceiling Fan A', by: 'us', media: 'dokumen' });
+      assert.equal(thread.at(-2).quote, null);
       const g = (await call('/api/gfan/handoffs?status=open')).body.groups.find((x: { phone: string }) => x.phone === C3);
       assert.deepEqual(g.context, { before: ASK, reply: REPLY }, 'pesan bot sebelumnya dan balasan bot, tanpa tanda lampiran');
 

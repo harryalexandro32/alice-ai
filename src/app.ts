@@ -98,6 +98,8 @@ interface Pending {
   texts: string[];
   /** Foto/suara terakhir di rentetan pesan ini (teksnya sudah masuk `texts`). */
   media?: TransportInbound;
+  /** Kutipan terakhir di rentetan pesan ini (pelanggan membalas pesan tertentu). */
+  quote?: TransportInbound['quote'];
   timer: NodeJS.Timeout;
 }
 
@@ -126,6 +128,7 @@ function flush(phone: string): void {
       waId: p.first.waId,
       ...(p.first.profileName ? { profileName: p.first.profileName } : {}),
       ...(p.media?.media ? { media: p.media.media, fetchMedia: p.media.fetchMedia } : {}),
+      ...(p.quote ? { quote: p.quote } : {}),
     });
     // Pesan ini mungkin baru ditunda jam tenang: timernya disesuaikan.
     void scheduleDeferred().catch((e) => console.error('[jam tenang] jadwal gagal:', e instanceof Error ? e.message : e));
@@ -266,6 +269,7 @@ export async function startApp(raw: Transport): Promise<void> {
         if (m.text) p.texts.push(m.text);
         // Stiker tidak menimpa foto yang sudah menunggu di rentetan yang sama.
         if (m.media && (m.media !== 'stiker' || !p.media)) p.media = m;
+        if (m.quote) p.quote = m.quote;
         p.timer = setTimeout(() => flush(m.phone), cfg.debounceMs);
         return;
       }
@@ -273,6 +277,7 @@ export async function startApp(raw: Transport): Promise<void> {
         first: m,
         texts: m.text ? [m.text] : [],
         ...(m.media ? { media: m } : {}),
+        ...(m.quote ? { quote: m.quote } : {}),
         timer: setTimeout(() => flush(m.phone), cfg.debounceMs),
       });
     },

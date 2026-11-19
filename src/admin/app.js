@@ -1947,7 +1947,12 @@ function bubble(m, pending) {
     else if (p.failed) { meta.push(T('gagal terkirim', 'not sent')); bad = true; }
     else meta.push(p.attempts ? T('mencoba lagi…', 'retrying…') : T('menunggu terkirim…', 'waiting to send…'));
   }
-  return el('div', { className: 'bubble ' + m.dir, textContent: m.text }, el('span', { className: 'meta' + (bad ? ' bad' : ''), textContent: meta.join(' · ') }));
+  // Pelanggan membalas pesan tertentu (fitur "balas" WhatsApp): kutipannya di atas, seperti di WhatsApp.
+  const q = m.quote;
+  const quote = q ? el('div', { className: 'quote' + (q.by === 'us' ? ' us' : '') },
+    el('b', { textContent: q.by === 'us' ? (profile.brand || T('Kita', 'Us')) : q.by === 'customer' ? T('Pelanggan', 'Customer') : T('Pesan sebelumnya', 'Earlier message') }),
+    el('span', { textContent: (q.media ? '[' + q.media + '] ' : '') + (q.text || '') })) : null;
+  return el('div', { className: 'bubble ' + m.dir }, quote, m.text, el('span', { className: 'meta' + (bad ? ' bad' : ''), textContent: meta.join(' · ') }));
 }
 
 function renderConv() {

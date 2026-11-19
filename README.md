@@ -98,6 +98,11 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   marketplace itu). Kalau pelanggan ingin membeli produk yang punya tautan, LLM hanya memilih
   produknya (`buy`); kode mengirim tautannya sebagai pesan sendiri dan mencatatnya di riwayat
   sebagai `[link:<produk>]`. Tautannya tidak masuk prompt.
+- **Pesan yang dikutip**: kalau pelanggan membalas pesan tertentu (fitur "balas" WhatsApp), kutipannya
+  ikut ke LLM sebagai catatan ("pesan terbaru mengutip pesan kita: …"), tersimpan bersama pesannya
+  (kolom `messages.quote`), dan tampil di atas pesannya di halaman chat. Untuk foto atau PDF dari bot,
+  kutipannya adalah keterangannya (nama produk atau berkas). Hanya jalur `baileys`; jalur `cloud`
+  belum membaca kutipan.
 - **Balas dari web**: balasan masuk antrean (`outbox`, jenis `reply`) dan dikirim proses bot dalam
   ±3 detik selama WhatsApp tersambung. Bot langsung mundur di chat itu, sama seperti admin yang
   membalas dari HP. Balasan yang terus gagal tampil "gagal terkirim" dan jadi warning

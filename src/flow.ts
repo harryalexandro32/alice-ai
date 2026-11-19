@@ -28,7 +28,7 @@ import {
 } from './store';
 import { inQuiet, quietEndAfter } from './quiet';
 import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK } from './texts';
-import type { MediaKind } from './transport/types';
+import type { MediaKind, Quote } from './transport/types';
 
 /** `image` = path file foto atau PDF; kalau ada, `text` menjadi keterangannya. */
 export type Sender = (to: { phone: string; address: string }, text: string, image?: string, fileName?: string) => Promise<void>;
@@ -64,6 +64,22 @@ export interface Inbound {
   media?: MediaKind;
   /** Untuk foto: unduh isinya supaya bisa diamati LLM. */
   fetchMedia?: () => Promise<{ data: Buffer; mime: string } | null>;
+  /** Pesan yang dikutip pelanggan saat membalas (fitur "balas" WhatsApp), kalau ada. */
+  quote?: Quote;
+}
+
+/**
+ * Catatan untuk LLM: pesan terbaru mengutip pesan tertentu. Tanpa ini, "yang
+ * ini berapa?" sambil mengutip rekomendasi lama hanya bisa ditebak dari riwayat.
+ */
+export function quoteNote(q: Quote): string {
+  const who = q.by === 'us' ? 'pesan KITA' : q.by === 'customer' ? 'pesannya sendiri sebelumnya' : 'pesan sebelumnya';
+  const body = q.text ? `"${q.text.replace(/\s+/g, ' ').slice(0, 600)}"` : '(tanpa teks)';
+  return (
+    `Pesan terbaru pelanggan adalah BALASAN yang mengutip ${who}: ${q.media ? `${q.media} ` : ''}${body}. ` +
+    'Pahami "ini", "itu", "yang ini", dan pertanyaan pendek sejenis sebagai tentang pesan yang dikutip itu.' +
+    (q.media && q.by === 'us' ? ' Keterangan foto atau PDF dari kita adalah nama produk atau berkasnya.' : '')
+  );
 }
 
 export function missingFields(c: Pick<Contact, 'lead'>): LeadField[] {
@@ -306,7 +322,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
   const stored = m.media ? `[${m.media}]${caption ? ` ${caption}` : ''}` : caption || '[bukan teks]';
 
   let c = existing ?? (await createContact(m.phone, m.address, at));
-  if (!(await addMessage(m.phone, 'in', stored, at, m.waId))) {
+  if (!(await addMessage(m.phone, 'in', stored, at, m.waId, undefined, m.quote ?? null))) {
     console.log(`[alur] ${m.phone}: pesan ganda, dilewat`);
     return;
   }
@@ -370,6 +386,7 @@ export async function handleInbound(m: Inbound): Promise<void> {
       phone: m.phone, address: m.address, waId: m.waId ?? null,
       text: [...night.texts, caption].filter(Boolean).join('\n') || null,
       ...(keepLive ? { media: m.media, fetchMedia: m.fetchMedia } : night.media ? { media: night.media } : {}),
+      ...(m.quote ?? night.quote ? { quote: (m.quote ?? night.quote) as Quote } : {}),
     };
     return respond(c, merged, [...night.stored, stored].join('\n'), await neverAnswered(c), at, night.count + 1);
   }
@@ -390,20 +407,24 @@ function parseStored(text: string): { media?: MediaKind; text: string | null } {
  * Digabung seperti pesan beruntun di app.ts: teksnya disambung per baris, dan
  * lampiran terakhir yang dipakai (stiker tidak menimpa lampiran lain).
  */
-async function unansweredBatch(c: Contact, skipLast = 0): Promise<{ texts: string[]; stored: string[]; media?: MediaKind; count: number }> {
+async function unansweredBatch(
+  c: Contact, skipLast = 0
+): Promise<{ texts: string[]; stored: string[]; media?: MediaKind; quote?: Quote; count: number }> {
   const recent = await recentMessages(c.phone, 40);
   let i = recent.length;
   while (i > 0 && recent[i - 1]?.dir === 'in') i--;
   const since = (c.deferred_until ?? now()) - 24 * HOUR;
   const rows = recent.slice(i, recent.length - skipLast).filter((r) => r.at >= since);
   let media: MediaKind | undefined;
+  let quote: Quote | undefined;
   const texts: string[] = [];
   for (const r of rows) {
     const p = parseStored(r.text);
     if (p.text) texts.push(p.text);
     if (p.media && (p.media !== 'stiker' || !media)) media = p.media;
+    if (r.quote) quote = r.quote;
   }
-  return { texts, stored: rows.map((r) => r.text), ...(media ? { media } : {}), count: rows.length };
+  return { texts, stored: rows.map((r) => r.text), ...(media ? { media } : {}), ...(quote ? { quote } : {}), count: rows.length };
 }
 
 /** Bot belum pernah membalas kontak ini (dan ia bukan pelanggan lama yang diimpor): perlu disapa dulu. */
@@ -464,7 +485,10 @@ export async function runDeferredTurn(phone: string): Promise<void> {
   }
   if (!night.count) return;
   console.log(`[alur] ${phone}: jam tenang selesai, ${night.count} pesan dijawab sekarang`);
-  const merged: Inbound = { phone, address: c.address, text: night.texts.join('\n') || null, ...(night.media ? { media: night.media } : {}) };
+  const merged: Inbound = {
+    phone, address: c.address, text: night.texts.join('\n') || null,
+    ...(night.media ? { media: night.media } : {}), ...(night.quote ? { quote: night.quote } : {}),
+  };
   await respond(c, merged, night.stored.join('\n'), await neverAnswered(c), at, night.count);
 }
 
@@ -541,6 +565,7 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     const notes = [
       image ? 'Pelanggan melampirkan foto, ikut di pesan ini. Amati fotonya (lihat FOTO DARI PELANGGAN) lalu jawab.' : null,
       heard ? 'Pesan terbaru adalah PESAN SUARA yang ditranskripsi otomatis; bisa ada salah dengar. Kalau ada bagian yang tidak jelas, tanyakan, jangan ditebak.' : null,
+      m.quote ? quoteNote(m.quote) : null,
       media && !image && !heard
         ? `Pelanggan melampirkan ${media} yang TIDAK bisa kamu lihat. Jangan mengomentari isinya; sampaikan bahwa tim kami yang akan mengeceknya, lalu jawab teksnya.`
         : null,

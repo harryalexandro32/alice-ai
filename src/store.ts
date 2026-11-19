@@ -20,6 +20,7 @@ import {
   type PairingRequest, type Project, type ProjectStatus,
 } from './db/schema';
 import { currentProject } from './project';
+import type { Quote } from './transport/types';
 
 export type { PairingRequest, Project, ProjectStatus };
 
@@ -125,11 +126,11 @@ export type MessageKind = 'followup' | 'dashboard';
 
 /** Id pesan yang dicatat, atau null kalau id WhatsApp-nya sudah pernah dicatat (kiriman ganda). */
 export async function addMessage(
-  phone: string, dir: Dir, text: string, at: number, waId?: string | null, kind?: MessageKind
+  phone: string, dir: Dir, text: string, at: number, waId?: string | null, kind?: MessageKind, quote?: Quote | null
 ): Promise<number | null> {
   const rows = await db()
     .insert(messages)
-    .values({ project: pid(), phone, dir, text, at, wa_id: waId ?? null, kind: kind ?? null })
+    .values({ project: pid(), phone, dir, text, at, wa_id: waId ?? null, kind: kind ?? null, quote: quote ?? null })
     .onConflictDoNothing()
     .returning({ id: messages.id });
   return rows[0]?.id ?? null;
@@ -141,12 +142,14 @@ export interface MessageRow {
   text: string;
   at: number;
   kind: string | null;
+  /** Pesan yang dikutip (pelanggan membalas pesan tertentu), atau null. */
+  quote: Quote | null;
 }
 
 /** Riwayat satu percakapan, terlama dulu; `before` = hanya pesan dengan id lebih kecil (halaman sebelumnya). */
 export async function messagePage(phone: string, limit: number, before?: number): Promise<MessageRow[]> {
   const rows = await db()
-    .select({ id: messages.id, dir: messages.dir, text: messages.text, at: messages.at, kind: messages.kind })
+    .select({ id: messages.id, dir: messages.dir, text: messages.text, at: messages.at, kind: messages.kind, quote: messages.quote })
     .from(messages)
     .where(and(eq(messages.project, pid()), eq(messages.phone, phone), ...(before ? [lt(messages.id, before)] : [])))
     .orderBy(desc(messages.id))
@@ -154,9 +157,9 @@ export async function messagePage(phone: string, limit: number, before?: number)
   return rows.reverse().map((r) => ({ ...r, dir: r.dir as Dir }));
 }
 
-export async function recentMessages(phone: string, n: number): Promise<{ dir: Dir; text: string; at: number }[]> {
+export async function recentMessages(phone: string, n: number): Promise<{ dir: Dir; text: string; at: number; quote: Quote | null }[]> {
   const rows = await db()
-    .select({ dir: messages.dir, text: messages.text, at: messages.at })
+    .select({ dir: messages.dir, text: messages.text, at: messages.at, quote: messages.quote })
     .from(messages)
     .where(and(eq(messages.project, pid()), eq(messages.phone, phone)))
     .orderBy(desc(messages.id))
