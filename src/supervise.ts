@@ -4,7 +4,7 @@
  *   - menyimpan SEMUA keluarannya (termasuk log Baileys) ke logs/bot-TANGGAL.log,
  *     jadi jejaknya tidak hilang saat jendela terminal ditutup;
  *   - menyalakannya lagi kalau ia mati, dengan jeda yang makin panjang;
- *   - mengabari pemilik lewat email (kalau diatur) saat bot mati.
+ *   - mencatat warning "bot berhenti" di dashboard saat bot mati.
  *
  * Bot tanpa pengawas: `npm run bot`.
  */
