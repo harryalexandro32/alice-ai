@@ -296,14 +296,11 @@ $('fuMode').addEventListener('keydown', (e) => {
 });
 
 // ---------- penerima notifikasi & rute ----------
+// Hanya kabar yang bisa lewat WhatsApp. Kabar soal WhatsApp-nya sendiri dan bot berhenti hanya tampil di dashboard.
 const NOTIFY = [
   ['lead', () => T('Lead baru (data pelanggan lengkap)', 'New lead (customer data complete)'), 'staff'],
   ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, minta orang, kirim suara/dokumen)', 'Customer needs staff (bot cannot answer, asks for a person, sends voice/document)'), 'staff'],
-  ['wa-putus', () => T('WhatsApp terputus', 'WhatsApp disconnected'), 'owner'],
-  ['kiriman-dijeda', () => T('Kiriman bot dijeda pengaman', 'Sending paused by the safeguard'), 'owner'],
-  ['kiriman-gagal', () => T('Balasan dari dashboard gagal terkirim', 'Reply from the dashboard could not be sent'), 'owner'],
   ['llm', () => T('LLM bermasalah / jatah harian habis', 'LLM failing / daily limit reached'), 'owner'],
-  ['bot-mati', () => T('Bot berhenti', 'Bot stopped'), 'owner'],
 ];
 function renderRecipients() {
   const list = profile.recipients;
@@ -313,11 +310,11 @@ function renderRecipients() {
     role.value = r.role;
     role.addEventListener('change', () => { r.role = role.value; touch(); });
     const cell = (k, ph) => el('td', { className: k === 'name' ? 'first' : '' }, cellInput(r[k], (v) => { r[k] = v; touch(); }, ph));
-    return el('tr', {}, cell('name', T('mis. Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')), cell('email', 'nama@contoh.com'),
+    return el('tr', {}, cell('name', T('mis. Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')),
       el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 5, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima. Selama kosong, bot memakai nomor sales proyek (kartu Proyek di Pengaturan > Umum).', 'No recipients yet. While empty, the bot uses the project\'s sales number (Project card in Settings > General).') })));
-  $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp', 'Email']), body);
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 4, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima, jadi tidak ada yang dikabari lewat WhatsApp. Tambahkan minimal satu orang.', 'No recipients yet, so nobody is notified on WhatsApp. Add at least one person.') })));
+  $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp']), body);
 
   const opts = [['owner', T('Pemilik', 'Owner')], ['staff', T('Staf', 'Staff')], ['both', T('Pemilik dan staf', 'Owner and staff')], ['none', T('Tidak dikirim', 'Not sent')]];
   $('routes').replaceChildren(el('thead', {}, el('tr', {}, el('th', { textContent: T('Jenis kabar', 'Kind of news') }), el('th', { textContent: T('Dikirim ke', 'Sent to') }))),
@@ -327,17 +324,10 @@ function renderRecipients() {
       sel.addEventListener('change', () => { profile.notifyRoutes = { ...(profile.notifyRoutes || {}), [kind]: sel.value }; setDirty(true, 'notifyRoutes'); });
       return el('tr', {}, el('td', { textContent: label() }), el('td', {}, sel));
     })));
-
-  const ch = state && state.status && state.status.channels;
-  const yes = T('siap', 'ready');
-  const no = T('belum diatur di .env bot', 'not set in the bot\'s .env');
-  $('channels').textContent = !ch
-    ? T('Bot belum melapor, jadi belum diketahui jalur mana yang siap.', 'The bot has not reported yet, so it is unknown which channels are ready.')
-    : 'WhatsApp: ' + yes + ' · Email: ' + (ch.email ? yes : no);
 }
 $('addRecipient').addEventListener('click', () => {
   if (profile.recipients.length >= 20) return toast(T('Maksimal 20 orang.', '20 people max.'), true);
-  profile.recipients.push({ name: '', role: 'staff', phone: '', email: '' });
+  profile.recipients.push({ name: '', role: 'staff', phone: '' });
   setDirty(true, 'recipients');
   renderRecipients();
 });
@@ -1047,7 +1037,7 @@ $('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.
 const QS_KEYS = {
   beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt pelajaran ajari',
   produk: 'katalog harga stok marketplace tokopedia shopee', brosur: 'pdf katalog', pengaturan: 'proyek follow-up',
-  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'email penerima sales', lanjutan: 'biaya llm error warning mode uji',
+  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'penerima sales wa kabar', lanjutan: 'biaya llm error warning mode uji',
 };
 /** Huruf kecil tanpa aksen, untuk dicocokkan. */
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -2712,8 +2702,6 @@ function renderProject() {
   if (!projectDirty) {
     $('projName').value = p.name || '';
     $('projTransport').value = p.transport || 'baileys';
-    $('projWa').value = p.wa_number || '';
-    $('projSales').value = p.sales_number || '';
     $('projEnabled').checked = Boolean(p.enabled);
   }
   $('projPaused').checked = Boolean(p.paused);
@@ -2733,7 +2721,7 @@ async function putProject(patch, message) {
 }
 
 // Isian kartu Proyek: perubahan memunculkan bilah simpan di bawah, seperti isian lain.
-for (const id of ['projName', 'projTransport', 'projWa', 'projSales', 'projEnabled']) {
+for (const id of ['projName', 'projTransport', 'projEnabled']) {
   const input = $(id);
   input.addEventListener(input.tagName === 'INPUT' && input.type === 'text' ? 'input' : 'change', () => setDirty(true, 'project'));
 }
@@ -2773,7 +2761,7 @@ $('newProjectForm').addEventListener('submit', async (e) => {
   $('npErr').textContent = '';
   try {
     const r = await api('projects', { method: 'POST', body: JSON.stringify({
-      id: $('npId').value.trim().toLowerCase(), name: $('npName').value, template: $('npTemplate').value, wa_number: $('npWa').value, sales_number: $('npSales').value,
+      id: $('npId').value.trim().toLowerCase(), name: $('npName').value, template: $('npTemplate').value,
     }) });
     $('newProject').classList.remove('on');
     $('newProjectForm').reset();
@@ -3207,7 +3195,7 @@ async function save(quiet = false) {
     let moved = false;
     if (projectDirty) {
       moved = $('projTransport').value !== (state.project && state.project.transport);
-      await putProject({ name: $('projName').value, transport: $('projTransport').value, wa_number: $('projWa').value, sales_number: $('projSales').value, enabled: $('projEnabled').checked });
+      await putProject({ name: $('projName').value, transport: $('projTransport').value, enabled: $('projEnabled').checked });
       // Baris proyek sudah tersimpan: kalau profil gagal, yang dikirim ulang hanya profil.
       projectDirty = false;
     }

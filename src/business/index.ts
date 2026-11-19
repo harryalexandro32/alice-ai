@@ -14,7 +14,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { cfg, normPhone, projectCfg, settingsCfg, TUNABLE, type Settings, type TunableKey } from '../config';
+import { cfg, normPhone, parseSalesNumber, projectCfg, settingsCfg, TUNABLE, type Settings, type TunableKey } from '../config';
 import { currentProject, defaultProject, maybeProject, setDefaultProject, type ProjectCtx } from '../project';
 import { getProfile, getProject, projectStamp, saveProfile, type Project } from '../store';
 import { isPdf, linksOf, renderCatalog, renderProducts, validateCatalog, validateProducts } from './catalog';
@@ -98,11 +98,13 @@ function apply(ctx: ProjectCtx, overrides: Partial<Editable>): void {
   b.lessons = Array.isArray(b.lessons) ? b.lessons : [];
   // Produk yang disimpan sebelum ada tautan marketplace: tanpa tautan.
   b.products = (b.products ?? []).map((p) => ({ ...p, links: linksOf(p.links) }));
-  // Profil lama bisa menyimpan penerima dengan jalur yang sudah dihapus: hanya
-  // WhatsApp dan email yang dipakai, dan penerima tanpa keduanya dibuang diam-diam.
-  b.recipients = (b.recipients ?? [])
-    .filter((r) => r && (r.phone || r.email))
-    .map((r) => ({ name: r.name, role: r.role, phone: r.phone, email: r.email }));
+  // Profil lama bisa menyimpan penerima dengan jalur yang sudah dihapus (email,
+  // telegram): hanya WhatsApp yang dipakai, dan penerima tanpa nomor dibuang diam-diam.
+  b.recipients = (b.recipients ?? []).filter((r) => r && r.phone).map((r) => ({ name: r.name, role: r.role, phone: r.phone }));
+  // Nomor sales dari kartu Proyek yang lama: selama daftar penerima kosong, ia
+  // tampil sebagai satu penerima, dan tersimpan begitu daftar itu disimpan.
+  const sales = parseSalesNumber(ctx.row.sales_number);
+  if (!b.recipients.length && sales) b.recipients = [{ name: 'Sales', role: 'staff', phone: sales }];
   ctx.biz = b;
   syncPdfTexts(ctx);
   // Pengaturan dari dashboard menimpa bawaan .env untuk proyek ini.
@@ -295,20 +297,18 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('recipients' in input) {
     if (!Array.isArray(input.recipients) || input.recipients.length > 20) throw new Error('Penerima notifikasi: maksimal 20 baris');
     const rows = input.recipients
-      // Penerima dari profil lama yang jalurnya hanya jalur yang sudah dihapus: dibuang tanpa pesan.
-      .filter((raw: Record<string, unknown>) => !(raw?.telegram && !String(raw?.phone ?? '').trim() && !String(raw?.email ?? '').trim()))
+      // Penerima dari profil lama tanpa nomor (jalurnya email atau telegram, yang sudah dihapus): dibuang tanpa pesan.
+      .filter((raw: Record<string, unknown>) => !((raw?.telegram || raw?.email) && !String(raw?.phone ?? '').trim()))
       .map((raw: Record<string, unknown>, i: number): Recipient => {
         const name = text(raw?.name ?? '', 40, `Nama penerima baris ${i + 1}`);
         const who = name || `baris ${i + 1}`;
         const phoneRaw = String(raw?.phone ?? '').trim();
         const phone = !phoneRaw ? '' : phoneRaw.toLowerCase() === 'self' ? 'self' : normPhone(phoneRaw);
         if (phone === null) throw new Error(`Penerima ${who}: nomor WhatsApp "${phoneRaw}" tidak sah`);
-        const email = String(raw?.email ?? '').trim();
-        if (email && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email)) throw new Error(`Penerima ${who}: alamat email tidak sah`);
-        return { name, role: raw?.role === 'owner' ? 'owner' : 'staff', phone, email: email.slice(0, 120) };
+        return { name, role: raw?.role === 'owner' ? 'owner' : 'staff', phone };
       })
-      .filter((r) => r.name || r.phone || r.email);
-    for (const r of rows) if (!r.phone && !r.email) throw new Error(`Penerima ${r.name}: isi minimal satu jalur (WhatsApp atau email)`);
+      .filter((r) => r.name || r.phone);
+    for (const r of rows) if (!r.phone) throw new Error(`Penerima ${r.name}: isi nomor WhatsApp-nya`);
     set('recipients', rows);
   }
   if ('notifyRoutes' in input) {

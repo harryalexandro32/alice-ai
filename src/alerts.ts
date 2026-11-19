@@ -8,16 +8,16 @@
  *     dashboard yang gagal terkirim, LLM bermasalah.
  *
  * Tiap warning dicatat (tampil di dashboard: Beranda dan Pengaturan > Lanjutan)
- * dan dikirim ke penerima yang diatur di dashboard (lihat notify.ts): lewat
- * WhatsApp selama WhatsApp-nya masih jalan, plus email: jalur yang tetap
- * sampai saat WhatsApp-nya sendiri yang bermasalah.
+ * dan dikirim lewat WhatsApp ke penerima yang diatur di dashboard (lihat
+ * notify.ts), kecuali warning soal WhatsApp-nya sendiri: itu hanya tampil
+ * di dashboard.
  */
 
 import { biz } from './business';
 import type { NotifyKind } from './business/types';
 import { now } from './clock';
 import { HOUR, MINUTE } from './config';
-import { deliverExternal, waTargets } from './notify';
+import { waTargets } from './notify';
 import { addAlert, lastAlertAt } from './store';
 
 export type AlertKind = Exclude<NotifyKind, 'lead'>;
@@ -77,7 +77,6 @@ export async function raiseAlert(kind: AlertKind, text: string, opts: { key?: st
   signalDashboard();
   const title = `⚠️ ${ALERT_TITLES[kind]} | ${biz.brand}`;
   console.error(`[warning] ${ALERT_TITLES[kind]}: ${text.replace(/\n/g, ' | ')}`);
-  void deliverExternal(kind, title, text);
   if (opts.whatsapp !== false && viaWhatsApp) {
     for (const phone of waTargets(kind)) {
       void viaWhatsApp(phone, `${title}\n${text}`).catch((e) => console.error(`[warning] WA ke ${phone} gagal: ${e instanceof Error ? e.message : e}`));

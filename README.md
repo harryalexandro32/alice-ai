@@ -12,7 +12,7 @@ Hal yang tidak diketahui bot (mis. harga) dioper ke manusia. Kalau pemilik memba
 aplikasi WhatsApp, bot diam untuk kontak itu selama `HUMAN_PAUSE_HOURS`.
 
 **Proyek.** Satu proyek = satu bisnis = satu nomor WhatsApp, dengan lead, profil, berkas,
-pengaturan, dan nomor sales sendiri. Semua proyek ada di satu database PostgreSQL (`DATABASE_URL`);
+pengaturan, dan penerima notifikasi sendiri. Semua proyek ada di satu database PostgreSQL (`DATABASE_URL`);
 tiap bot melayani satu proyek (`PROJECT=gfan npm run bot`), dan satu dashboard melayani semuanya.
 
 ## Coba tanpa WhatsApp
@@ -72,7 +72,8 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
 `conversations`, `knowledge`, `settings`, …).
 
 - **Pemilih proyek** di bilah atas: pindah proyek (tetap di menu yang sama), atau
-  **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`, nomor WA bot, nomor sales).
+  **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`). Nomor bot diatur di Pengaturan >
+  WhatsApp saat menautkan; penerima kabar di Pengaturan > Notifikasi.
 - **Cari** (QuickSwitch) di bilah atas, atau Ctrl+K / ⌘K / `/`: satu kotak cari untuk halaman dan
   bagiannya, percakapan (nama, nomor 08… atau +62…, isian lead), produk, proyek lain, dan aksi
   (tema, bahasa, Coba chat). ↑↓ memilih, Enter membuka, Esc menutup.

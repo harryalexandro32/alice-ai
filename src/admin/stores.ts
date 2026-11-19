@@ -51,7 +51,7 @@ export interface BotStatus {
   /** Pengaturan yang sedang berlaku di bot (.env + yang diubah di dashboard). */
   effective?: Record<string, number | boolean | string[]>;
   /** Jalur notifikasi yang kredensialnya sudah diisi di .env bot. */
-  channels?: { email: boolean; stt?: boolean };
+  channels?: { stt?: boolean };
   /** Keadaan WhatsApp menurut laporan terakhir bot (connected, qr, …). */
   wa?: string;
   /** Kapan bot terakhir melapor (ms). Null = bot belum pernah melapor. */

@@ -77,10 +77,6 @@
       <label class="f"><span data-en="Name">Nama</span><input type="text" id="npName" required placeholder="mis. Toko Budi" data-en-ph="e.g. Toko Budi"></label>
     </div>
     <label class="f"><span data-en="Starting profile">Bibit profil</span><select id="npTemplate"></select><small data-en="“generic” starts empty; “gfan” copies the GFAN product data.">“generic” mulai kosong; “gfan” menyalin data produk GFAN.</small></label>
-    <div class="row">
-      <label class="f"><span data-en="Bot WhatsApp number (for the pairing code)">Nomor WA bot (untuk kode pairing)</span><input type="text" id="npWa" placeholder="0812…"><small data-en="Only used when requesting a pairing code. Once linked, the connected number is shown on the WhatsApp card.">Hanya dipakai saat meminta kode pairing. Setelah tertaut, nomor yang tersambung ditampilkan di kartu WhatsApp.</small></label>
-      <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="npSales" placeholder="0812… / self"></label>
-    </div>
     <p class="err" id="npErr"></p>
     <div class="actions"><button class="btn ghost" type="button" id="npCancel" data-en="Cancel">Batal</button><button class="btn" data-en="Create">Buat</button></div>
   </form>
@@ -353,10 +349,6 @@
               <label class="f"><span data-en="Project name">Nama proyek</span><input type="text" id="projName"></label>
               <label class="f"><span data-en="WhatsApp channel">Jalur WhatsApp</span><select id="projTransport"><option value="baileys">Baileys (QR / kode pairing)</option><option value="cloud">Cloud API (Meta)</option></select></label>
             </div>
-            <div class="row">
-              <label class="f"><span data-en="Bot WhatsApp number (for the pairing code)">Nomor WA bot (untuk kode pairing)</span><input type="text" id="projWa" placeholder="0812…"><small data-en="Only used when requesting a pairing code. Once linked, the connected number is shown on the WhatsApp card.">Hanya dipakai saat meminta kode pairing. Setelah tertaut, nomor yang tersambung ditampilkan di kartu WhatsApp.</small></label>
-              <label class="f"><span data-en="Sales number">Nomor sales</span><input type="text" id="projSales" placeholder="0812… / self"><small data-en="Gets lead summaries on WhatsApp while the recipient list under Notifications is empty. “self” = the bot's own number.">Menerima ringkasan lead lewat WhatsApp selama daftar penerima di Notifikasi masih kosong. “self” = nomor bot sendiri.</small></label>
-            </div>
             <label class="check" style="margin:0"><input type="checkbox" id="projEnabled"><span class="ck"><span class="t" data-en="Project active">Proyek aktif</span><small class="help" data-en="Off: the server stops this project's bot.">Mati: server menghentikan bot proyek ini.</small></span></label>
           </div>
         </div>
@@ -440,42 +432,15 @@
       <!-- ================= Pengaturan: Notifikasi ================= -->
       <section data-page="notifikasi">
         <div class="card">
-          <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot contacts, the owner and staff, and which kind of news goes to whom. Fill in the channels you want for each person: WhatsApp number, email. Messages from these numbers are never treated as customers.">Siapa yang dikabari bot, yaitu pemilik dan staf, dan jenis kabar mana ke siapa. Isi jalur yang diinginkan untuk tiap orang: nomor WhatsApp, email. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
+          <div class="ch"><h2 data-en="Recipients">Penerima</h2><p class="help" data-en="Who the bot notifies on WhatsApp, the owner and staff, and which kind of news goes to whom. Enter a WhatsApp number (e.g. 0812…), or “self” for the bot's own number. Messages from these numbers are never treated as a customer.">Siapa yang dikabari bot lewat WhatsApp, pemilik dan staf, dan kabar mana ke siapa. Isi nomor WhatsApp (mis. 0812…), atau “self” untuk nomor bot sendiri. Pesan dari nomor-nomor ini tidak pernah dianggap pelanggan.</p></div>
           <div class="cb">
             <div class="scroll"><table class="grid" id="recipients"></table></div>
             <div class="tblfoot"><button class="btn ghost" id="addRecipient" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span data-en="Person">Orang</span></button></div>
             <div class="sub" data-en="Which news goes to whom">Kabar mana ke siapa</div>
             <div class="scroll"><table class="list" id="routes"></table></div>
+            <p class="help" style="margin-top:10px" data-en="News about WhatsApp itself (disconnected, sending paused, a dashboard reply that failed) and a stopped bot cannot travel over WhatsApp. It shows in the dashboard: on Home and in Settings › Advanced.">Kabar soal WhatsApp-nya sendiri (terputus, kiriman dijeda, balasan dashboard gagal) dan bot yang berhenti tidak bisa lewat WhatsApp. Kabar itu tampil di dashboard: di Beranda dan di Pengaturan › Lanjutan.</p>
           </div>
-          <div class="cardfoot" id="channels"></div>
         </div>
-        <details class="fold">
-          <summary><span data-en="How to set up WhatsApp and email">Cara menyiapkan WhatsApp dan email</span></summary>
-          <div class="fold-body guide" style="padding-bottom:12px">
-            <div data-only="id">
-              <b>WhatsApp</b>: tidak perlu disiapkan. Isi nomornya di tabel (mis. 0812…); tulis <code>self</code> untuk nomor bot sendiri. Kabar soal WhatsApp-nya sendiri (terputus, dijeda) tidak bisa lewat WhatsApp, jadi pemilik sebaiknya juga mengisi alamat email.
-              <br><br><b>Email (contoh Gmail)</b>
-              <ol>
-                <li>Pakai satu akun Gmail sebagai pengirim. Nyalakan <b>Verifikasi 2 Langkah</b> di akun itu (myaccount.google.com → Keamanan).</li>
-                <li>Buka <b>myaccount.google.com/apppasswords</b>, buat “sandi aplikasi”. Anda mendapat 16 huruf.</li>
-                <li>Di <code>.env</code> bot isi: <code>SMTP_HOST=smtp.gmail.com</code>, <code>SMTP_PORT=465</code>, <code>SMTP_USER=</code> alamat Gmail itu, <code>SMTP_PASS=</code> 16 huruf tadi (tanpa spasi). Nyalakan ulang bot.</li>
-                <li>Isi alamat email tiap penerima di tabel di atas. Penyedia lain (Outlook, hosting sendiri) sama saja: ganti host, port, pengguna, dan sandinya.</li>
-              </ol>
-              Baris di bawah tabel menunjukkan jalur mana yang sudah siap menurut bot.
-            </div>
-            <div data-only="en">
-              <b>WhatsApp</b>: nothing to set up. Enter the number in the table (e.g. 0812…); write <code>self</code> for the bot's own number. News about WhatsApp itself (disconnected, paused) cannot travel over WhatsApp, so the owner should also fill in an email address.
-              <br><br><b>Email (Gmail example)</b>
-              <ol>
-                <li>Use one Gmail account as the sender. Turn on <b>2-Step Verification</b> for it (myaccount.google.com → Security).</li>
-                <li>Open <b>myaccount.google.com/apppasswords</b> and create an “app password”. You get 16 letters.</li>
-                <li>In the bot's <code>.env</code> set: <code>SMTP_HOST=smtp.gmail.com</code>, <code>SMTP_PORT=465</code>, <code>SMTP_USER=</code> that Gmail address, <code>SMTP_PASS=</code> the 16 letters (no spaces). Restart the bot.</li>
-                <li>Enter each recipient's email address in the table above. Other providers (Outlook, your own hosting) work the same way: change host, port, user and password.</li>
-              </ol>
-              The line under the table shows which channels the bot reports as ready.
-            </div>
-          </div>
-        </details>
       </section>
 
       <!-- ================= Pengaturan: Lanjutan ================= -->

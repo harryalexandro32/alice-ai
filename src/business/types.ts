@@ -38,13 +38,12 @@ export type NotifyKind = 'lead' | 'butuh-staf' | 'wa-putus' | 'kiriman-dijeda' |
 /** Ke siapa sebuah jenis kabar dikirim. */
 export type Route = 'owner' | 'staff' | 'both' | 'none';
 
-/** Orang yang dikabari bot. Isi jalur yang ingin dipakai; yang kosong dilewati. */
+/** Orang yang dikabari bot lewat WhatsApp. */
 export interface Recipient {
   name: string;
   role: 'owner' | 'staff';
-  /** Nomor WhatsApp "+62…", "self" (nomor bot sendiri), atau ''. */
+  /** Nomor WhatsApp "+62…" atau "self" (nomor bot sendiri). */
   phone: string;
-  email: string;
 }
 
 /** Marketplace tempat produk bisa dibeli; urutannya = urutan kolom dan tautan yang dikirim. */

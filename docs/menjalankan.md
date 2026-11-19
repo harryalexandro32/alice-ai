@@ -7,7 +7,7 @@ Bot melayani satu proyek per proses. Di PC lokal, isi `PROJECT=gfan` (id proyekn
 
 - bot dinyalakan lagi kalau mati (5 detik, lalu makin lama, paling lama 5 menit);
 - semua keluarannya disimpan ke `logs/bot-TANGGAL.log` (14 hari terakhir);
-- pemilik dikabari lewat email kalau bot mati (lihat `docs/notifikasi.md`).
+- kalau bot mati, pengawas mencatatnya sebagai warning di dashboard (lihat `docs/notifikasi.md`).
 
 Yang tidak dilakukan pengawas: menyalakan dirinya sendiri setelah komputer menyala ulang. Itu
 bagian di bawah ini.

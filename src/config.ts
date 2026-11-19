@@ -3,8 +3,8 @@
  * "jam 8 pagi" berarti apa pun yang BOT_TZ katakan.
  *
  * .env hanya memuat yang dipakai bersama semua proyek (database, LLM,
- * dashboard, SMTP). Yang khas satu bot (jalur WhatsApp, nomor
- * sales, nomor bot, mode uji, follow-up) ada di database, per proyek.
+ * dashboard). Yang khas satu bot (jalur WhatsApp, nomor bot, penerima
+ * notifikasi, mode uji, follow-up) ada di database, per proyek.
  */
 
 import 'dotenv/config';
@@ -103,14 +103,7 @@ const base = {
   quietStartHour: 0,
   quietEndHour: 7,
 
-  // Warning untuk pemilik lewat email SMTP (opsional; lihat src/alerts.ts).
   // Rahasia: hanya di .env, tidak pernah di dashboard.
-  smtpHost: str('SMTP_HOST'),
-  smtpPort: num('SMTP_PORT', 465),
-  smtpUser: str('SMTP_USER'),
-  smtpPass: str('SMTP_PASS'),
-  smtpFrom: str('SMTP_FROM'),
-  alertEmailTo: str('ALERT_EMAIL_TO'),
 
   // Mode uji: kalau diisi, bot HANYA melayani nomor-nomor ini. Dipakai waktu
   // mencoba di nomor yang sudah punya pelanggan sungguhan. Diatur per proyek
@@ -130,8 +123,6 @@ const base = {
 
   // --- Per proyek (baris projects di database); nilai di sini hanya cadangan ---
   transport: 'baileys' as 'baileys' | 'cloud',
-  /** Nomor sales: "+62…", "self", atau null. */
-  salesNumber: null as string | null,
   /** Folder sesi WhatsApp proyek ini (Baileys): <authRoot>/<proyek>. */
   waAuthDir: './auth',
   /** Nomor bot; kalau diisi dan belum tertaut, bot meminta kode pairing. */
@@ -178,7 +169,7 @@ export interface Settings extends Partial<Record<TunableKey, number>> {
 
 /** Kunci `cfg` yang nilainya milik proyek yang sedang dilayani, bukan .env. */
 export const PROJECT_KEYS: ReadonlySet<string> = new Set([
-  'transport', 'salesNumber', 'waAuthDir', 'waPairingNumber', 'followupMaxHours',
+  'transport', 'waAuthDir', 'waPairingNumber', 'followupMaxHours',
   'llmVision', 'followupSmart', 'transcribeVoice', 'onlyNumbers', 'quietEnabled', 'waWarmup', ...Object.keys(TUNABLE),
 ]);
 
@@ -219,7 +210,6 @@ export function projectCfg(row: Pick<Project, 'id' | 'transport' | 'sales_number
   const transport = row.transport === 'cloud' ? 'cloud' : 'baileys';
   return {
     transport,
-    salesNumber: parseSalesNumber(row.sales_number),
     waAuthDir: join(base.authRoot, row.id),
     waPairingNumber: row.wa_number ?? '',
     followupMaxHours: has('FOLLOWUP_MAX_HOURS') ? envDefaults.followupMaxHours : transport === 'cloud' ? 24 : 0,
