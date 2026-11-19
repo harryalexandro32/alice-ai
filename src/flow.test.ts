@@ -1240,7 +1240,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(A))?.stage, 'payment');
   }],
 
-  ['tahap pesanan (payment, barang terkirim, order complete) hanya diubah staf', async () => {
+  ['tahap pesanan (pembayaran, barang terkirim, pesanan selesai) hanya diubah staf', async () => {
     const TOKO = 'https://www.tokopedia.com/kipashisap/axial-wall-fan-16-inch-industrial-ventilation-fan-gfaf-40ab';
     biz.products = [{ name: 'GFAF-40AB', description: '', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: TOKO, shopee: '' } }];
     await say('halo');

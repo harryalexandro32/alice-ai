@@ -80,7 +80,7 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
 - **Bilah keadaan** di atas tiap halaman: WhatsApp tersambung atau belum, **Bot dijeda**,
   **MODE UJI**, dan perkiraan biaya LLM bulan ini. Tiap tanda adalah tautan ke pengaturannya.
 - **Percakapan**: tiap pelanggan punya **tahap** (baru, menunggu tim, dihubungi, link terkirim,
-  payment, barang terkirim, order complete, batal) dan **catatan**. Arti tiap tahap tampil saat
+  pembayaran, barang terkirim, pesanan selesai, batal) dan **catatan**. Arti tiap tahap tampil saat
   saringannya disorot. Yang berubah sendiri:
   - "baru" -> "menunggu tim" saat bot menyerahkan chat ke tim (tidak bisa menjawab, pelanggan minta
     orang, atau kiriman yang hanya bisa dicek staf);
@@ -92,7 +92,7 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   Tanda **Perlu staf** (bukan tahap) muncul saat bot meminta bantuan staf, di tahap apa pun, dan
   hilang saat staf membalas (dari HP atau dari web) atau menandai **Sudah ditangani**.
 
-  Tahap tidak pernah turun sendiri. Payment, barang terkirim, order complete, dan batal hanya diubah
+  Tahap tidak pernah turun sendiri. Pembayaran, barang terkirim, pesanan selesai, dan batal hanya diubah
   staf dari dashboard; bot tidak pernah memasang atau mengubahnya.
 - **Tautan marketplace**: tiap produk punya kolom Tokopedia dan Shopee (https, di situs
   marketplace itu). Kalau pelanggan ingin membeli produk yang punya tautan, LLM hanya memilih

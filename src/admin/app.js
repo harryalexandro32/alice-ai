@@ -1584,12 +1584,12 @@ function columnChart({ el: host, title, help, days, series, stacked = false, for
 }
 
 const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'payment', 'dikirim', 'selesai', 'batal'];
-const stageLabel = (s) => ({ baru: T('Baru', 'New'), menunggu: T('Menunggu tim', 'Waiting for team'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), payment: 'Payment', dikirim: T('Barang terkirim', 'Shipped'), selesai: 'Order complete', batal: T('Batal', 'Cancelled') })[s] || s;
+const stageLabel = (s) => ({ baru: T('Baru', 'New'), menunggu: T('Menunggu tim', 'Waiting for team'), dihubungi: T('Dihubungi', 'Contacted'), link: T('Link terkirim', 'Link sent'), payment: T('Pembayaran', 'Payment'), dikirim: T('Barang terkirim', 'Shipped'), selesai: T('Pesanan selesai', 'Order complete'), batal: T('Batal', 'Cancelled') })[s] || s;
 /**
  * Warna tiap tahap: satu sumber untuk chip Beranda, saringan Percakapan, dan pilihan tahap.
  * Kelasnya ada di app.css (.stage-baru …) dan mengisi --st-bg / --st-fg untuk tema terang dan gelap:
- * baru biru, menunggu tim kuning, dihubungi oranye, link ungu, payment hijau toska, barang terkirim merah muda,
- * order complete hijau, batal abu-abu.
+ * baru biru, menunggu tim kuning, dihubungi oranye, link ungu, pembayaran hijau toska, barang terkirim merah muda,
+ * pesanan selesai hijau, batal abu-abu.
  */
 const STAGE_COLOR = { baru: 'stage-baru', menunggu: 'stage-menunggu', dihubungi: 'stage-dihubungi', link: 'stage-link', payment: 'stage-payment', dikirim: 'stage-dikirim', selesai: 'stage-selesai', batal: 'stage-batal' };
 const stageClass = (s) => STAGE_COLOR[s] || STAGE_COLOR.baru;
@@ -1662,7 +1662,7 @@ const FILTER_HELP = () => ({
   menunggu: T('Bot sudah menyerahkan chat ini ke tim, dan belum ada staf yang membalas. Pindah ke Dihubungi saat staf membalas atau menandai Sudah ditangani.',
     'The bot passed this chat to the team, and no staff member has replied yet. It moves to Contacted when staff reply or mark it as handled.'),
   dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari web.', 'A staff member has replied to this customer, from the phone or the web.'),
-  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Payment atau Batal, karena bot tidak melihat pesanan di marketplace.',
+  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, karena bot tidak melihat pesanan di marketplace.',
     'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, because the bot cannot see marketplace orders.'),
   payment: T('Pelanggan sedang membayar atau sudah membayar. Hanya diubah staf.', 'The customer is paying or has paid. Only staff set this.'),
   dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya diubah staf.', 'The goods are on the way to the customer. Only staff set this.'),
