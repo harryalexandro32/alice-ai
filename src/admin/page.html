@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alice AI</title>
+<!-- Huruf: Inter untuk teks, Plus Jakarta Sans untuk judul dan angka, Geist Mono untuk kode. CSP di server.ts mengizinkan Google Fonts. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="/assets/app.css">
 <!-- Berkas merek disimpan sehari oleh peramban dan Vercel: naikkan ?v= setiap kali ikonnya diganti. -->
 <link rel="icon" href="/assets/favicon.svg?v=2" type="image/svg+xml">
@@ -53,6 +55,7 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
   <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-panel-left" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
   <!-- Wordmark: tanda oranye (A sebagai path) + teks. "Alice" ikut warna tinta (currentColor), "AI" oranye. Sama dengan brand/wordmark.svg. -->
   <symbol id="brand-wordmark" viewBox="0 0 92 24"><path d="M12 1a10.5 10.5 0 1 1-5.3 19.6l-4.2 1.4c-.6.2-1.1-.3-.9-.9l1.4-4.2A10.5 10.5 0 0 1 12 1z" fill="#f6821f"/><circle cx="11.1" cy="11.8" r="3.4" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M14.5 8.4v6.8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><text x="32" y="18" font-family='-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif' font-size="17" font-weight="700" letter-spacing="-0.34" fill="currentColor">Alice <tspan fill="#f6821f">AI</tspan></text></symbol>
@@ -103,42 +106,57 @@
   </form>
 </div>
 
-<!-- Bilah atas + bilah keadaan: satu kepala tetap (position: fixed). Tingginya diukur app.js ke --chrome-h. -->
-<header class="chrome" id="chrome">
-<div class="topbar">
-  <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><svg class="wordmark" viewBox="0 0 92 24" width="92" height="24" preserveAspectRatio="xMinYMid slice" role="img" aria-label="Alice AI"><use href="#brand-wordmark"/></svg></a>
-  <span class="projwrap"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><img class="projlogo" id="logoTop" alt="" hidden><select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)" data-en-title="Project (one business, one WhatsApp number)"></select></span>
-  <div class="spacer"></div>
-  <button class="btn ghost qs-open" id="qsOpen" type="button" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K /" title="Cari di seluruh dashboard" data-en-title="Search the whole dashboard"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl" data-en="Search">Cari</span><kbd id="qsKey">Ctrl K</kbd></button>
-  <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light / dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
-  <div class="lang" id="lang" role="group" aria-label="Bahasa / Language"><span class="lang-ico"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></span><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
-  <button class="btn ghost" id="logout" type="button" title="Keluar" aria-label="Keluar" data-en-title="Sign out"><svg class="i" aria-hidden="true"><use href="#i-log-out"/></svg><span class="lbl" data-en="Sign out">Keluar</span></button>
-</div>
-
-<div class="strip" id="strip" hidden><button class="btn ghost sm try" id="tryBtn" type="button"><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try chat">Coba chat</span></button></div>
-</header>
-
 <div class="app" id="app" hidden>
-  <aside>
+  <!-- Menu samping: merek, pemilih proyek, menu, lalu bahasa dan keluar. Di layar lebar menempel setinggi layar
+       (bisa disembunyikan lewat #navToggle); di layar <= 820 px jadi laci yang digeser dari kiri. -->
+  <aside class="sidebar" id="sidebar" aria-label="Menu">
+    <div class="sb-head">
+      <a class="home" id="homeLink" href="/" aria-label="Beranda" data-en-title="Home"><svg class="wordmark" viewBox="0 0 92 24" width="92" height="24" role="img" aria-label="Alice AI"><use href="#brand-wordmark"/></svg></a>
+      <button class="btn ghost icon sb-close" id="navClose" type="button" title="Tutup menu" aria-label="Tutup menu" data-en-title="Close menu"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sb-proj">
+      <span class="projwrap"><svg class="i" aria-hidden="true"><use href="#i-layers"/></svg><img class="projlogo" id="logoTop" alt="" hidden><select class="projsel" id="projectSel" aria-label="Proyek" title="Proyek (satu bisnis, satu nomor WhatsApp)" data-en-title="Project (one business, one WhatsApp number)"></select></span>
+    </div>
     <nav id="nav">
+      <div class="nav-group" data-en="Overview">Ringkasan</div>
       <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span></a>
       <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span><span class="badge" id="convBadge"></span></a>
-      <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span data-en="Bot knowledge">Pengetahuan bot</span></div>
-      <a data-nav="behavior" class="sub"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="How the bot talks">Cara bot bicara</span></a>
-      <a data-nav="produk" class="sub"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
-      <a data-nav="brosur" class="sub"><svg class="i" aria-hidden="true"><use href="#i-file-text"/></svg><span data-en="Brochures">Brosur</span></a>
-      <div class="nav-group"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg><span data-en="Settings">Pengaturan</span></div>
-      <a data-nav="pengaturan" class="sub"><svg class="i" aria-hidden="true"><use href="#i-toggle"/></svg><span data-en="General">Umum</span></a>
-      <a data-nav="whatsapp" class="sub"><svg class="i" aria-hidden="true"><use href="#i-smartphone"/></svg><span>WhatsApp</span></a>
-      <a data-nav="notifikasi" class="sub"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg><span data-en="Notifications">Notifikasi</span></a>
-      <a data-nav="lanjutan" class="sub"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg><span data-en="Advanced">Lanjutan</span></a>
+      <div class="nav-group" data-en="Bot knowledge">Pengetahuan bot</div>
+      <a data-nav="behavior"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="How the bot talks">Cara bot bicara</span></a>
+      <a data-nav="produk"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
+      <a data-nav="brosur"><svg class="i" aria-hidden="true"><use href="#i-file-text"/></svg><span data-en="Brochures">Brosur</span></a>
+      <div class="nav-group" data-en="Settings">Pengaturan</div>
+      <a data-nav="pengaturan"><svg class="i" aria-hidden="true"><use href="#i-toggle"/></svg><span data-en="General">Umum</span></a>
+      <a data-nav="whatsapp"><svg class="i" aria-hidden="true"><use href="#i-smartphone"/></svg><span>WhatsApp</span></a>
+      <a data-nav="notifikasi"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg><span data-en="Notifications">Notifikasi</span></a>
+      <a data-nav="lanjutan"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg><span data-en="Advanced">Lanjutan</span></a>
     </nav>
+    <div class="sb-foot">
+      <div class="lang" id="lang" role="group" aria-label="Bahasa / Language"><span class="lang-ico"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></span><button type="button" data-lang="id">ID</button><button type="button" data-lang="en">EN</button></div>
+      <button class="btn ghost" id="logout" type="button" title="Keluar" aria-label="Keluar" data-en-title="Sign out"><svg class="i" aria-hidden="true"><use href="#i-log-out"/></svg><span class="lbl" data-en="Sign out">Keluar</span></button>
+    </div>
   </aside>
+  <div class="sb-bg" id="navBg"></div>
+
+  <div class="shell">
+  <!-- Bilah atas + bilah keadaan: satu kepala yang menempel di atas kolom isi (position: sticky).
+       Tingginya diukur app.js ke --chrome-h. -->
+  <header class="chrome" id="chrome">
+  <div class="topbar">
+    <button class="btn ghost icon" id="navToggle" type="button" aria-controls="sidebar" aria-expanded="true" title="Menu" aria-label="Menu"><svg class="i" aria-hidden="true"><use href="#i-panel-left"/></svg></button>
+    <span class="vsep" aria-hidden="true"></span>
+    <nav class="bc" id="bc" aria-label="Breadcrumb"></nav>
+    <div class="spacer"></div>
+    <button class="btn ghost qs-open" id="qsOpen" type="button" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K /" title="Cari di seluruh dashboard" data-en-title="Search the whole dashboard"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl" data-en="Search">Cari</span><kbd id="qsKey">Ctrl K</kbd></button>
+    <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light / dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
+  </div>
+
+  <div class="strip" id="strip" hidden><button class="btn ghost sm try" id="tryBtn" type="button"><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try chat">Coba chat</span></button></div>
+  </header>
 
   <main>
     <div class="pagehead">
       <div>
-        <p class="crumb" id="crumb"></p>
         <div class="titlerow"><a class="btn ghost back" id="convBack" hidden aria-label="Kembali ke Percakapan" data-en-title="Back to Conversations" title="Kembali ke Percakapan"><svg class="i" aria-hidden="true"><use href="#i-arrow-left"/></svg></a><h1 id="title"></h1></div>
         <p id="desc"></p>
       </div>
@@ -522,6 +540,7 @@
 
     </div>
   </main>
+  </div>
 </div>
 
 <!-- Coba chat: panel samping di halaman Pengetahuan -->

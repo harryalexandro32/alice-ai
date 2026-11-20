@@ -57,6 +57,8 @@ let lang = 'id';
 try { if (localStorage.getItem('lang') === 'en') lang = 'en'; } catch { /* penyimpanan peramban diblokir */ }
 const T = (id, en) => (lang === 'en' ? en : id);
 const locale = () => T('id-ID', 'en-GB');
+/** Huruf pertama kapital: teks lencana (chip) yang juga dipakai di tengah kalimat. */
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 function applyLang() {
   document.documentElement.lang = lang;
@@ -96,6 +98,37 @@ $('theme').addEventListener('click', () => {
   try { localStorage.setItem('theme', theme); } catch { /* berlaku untuk kunjungan ini saja */ }
   applyTheme();
 });
+
+// ---------- menu samping ----------
+// Layar lebar: #navToggle menyembunyikan atau menampilkan menu (diingat peramban).
+// Layar <= 820 px: menu jadi laci; #navToggle membukanya, dan pilihan menu, latar, Esc, atau ✕ menutupnya.
+const narrow = matchMedia('(max-width: 820px)');
+let navOff = false;
+try { navOff = localStorage.getItem('nav') === 'off'; } catch { /* menu tetap tampil */ }
+function applyNav() {
+  const root = document.documentElement;
+  root.classList.toggle('nav-off', navOff);
+  $('navToggle').setAttribute('aria-expanded', String(narrow.matches ? root.classList.contains('nav-open') : !navOff));
+}
+function setDrawer(open) {
+  document.documentElement.classList.toggle('nav-open', open);
+  applyNav();
+  if (open) ($('nav').querySelector('a.on') || $('nav').querySelector('a')).focus();
+}
+const drawerOpen = () => document.documentElement.classList.contains('nav-open');
+$('navToggle').addEventListener('click', () => {
+  if (narrow.matches) return setDrawer(!drawerOpen());
+  navOff = !navOff;
+  try { localStorage.setItem('nav', navOff ? 'off' : 'on'); } catch { /* berlaku untuk kunjungan ini saja */ }
+  applyNav();
+});
+$('navClose').addEventListener('click', () => { setDrawer(false); $('navToggle').focus(); });
+$('navBg').addEventListener('click', () => setDrawer(false));
+$('nav').addEventListener('click', (e) => { if (e.target.closest('a[href]')) setDrawer(false); });
+$('projectSel').addEventListener('change', () => setDrawer(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawerOpen()) { setDrawer(false); $('navToggle').focus(); } });
+narrow.addEventListener('change', () => setDrawer(false));
+applyNav();
 
 let profile = null;
 let state = null;
@@ -1779,11 +1812,11 @@ function renderLeads() {
       c.note ? el('span', { className: 'note-ico', textContent: ' ✎', title: c.note }) : null,
       name ? el('small', { textContent: c.phone }) : null);
     const status = el('td', {}, el('div', { className: 'chiprow' },
-      el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('lengkap', 'complete') : T('belum lengkap', 'incomplete') }),
-      c.needsSales ? el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff') }) : null));
+      el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('Lengkap', 'Complete') : T('Belum lengkap', 'Incomplete') }),
+      c.needsSales ? el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') }) : null));
     const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
       el('td', { className: 'sum', textContent: c.summary || '-' }), status,
-      el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: why }) : null)),
+      el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: cap(why) }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
     // Klik di mana saja pada baris (selain kontrolnya) membuka percakapannya.
     tr.addEventListener('click', (e) => {
@@ -2166,9 +2199,9 @@ function questionItem(g) {
     try {
       const r = await api('handoffs/' + g.id + '/retry', { method: 'POST', body: JSON.stringify({ lesson: lesson.value }) });
       const passed = r.intent === 'handoff' || r.intent === 'human';
-      const verdict = r.rejected ? el('span', { className: 'chip danger', textContent: T('tidak akan dikirim: ', 'would not be sent: ') + r.rejected })
-        : passed ? el('span', { className: 'chip warn', textContent: T('masih diserahkan ke tim', 'still passed to the team') })
-          : el('span', { className: 'chip ok', textContent: T('dijawab bot', 'answered by the bot') });
+      const verdict = r.rejected ? el('span', { className: 'chip danger', textContent: T('Tidak akan dikirim: ', 'Would not be sent: ') + r.rejected })
+        : passed ? el('span', { className: 'chip warn', textContent: T('Masih diserahkan ke tim', 'Still passed to the team') })
+          : el('span', { className: 'chip ok', textContent: T('Dijawab bot', 'Answered by the bot') });
       const files = [...(r.photos || []), ...(r.docs || [])].map((f) => f.name);
       result.replaceChildren(
         el('div', { className: 'qtry-h' }, el('b', { textContent: T('Jawaban bot sekarang', 'The bot\'s answer now') }), verdict),
@@ -2345,7 +2378,7 @@ function renderAttention() {
     const name = nameOf(c);
     const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka chat', 'Open chat'));
     rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
-      el('td', {}, el('span', { className: 'chip warn', textContent: T('perlu staf', 'needs staff') })),
+      el('td', {}, el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') })),
       el('td', { className: 'sum', textContent: c.summary || '-' }),
       el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
   }
@@ -2410,7 +2443,7 @@ function renderAlerts(r) {
   $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
     el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada warning.', 'No alerts yet.'))])));
   const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
-    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? T('error', 'error') : T('warning', 'warning') })),
+    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? 'Error' : 'Warning' })),
     el('td', { className: 'mono', textContent: e.text })));
   $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Isi', 'Message')),
     el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
@@ -2598,7 +2631,7 @@ function renderWaPending() {
   const failed = !waPending && waError;
   busy(['waState', 'waDetail', 'waFoot'], !failed);
   $('waState').className = 'chip' + (failed ? ' danger' : '');
-  $('waState').replaceChildren(failed ? T('gagal memuat', 'failed to load') : skelText(T('menyambung…', 'connecting…')));
+  $('waState').replaceChildren(failed ? T('Gagal memuat', 'Failed to load') : skelText(T('menyambung…', 'connecting…')));
   $('waQr').hidden = true;
   $('waCodeBox').hidden = true;
   // Tebak susunan akhirnya dari laporan bot terakhir (sudah ada di state): tersambung = baris rincian
@@ -2625,7 +2658,7 @@ function renderWa() {
   const stale = !w || !w.last_seen_at || Date.now() - w.last_seen_at > 120000;
   const [text, cls] = !w ? [T('bot belum pernah melapor', 'bot has never reported'), 'warn']
     : stale ? [T('bot tidak melapor', 'bot not reporting'), 'danger'] : WA_STATES[w.state] ? WA_STATES[w.state]() : [w.state, ''];
-  $('waState').textContent = text;
+  $('waState').textContent = cap(text);
   $('waState').className = 'chip ' + cls;
   $('waSeen').textContent = w && w.last_seen_at ? T('laporan terakhir ', 'last report ') + when(w.last_seen_at) : '';
   const connected = Boolean(w && !stale && w.state === 'connected' && !(wa && wa.pending));
@@ -2717,9 +2750,9 @@ function renderStrip() {
   const month = state.month || { idr: 0 };
   // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
   out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#cost', 'coins'));
-  // Tombol Coba chat ikut di strip, di ujung kanan, di semua halaman (node yang sama dipindahkan lagi).
-  out.push($('tryBtn'));
-  $('strip').replaceChildren(...out);
+  // Lencana di wadahnya sendiri (di HP bergulung ke samping); tombol Coba chat di ujung kanan, di semua halaman
+  // (node yang sama dipindahkan lagi).
+  $('strip').replaceChildren(el('div', { className: 'strip-chips' }, ...out), $('tryBtn'));
 }
 
 // Keadaan WhatsApp di bilah atas tetap segar walau tidak di halaman WhatsApp.
@@ -3001,16 +3034,25 @@ function renderMeta() {
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
   const [crumb, title, desc] = PAGES[page]();
-  $('crumb').textContent = crumb;
-  $('crumb').hidden = !crumb;
   $('title').textContent = title;
   $('desc').textContent = desc;
   $('desc').hidden = !desc;
   const p = projects.find((x) => x.id === project);
+  renderBreadcrumb(p ? p.name : '', crumb, title);
   document.title = title + (p ? ' · ' + p.name : '') + ' · Alice AI';
   setDirty(dirty);
   $('convBack').hidden = page !== 'chat';
   if (page === 'chat' && conv && conv.contact) renderConvHead();
+}
+
+/** Jejak di bilah atas: proyek › kelompok menu › halaman. Yang terakhir tebal; yang sama dengan sebelumnya dilewati. */
+function renderBreadcrumb(projectName, crumb, title) {
+  const sep = () => { const i = ico('chevron-right'); i.classList.add('bc-sep'); return i; };
+  const out = [];
+  if (projectName) out.push(el('a', { href: pathOf('beranda'), textContent: projectName }));
+  if (crumb && crumb !== title) out.push(page === 'chat' ? el('a', { href: pathOf('percakapan'), textContent: crumb }) : el('span', { textContent: crumb }));
+  out.push(el('b', { textContent: title }));
+  $('bc').replaceChildren(...out.flatMap((n, i) => (i ? [sep(), n] : [n])));
 }
 
 /** Tampilkan satu halaman dan muat datanya. */
