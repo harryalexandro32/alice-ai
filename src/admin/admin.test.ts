@@ -468,9 +468,9 @@ const PNG = Buffer.from(
       for (const id of ['conversations', 'knowledge', 'settings', 'percakapan', 'pengetahuan', 'pengaturan']) {
         assert.equal((await make({ id, name: 'X', template: 'generic' })).status, 400, `id "${id}" dipakai alamat dashboard`);
       }
-      assert.match((await make({ id: 'toko-b', name: 'X', template: 'entah' })).body.error, /Bibit/);
+      assert.match((await make({ id: 'toko-b', name: 'X', template: 'entah' })).body.error, /Profil awal/);
       assert.match((await make({ id: 'toko-b', name: '', template: 'generic' })).body.error, /Nama/);
-      assert.match((await make({ id: 'toko-b', name: 'Toko B', template: 'generic', wa_number: '12' })).body.error, /WA bot/);
+      assert.match((await make({ id: 'toko-b', name: 'Toko B', template: 'generic', wa_number: '12' })).body.error, /WhatsApp bot/);
       const made = await make({ id: 'toko-b', name: 'Toko B', template: 'generic', wa_number: '0812 7777 0001', sales_number: 'self' });
       assert.equal(made.status, 200);
       assert.deepEqual([made.body.project.wa_number, made.body.project.sales_number, made.body.project.enabled], ['+6281277770001', 'self', true]);
