@@ -197,17 +197,17 @@ function parseRoute(pathname) {
 }
 
 const PAGES = {
-  beranda: () => ['', T('Beranda', 'Home'), T('Ringkasan 7 hari terakhir, pelanggan yang menunggu orang, dan pertanyaan yang belum bisa dijawab bot.', 'The last 7 days at a glance, customers waiting for a person, and questions the bot could not answer.')],
+  beranda: () => ['', T('Beranda', 'Home'), T('Ringkasan 7 hari terakhir, pelanggan yang menunggu staf, dan pertanyaan yang belum bisa dijawab bot.', 'The last 7 days at a glance, customers waiting for a person, and questions the bot could not answer.')],
   percakapan: () => ['', T('Percakapan', 'Conversations'), T('Semua calon pelanggan yang chat dengan bot. Klik satu baris untuk membuka percakapannya dan membalas dari sini.', 'Every prospective customer who chatted with the bot. Click a row to open the conversation and reply from here.')],
   chat: () => [T('Percakapan', 'Conversations'), T('Percakapan', 'Conversation'), ''],
-  behavior: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Cara bot bicara', 'How the bot talks'), T('Siapa yang menjawab, pembukaan, pertanyaan dan rekomendasi, gaya, dan yang harus dijawab manusia. Perubahan berlaku pada pesan berikutnya setelah disimpan.', 'Who answers, the opening, questions and recommendations, the style, and what a human must answer. Changes apply to the next message after you save.')],
-  produk: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Produk', 'Products'), T('Daftar produk, pengetahuan lain, dan pertanyaan yang belum terjawab. Yang tidak tertulis di sini tidak akan dijawab bot.', 'The product list, other knowledge, and unanswered questions. Anything not written here, the bot will not answer.')],
+  behavior: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Cara bot bicara', 'How the bot talks'), T('Siapa yang menjawab, pembukaan, pertanyaan dan rekomendasi, gaya, dan yang harus dijawab manusia. Perubahan berlaku mulai pesan berikutnya setelah Anda menyimpan.', 'Who answers, the opening, questions and recommendations, the style, and what a human must answer. Changes apply to the next message after you save.')],
+  produk: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Produk', 'Products'), T('Daftar produk, pengetahuan lain, dan pertanyaan yang belum terjawab. Bot tidak menjawab hal yang tidak tertulis di sini.', 'The product list, other knowledge, and unanswered questions. Anything not written here, the bot will not answer.')],
   brosur: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Brosur', 'Brochures'), T('Brosur dan katalog PDF yang bisa dikirim bot ke pelanggan.', 'PDF brochures and catalogues the bot can send to customers.')],
   pengaturan: () => [T('Pengaturan', 'Settings'), T('Umum', 'General'), T('Proyek, saat admin ikut membalas, dan follow-up.', 'Project, when a human admin steps in, and follow-up.')],
   whatsapp: () => [T('Pengaturan', 'Settings'), 'WhatsApp', T('Tautkan nomor bot, lihat keadaan bot, dan pengaman nomornya.', 'Link the bot\'s number, see the bot\'s status and the number safeguard.')],
-  notifikasi: () => [T('Pengaturan', 'Settings'), T('Notifikasi', 'Notifications'), T('Siapa yang dikabari bot, dan kabar mana ke siapa.', 'Who the bot notifies, and which news goes to whom.')],
+  notifikasi: () => [T('Pengaturan', 'Settings'), T('Notifikasi', 'Notifications'), T('Siapa yang dikabari bot, dan notifikasi mana untuk siapa.', 'Who the bot notifies, and which news goes to whom.')],
   lanjutan: () => [T('Pengaturan', 'Settings'), T('Lanjutan', 'Advanced'), T('Mode uji, batas dan pengaman, irama balasan, biaya LLM, riwayat warning, dan catatan error.', 'Test mode, limits and safeguards, reply rhythm, LLM cost, alert history and the error log.')],
-  notfound: () => ['', T('Halaman tidak ada', 'Page not found'), ''],
+  notfound: () => ['', T('Halaman tidak ditemukan', 'Page not found'), ''],
 };
 
 function toast(text, err = false) {
@@ -232,9 +232,9 @@ async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== 'login') {
     showLogin();
-    throw new Error(T('Belum masuk.', 'Not signed in.'));
+    throw new Error(T('Anda belum masuk. Silakan masuk dulu.', 'Not signed in.'));
   }
-  if (!res.ok) throw new Error(data.error || T('Gagal', 'Failed') + ' (' + res.status + ').');
+  if (!res.ok) throw new Error(data.error || T('Permintaan gagal', 'Failed') + ' (' + res.status + ').' + T(' Coba lagi.', ''));
   return data;
 }
 
@@ -245,7 +245,7 @@ function setDirty(v, key) {
   else if (v && key) changed.add(key);
   if (!v) { changed.clear(); projectDirty = false; }
   $('save').disabled = !v;
-  withIcon($('save'), 'check', T('Simpan & terapkan', 'Save & apply'));
+  withIcon($('save'), 'check', T('Simpan dan terapkan', 'Save & apply'));
   $('savebar').classList.toggle('on', v);
   $('savebar').setAttribute('aria-hidden', String(!v));
   // Selama tersembunyi, tombolnya tidak bisa dicapai dengan Tab.
@@ -332,8 +332,8 @@ $('fuMode').addEventListener('keydown', (e) => {
 // Hanya kabar yang bisa lewat WhatsApp. Kabar soal WhatsApp-nya sendiri dan bot berhenti hanya tampil di dashboard.
 const NOTIFY = [
   ['lead', () => T('Lead baru (data pelanggan lengkap)', 'New lead (customer data complete)'), 'staff'],
-  ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, minta orang, kirim suara/dokumen)', 'Customer needs staff (bot cannot answer, asks for a person, sends voice/document)'), 'staff'],
-  ['llm', () => T('LLM bermasalah / jatah harian habis', 'LLM failing / daily limit reached'), 'owner'],
+  ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, pelanggan minta bicara dengan orang, atau mengirim suara atau dokumen)', 'Customer needs staff (bot cannot answer, asks for a person, sends voice/document)'), 'staff'],
+  ['llm', () => T('LLM bermasalah atau jatah hariannya habis', 'LLM failing / daily limit reached'), 'owner'],
 ];
 function renderRecipients() {
   const list = profile.recipients;
@@ -343,14 +343,14 @@ function renderRecipients() {
     role.value = r.role;
     role.addEventListener('change', () => { r.role = role.value; touch(); });
     const cell = (k, ph) => el('td', { className: k === 'name' ? 'first' : '' }, cellInput(r[k], (v) => { r[k] = v; touch(); }, ph));
-    return el('tr', {}, cell('name', T('mis. Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')),
+    return el('tr', {}, cell('name', T('misalnya Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')),
       el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 4, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima, jadi tidak ada yang dikabari lewat WhatsApp. Tambahkan minimal satu orang.', 'No recipients yet, so nobody is notified on WhatsApp. Add at least one person.') })));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 4, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada penerima, jadi tidak ada yang dikabari lewat WhatsApp. Tambahkan minimal satu penerima.', 'No recipients yet, so nobody is notified on WhatsApp. Add at least one person.') })));
   $('recipients').replaceChildren(headRow([T('Nama', 'Name'), T('Peran', 'Role'), 'WhatsApp']), body);
 
   const opts = [['owner', T('Pemilik', 'Owner')], ['staff', T('Staf', 'Staff')], ['both', T('Pemilik dan staf', 'Owner and staff')], ['none', T('Tidak dikirim', 'Not sent')]];
-  $('routes').replaceChildren(el('thead', {}, el('tr', {}, el('th', { textContent: T('Jenis kabar', 'Kind of news') }), el('th', { textContent: T('Dikirim ke', 'Sent to') }))),
+  $('routes').replaceChildren(el('thead', {}, el('tr', {}, el('th', { textContent: T('Jenis notifikasi', 'Kind of news') }), el('th', { textContent: T('Dikirim ke', 'Sent to') }))),
     el('tbody', {}, ...NOTIFY.map(([kind, label, def]) => {
       const sel = el('select', {}, ...opts.map(([v, t]) => el('option', { value: v, textContent: t })));
       sel.value = (profile.notifyRoutes || {})[kind] || def;
@@ -361,12 +361,12 @@ function renderRecipients() {
 // "Kirim tes": bot mengirim pesan tes ke tiap penerima yang sudah disimpan; di sini ditunggu kabarnya (±1 menit).
 $('testNotify').addEventListener('click', async () => {
   if (changed.has('recipients') || changed.has('notifyRoutes')) {
-    return toast(T('Simpan dulu perubahan penerima sebelum mengirim tes.', 'Save your recipient changes before sending a test.'), true);
+    return toast(T('Simpan dulu perubahan penerima, lalu kirim pesan tes.', 'Save your recipient changes before sending a test.'), true);
   }
   const btn = $('testNotify');
   const out = $('testNotifyState');
   btn.disabled = true;
-  out.textContent = T('Mengantre pesan tes…', 'Queuing the test…');
+  out.textContent = T('Pesan tes masuk antrean…', 'Queuing the test…');
   try {
     const r = await api('notify/test', { method: 'POST', body: '{}' });
     const total = r.ids.length;
@@ -381,8 +381,8 @@ $('testNotify').addEventListener('click', async () => {
       out.textContent = T('Terkirim ke ', 'Sent to ') + done + T(' dari ', ' of ') + total + T(' nomor.', ' numbers.');
     }
     if (done === total) out.textContent += T(' Cek WhatsApp di nomor penerima.', ' Check WhatsApp on the recipient numbers.');
-    else if (failed) out.textContent += T(' Sebagian gagal; lihat Pengaturan › Lanjutan › Catatan error.', ' Some failed; see Settings › Advanced › Error log.');
-    else out.textContent += T(' Sisanya menunggu WhatsApp bot tersambung (Pengaturan › WhatsApp).', ' The rest waits for the bot\'s WhatsApp to connect (Settings › WhatsApp).');
+    else if (failed) out.textContent += T(' Sebagian gagal. Lihat penyebabnya di Pengaturan › Lanjutan › Catatan error.', ' Some failed; see Settings › Advanced › Error log.');
+    else out.textContent += T(' Sisanya menunggu sampai WhatsApp bot tersambung (Pengaturan › WhatsApp).', ' The rest waits for the bot\'s WhatsApp to connect (Settings › WhatsApp).');
   } catch (e) {
     out.textContent = '';
     toast(e.message, true);
@@ -391,7 +391,7 @@ $('testNotify').addEventListener('click', async () => {
 });
 
 $('addRecipient').addEventListener('click', () => {
-  if (profile.recipients.length >= 20) return toast(T('Maksimal 20 orang.', '20 people max.'), true);
+  if (profile.recipients.length >= 20) return toast(T('Maksimal 20 penerima.', '20 people max.'), true);
   profile.recipients.push({ name: '', role: 'staff', phone: '' });
   setDirty(true, 'recipients');
   renderRecipients();
@@ -411,7 +411,7 @@ const fileOf = (id) => (profile.files || []).find((f) => f.id === id);
 const mediaUrl = (id) => { const f = fileOf(id); return f ? mediaBase() + f.file : ''; };
 
 async function uploadFile(file) {
-  if (file.size > 4000000) throw new Error(T('Berkas terlalu besar (maksimal 4 MB).', 'File too large (4 MB max).'));
+  if (file.size > 4000000) throw new Error(T('Berkas lebih dari 4 MB. Pilih berkas yang lebih kecil.', 'File too large (4 MB max).'));
   const r = await api('files?' + new URLSearchParams({ name: file.name }), { method: 'POST', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } });
   profile.files = r.files;
   return Object.assign(r.file, { matches: r.matches, readable: r.readable });
@@ -435,7 +435,7 @@ function assignPdf(id, names) {
 }
 
 const matchNote = (name, readable, r) =>
-  !readable ? name + T(': tidak terbaca (hasil pindai?). Pasangkan sendiri.', ': not readable (a scan?). Attach it by hand.')
+  !readable ? name + T(': tidak bisa dibaca, mungkin hasil pindai. Pasangkan sendiri.', ': not readable (a scan?). Attach it by hand.')
     : name + T(': dipasang ke ', ': attached to ') + r.set + T(' produk', ' products') +
       (r.taken ? T(', ', ', ') + r.taken + T(' sudah punya PDF lain', ' already had another PDF') : '') + '.';
 
@@ -449,11 +449,11 @@ async function afterAssign(wasDirty, notes) {
 
 function renderPdfs() {
   const list = pdfLibrary();
-  const head = el('thead', {}, el('tr', {}, el('th', { textContent: T('Berkas', 'File') }), el('th', { textContent: T('Produk yang memakai', 'Products using it') }), el('th', { textContent: T('Dibaca bot', 'Read by bot') }), el('th')));
+  const head = el('thead', {}, el('tr', {}, el('th', { textContent: T('Berkas', 'File') }), el('th', { textContent: T('Dipakai di produk', 'Products using it') }), el('th', { textContent: T('Dibaca bot', 'Read by bot') }), el('th')));
   const rows = list.map((f) => {
     const using = profile.products.filter((p) => p.pdf === f.id);
     const free = profile.products.filter((p) => p.name && p.pdf !== f.id);
-    const add = el('select', {}, el('option', { value: '', textContent: T('+ produk…', '+ product…') }),
+    const add = el('select', {}, el('option', { value: '', textContent: T('+ Tambah produk…', '+ product…') }),
       ...free.map((p) => el('option', { value: String(profile.products.indexOf(p)), textContent: p.name + (p.pdf ? T(' (ganti)', ' (replace)') : '') })));
     add.addEventListener('change', () => {
       if (add.value === '') return;
@@ -480,13 +480,13 @@ function renderPdfs() {
     });
     const del = el('button', { className: 'btn danger sm', type: 'button', style: 'margin-left:6px' }, ico('trash'), T('Hapus', 'Delete'));
     del.addEventListener('click', async () => {
-      if (dirty) return toast(T('Simpan dulu perubahan lain sebelum menghapus PDF.', 'Save your other changes before deleting a PDF.'), true);
+      if (dirty) return toast(T('Simpan dulu perubahan lain, lalu hapus PDF ini.', 'Save your other changes before deleting a PDF.'), true);
       if (!confirm(T('Hapus "', 'Delete "') + f.name + '"?' + (using.length ? ' ' + using.length + T(' produk akan kehilangan PDF-nya.', ' products will lose their PDF.') : ''))) return;
       try {
         profile = (await api('files/' + f.id, { method: 'DELETE' })).profile;
         renderProducts();
         renderPdfs();
-        toast(T('PDF dihapus.', 'PDF deleted.'));
+        toast(T('PDF sudah dihapus.', 'PDF deleted.'));
       } catch (e) { toast(e.message, true); }
     });
     const read = el('input', { type: 'checkbox', checked: Boolean(f.read) });
@@ -494,7 +494,7 @@ function renderPdfs() {
       read.disabled = true;
       try {
         profile.files = (await api('files/' + f.id + '/read', { method: 'POST', body: JSON.stringify({ read: read.checked }) })).files;
-        toast(read.checked ? T('Bot sekarang membaca isi PDF ini. Uji lewat "Coba chat".', 'The bot now reads this PDF. Test it with "Try chat".') : T('Bot tidak lagi membaca isi PDF ini.', 'The bot no longer reads this PDF.'));
+        toast(read.checked ? T('Bot sekarang membaca isi PDF ini. Uji lewat “Coba chat”.', 'The bot now reads this PDF. Test it with "Try chat".') : T('Bot tidak lagi membaca isi PDF ini.', 'The bot no longer reads this PDF.'));
       } catch (e) { toast(e.message, true); }
       renderPdfs();
     });
@@ -563,11 +563,11 @@ function renderLogo() {
   document.body.classList.toggle('has-logo', Boolean(src));
   if (src) $('logoTop').src = src; else $('logoTop').removeAttribute('src');
   $('logoTop').hidden = !src;
-  $('logoBox').replaceChildren(src ? el('img', { src, alt: 'Logo' }) : T('belum ada logo', 'no logo yet'));
+  $('logoBox').replaceChildren(src ? el('img', { src, alt: 'Logo' }) : T('Belum ada logo', 'no logo yet'));
   $('logoClear').style.display = src ? '' : 'none';
 }
 $('logoPick').addEventListener('click', () => pick(IMAGES, (f) => {
-  if (f.file.endsWith('.pdf')) return toast(T('Logo harus berupa gambar.', 'The logo must be an image.'), true);
+  if (f.file.endsWith('.pdf')) return toast(T('Logo harus berupa gambar JPG, PNG, atau WebP.', 'The logo must be an image.'), true);
   profile.logo = f.id;
   setDirty(true, 'logo');
   renderLogo();
@@ -635,7 +635,7 @@ function renderFields() {
   profile.leadFields.forEach((f, i) => {
     const mk = (prop, ph) => el('td', { className: prop === 'key' ? 'first' : '' },
       cellInput(f[prop], (v) => { f[prop] = v; setDirty(true, 'leadFields'); }, ph));
-    const isName = el('input', { type: 'checkbox', checked: Boolean(f.isName), title: T('Dipakai untuk menyapa', 'Used to address the customer') });
+    const isName = el('input', { type: 'checkbox', checked: Boolean(f.isName), title: T('Dipakai untuk menyapa pelanggan', 'Used to address the customer') });
     isName.addEventListener('change', () => {
       profile.leadFields.forEach((x) => (x.isName = false));
       f.isName = isName.checked;
@@ -643,15 +643,15 @@ function renderFields() {
       renderFields();
     });
     const del = xBtn(T('Hapus baris', 'Delete row'), () => {
-      if (profile.leadFields.length <= 1) return toast(T('Minimal satu baris.', 'At least one row.'), true);
+      if (profile.leadFields.length <= 1) return toast(T('Harus ada minimal satu baris.', 'At least one row.'), true);
       profile.leadFields.splice(i, 1);
       setDirty(true, 'leadFields');
       renderFields();
     });
-    body.append(el('tr', {}, mk('key', T('mis. kota', 'e.g. kota')), mk('label', T('mis. kota/alamat', 'e.g. kota/alamat')), mk('hint', T('apa yang dihitung sebagai jawabannya', 'what counts as the answer')),
+    body.append(el('tr', {}, mk('key', T('misalnya kota', 'e.g. kota')), mk('label', T('misalnya kota/alamat', 'e.g. kota/alamat')), mk('hint', T('apa yang dianggap sebagai jawaban', 'what counts as the answer')),
       el('td', { className: 'center' }, isName), el('td', { className: 'act' }, del)));
   });
-  $('fields').replaceChildren(headRow([T('Kunci', 'Key'), T('Sebutan ke pelanggan', 'What the customer is asked for'), T('Petunjuk untuk bot', 'Hint for the bot'), T('Nama', 'Name')]), body);
+  $('fields').replaceChildren(headRow([T('Kunci', 'Key'), T('Yang diminta dari pelanggan', 'What the customer is asked for'), T('Petunjuk untuk bot', 'Hint for the bot'), T('Nama', 'Name')]), body);
 }
 
 $('addField').addEventListener('click', () => {
@@ -664,9 +664,9 @@ $('addField').addEventListener('click', () => {
 // ---------- pertanyaan kebutuhan ----------
 function renderQuestions() {
   const body = el('tbody', {}, ...profile.questions.map((q, i) => el('tr', {},
-    el('td', {}, cellInput(q, (v) => { profile.questions[i] = v; setDirty(true, 'questions'); }, T('mis. Ukuran ruangannya berapa × berapa meter?', 'e.g. Ukuran ruangannya berapa × berapa meter?'))),
+    el('td', {}, cellInput(q, (v) => { profile.questions[i] = v; setDirty(true, 'questions'); }, T('Contoh: Ukuran ruangannya berapa × berapa meter?', 'e.g. Ukuran ruangannya berapa × berapa meter?'))),
     el('td', { className: 'act' }, xBtn(T('Hapus pertanyaan', 'Delete question'), () => { profile.questions.splice(i, 1); setDirty(true, 'questions'); renderQuestions(); })))));
-  if (!profile.questions.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada pertanyaan. Bot akan bertanya seperlunya saja.', 'No questions yet. The bot will only ask when it has to.') })));
+  if (!profile.questions.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada pertanyaan, jadi bot hanya bertanya kalau perlu. Tambahkan pertanyaan di bawah.', 'No questions yet. The bot will only ask when it has to.') })));
   $('questionTable').replaceChildren(headRow([T('Pertanyaan', 'Question')]), body);
 }
 $('addQuestion').addEventListener('click', () => {
@@ -683,11 +683,11 @@ function renderRules() {
   const list = profile.styleRules;
   const body = el('tbody', {}, ...list.map((r, i) => {
     // Aturan bisa panjang: kotak teks yang membungkus, bukan satu baris.
-    const box = el('textarea', { rows: Math.min(5, Math.max(2, Math.ceil((r || '').length / 90))), value: r, placeholder: T('mis. Pakai kalimat positif dan langsung ke inti.', 'e.g. Pakai kalimat positif dan langsung ke inti.'), style: 'border:0;border-radius:0;background:transparent' });
+    const box = el('textarea', { rows: Math.min(5, Math.max(2, Math.ceil((r || '').length / 90))), value: r, placeholder: T('Contoh: Pakai kalimat positif dan langsung ke inti.', 'e.g. Pakai kalimat positif dan langsung ke inti.'), style: 'border:0;border-radius:0;background:transparent' });
     box.addEventListener('input', () => { list[i] = box.value; setDirty(true, 'styleRules'); });
     return el('tr', {}, el('td', {}, box), el('td', { className: 'act' }, xBtn(T('Hapus aturan', 'Delete rule'), () => { list.splice(i, 1); setDirty(true, 'styleRules'); renderRules(); })));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada aturan. Bot memakai gaya bawaannya.', 'No rules yet. The bot uses its default style.') })));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 2, style: 'padding:10px;color:var(--muted)', textContent: T('Belum ada aturan, jadi bot memakai gaya bawaannya. Tambahkan aturan di bawah.', 'No rules yet. The bot uses its default style.') })));
   $('rules').replaceChildren(headRow([T('Aturan', 'Rule')]), body);
 }
 $('addRule').addEventListener('click', () => {
@@ -704,7 +704,7 @@ function renderLessons() {
   const list = profile.lessons || (profile.lessons = []);
   const body = el('tbody', {}, ...list.map((l, i) => {
     const box = el('textarea', { rows: Math.min(5, Math.max(2, Math.ceil((l.rule || '').length / 90))), value: l.rule, maxLength: 600,
-      placeholder: T('mis. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan.', 'e.g. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan.'),
+      placeholder: T('Contoh: Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan bot soal pemakaian ruangan.', 'e.g. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan.'),
       style: 'border:0;border-radius:0;background:transparent' });
     box.setAttribute('aria-label', T('Pelajaran ', 'Lesson ') + (i + 1));
     box.addEventListener('input', () => { l.rule = box.value; setDirty(true, 'lessons'); });
@@ -758,7 +758,7 @@ $('linkForm').addEventListener('submit', (e) => {
   const { p, m } = linkTarget;
   const url = $('linkUrl').value.trim();
   if (marketOf(url) !== m) return toast(T('Tempel link produk dari ', 'Paste a product link from ') + m.label + '.', true);
-  if (!url.startsWith('https://')) return toast(T('Link-nya harus diawali https://', 'The link must start with https://'), true);
+  if (!url.startsWith('https://')) return toast(T('Link harus diawali https://', 'The link must start with https://'), true);
   (p.links ||= { tokopedia: '', shopee: '' })[m.key] = url;
   $('linkDlg').classList.remove('on');
   touchProducts();
@@ -786,7 +786,7 @@ function marketCell(p) {
 function renderProducts() {
   const list = profile.products;
   const pdfs = pdfLibrary();
-  const ph = [T('mis. GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('mis. Rp 450.000', 'e.g. Rp 450.000'), T('mis. ada / 12 unit', 'e.g. ada / 12 unit')];
+  const ph = [T('misalnya GFAF-40A', 'e.g. GFAF-40A'), T('jenis, ukuran, kegunaan', 'type, size, use'), T('misalnya Rp450.000', 'e.g. Rp 450.000'), T('misalnya ada atau 12 unit', 'e.g. ada / 12 unit')];
 
   const body = el('tbody', {}, ...list.map((p, ri) => {
     const cells = P_COLS.map((k, ci) => {
@@ -802,7 +802,7 @@ function renderProducts() {
     add.addEventListener('click', () => {
       if (p.photos.length >= 6) return toast(T('Maksimal 6 foto per produk.', '6 photos per product max.'), true);
       pick(IMAGES, (f) => {
-        if (f.file.endsWith('.pdf')) return toast(T('Itu PDF, bukan foto. Pakai kolom PDF.', 'That is a PDF, not a photo. Use the PDF column.'), true);
+        if (f.file.endsWith('.pdf')) return toast(T('Berkas itu PDF, bukan foto. Pasang di kolom PDF.', 'That is a PDF, not a photo. Use the PDF column.'), true);
         p.photos.push(f.id);
         touchProducts();
         renderProducts();
@@ -828,7 +828,7 @@ function renderProducts() {
         if (sel.value === '+') {
           sel.value = '';
           return pick('application/pdf', (f) => {
-            if (!f.file.endsWith('.pdf')) return toast(T('Berkas itu bukan PDF.', 'That file is not a PDF.'), true);
+            if (!f.file.endsWith('.pdf')) return toast(T('Berkas itu bukan PDF. Pilih berkas PDF.', 'That file is not a PDF.'), true);
             p.pdf = f.id;
             // Produk lain yang disebut di PDF yang sama ikut dipasangkan.
             const r = assignPdf(f.id, f.matches);
@@ -849,7 +849,7 @@ function renderProducts() {
     const del = xBtn(T('Hapus produk', 'Delete product'), () => { list.splice(ri, 1); touchProducts(); renderProducts(); });
     return el('tr', {}, ...cells, el('td', {}, thumbs), el('td', {}, pdf), el('td', {}, marketCell(p)), el('td', { className: 'act' }, del));
   }));
-  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 8, style: 'padding:12px;color:var(--muted)', textContent: T('Belum ada produk.', 'No products yet.') })));
+  if (!list.length) body.append(el('tr', {}, el('td', { colSpan: 8, style: 'padding:12px;color:var(--muted)', textContent: T('Belum ada produk. Klik Tambah produk untuk menambahkan yang pertama.', 'No products yet.') })));
   $('products').replaceChildren(headRow([T('Nama', 'Name'), T('Keterangan', 'Description'), T('Harga', 'Price'), T('Stok', 'Stock'), T('Foto', 'Photos'), 'PDF', 'Marketplace']), body);
   updateKnowLen();
 }
@@ -887,8 +887,8 @@ function knowledgeLength() {
 
 function updateKnowLen() {
   const n = knowledgeLength();
-  $('knowLen').textContent = profile.products.filter((p) => p.name).length + T(' produk · ±', ' products · ±') + n.toLocaleString(locale()) +
-    T(' karakter dibaca bot di tiap balasan. Makin panjang, makin mahal tiap balasan.', ' characters read by the bot on every reply. The longer, the more each reply costs.');
+  $('knowLen').textContent = profile.products.filter((p) => p.name).length + T(' produk · sekitar ', ' products · ±') + n.toLocaleString(locale()) +
+    T(' karakter dibaca bot di tiap balasan. Makin panjang, makin mahal biaya tiap balasan.', ' characters read by the bot on every reply. The longer, the more each reply costs.');
   $('detailCount').textContent = profile.catalog.length ? profile.catalog.length + T(' kelompok', ' groups') : T('kosong', 'empty');
 }
 
@@ -932,9 +932,9 @@ function tableNode(t) {
     redraw: () => { touchCatalog(); draw(); },
   });
   draw();
-  const addRow = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Baris', 'Row'));
+  const addRow = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Tambah baris', 'Row'));
   addRow.addEventListener('click', () => { t.rows.push(t.columns.map(() => '')); touchCatalog(); draw(); focusCell(t.rows.length - 1, 0); });
-  const addCol = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Kolom', 'Column'));
+  const addCol = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Tambah kolom', 'Column'));
   addCol.addEventListener('click', () => {
     if (t.columns.length >= 16) return toast(T('Maksimal 16 kolom.', '16 columns max.'), true);
     t.columns.push(T('Kolom ', 'Column ') + (t.columns.length + 1));
@@ -949,18 +949,18 @@ function seriesNode(s, si) {
   const blank = T('(kelompok baru)', '(new group)');
   const title = el('span', { textContent: s.name || blank });
   const count = el('span', { className: 'count', textContent: s.tables.length + T(' tabel', ' tables') });
-  const name = cellInput(s.name, (v) => { s.name = v; title.textContent = v || blank; touchCatalog(); }, T('mis. Exhaust Fan Industri, Seri A', 'e.g. Exhaust Fan Industri, Seri A'));
-  const facts = el('textarea', { rows: Math.max(2, s.facts.length + 1), value: s.facts.join('\n'), placeholder: T('Satu kalimat per baris: bahan, pemakaian, rentang ukuran, …', 'One sentence per line: material, use, size range, …') });
+  const name = cellInput(s.name, (v) => { s.name = v; title.textContent = v || blank; touchCatalog(); }, T('misalnya Exhaust Fan Industri, Seri A', 'e.g. Exhaust Fan Industri, Seri A'));
+  const facts = el('textarea', { rows: Math.max(2, s.facts.length + 1), value: s.facts.join('\n'), placeholder: T('Satu kalimat per baris, misalnya bahan, pemakaian, dan rentang ukuran', 'One sentence per line: material, use, size range, …') });
   facts.addEventListener('input', () => { s.facts = facts.value.split('\n').map((f) => f.trim()).filter(Boolean); touchCatalog(); });
 
   const body = el('div', { className: 'series-body' },
     el('div', { className: 'row' },
-      el('label', { className: 'f' }, el('span', { textContent: T('Nama kelompok / seri', 'Group / series name') }), name),
+      el('label', { className: 'f' }, el('span', { textContent: T('Nama kelompok atau seri', 'Group / series name') }), name),
       el('label', { className: 'f' }, el('span', { textContent: T('Keterangan umum', 'General notes') }), facts)));
 
   s.tables.forEach((t, ti) => {
     const { table, addRow, addCol } = tableNode(t);
-    const tTitle = cellInput(t.title, (v) => { t.title = v; touchCatalog(); }, T('judul tabel, mis. Spesifikasi teknis', 'table title, e.g. Spesifikasi teknis'));
+    const tTitle = cellInput(t.title, (v) => { t.title = v; touchCatalog(); }, T('judul tabel, misalnya Spesifikasi teknis', 'table title, e.g. Spesifikasi teknis'));
     const delT = el('button', { className: 'btn danger sm', type: 'button' }, ico('trash'), T('Hapus tabel', 'Delete table'));
     delT.addEventListener('click', () => {
       if (t.rows.length && !confirm(T('Hapus tabel "', 'Delete table "') + t.title + T('" beserta barisnya?', '" and its rows?'))) return;
@@ -971,7 +971,7 @@ function seriesNode(s, si) {
     body.append(el('div', { className: 'tblhead' }, tTitle), el('div', { className: 'scroll' }, table), el('div', { className: 'tblfoot' }, addRow, addCol, delT));
   });
 
-  const addT = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Tabel', 'Table'));
+  const addT = el('button', { className: 'btn ghost sm', type: 'button' }, ico('plus'), T('Tambah tabel', 'Table'));
   addT.addEventListener('click', () => {
     if (s.tables.length >= 6) return toast(T('Maksimal 6 tabel per kelompok.', '6 tables per group max.'), true);
     const first = s.tables[0];
@@ -1018,7 +1018,7 @@ document.addEventListener('click', (e) => {
 $('viewer').addEventListener('click', () => $('viewer').classList.remove('on'));
 
 // ---------- uji coba ----------
-const chatHint = () => el('div', { className: 'msg note', textContent: T('Ketik seperti calon pelanggan.', 'Type as a prospective customer would (in Indonesian).') });
+const chatHint = () => el('div', { className: 'msg note', textContent: T('Ketik pesan seperti calon pelanggan.', 'Type as a prospective customer would (in Indonesian).') });
 
 function addMsg(cls, text, photos, docs) {
   const m = el('div', { className: 'msg ' + cls, textContent: text });
@@ -1041,7 +1041,7 @@ $('sendForm').addEventListener('submit', async (e) => {
     const r = await api('test', { method: 'POST', body: JSON.stringify({ text, history: chat, known }) });
     wait.remove();
     if (r.rejected) {
-      addMsg('bad', T('Balasan ini TIDAK akan dikirim (', 'This reply will NOT be sent (') + r.rejected + '):\n\n' + r.reply);
+      addMsg('bad', T('Balasan ini tidak akan dikirim (', 'This reply will NOT be sent (') + r.rejected + '):\n\n' + r.reply);
     } else {
       addMsg('out', r.reply, r.photos, r.docs);
       for (const b of r.buy || []) addMsg('out', b.text);
@@ -1191,7 +1191,7 @@ function renderQs() {
   qsActive = Math.min(qsActive, Math.max(0, qsShown.length - 1));
   const list = $('qsList');
   if (!qsShown.length) {
-    list.replaceChildren(el('div', { className: 'qs-empty', textContent: T('Tidak ada yang cocok.', 'Nothing matches.') }));
+    list.replaceChildren(el('div', { className: 'qs-empty', textContent: T('Tidak ada hasil. Coba kata lain.', 'Nothing matches.') }));
     $('qsInput').removeAttribute('aria-activedescendant');
     return;
   }
@@ -1339,7 +1339,7 @@ const clock = (at) => new Date(at).toLocaleTimeString(locale(), { hour: '2-digit
 const dayLabel = (at) => new Date(at).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const int = (n) => Math.round(n).toLocaleString(locale());
 const usd = (n) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: n < 1 ? 4 : 2, maximumFractionDigits: n < 1 ? 4 : 2 });
-const idr = (n) => 'Rp ' + n.toLocaleString(locale(), { maximumFractionDigits: n < 100 ? 1 : 0 });
+const idr = (n) => 'Rp' + n.toLocaleString(locale(), { maximumFractionDigits: n < 100 ? 1 : 0 });
 const pct = (a, b) => (b ? Math.round((a * 100) / b) + '%' : '-');
 const emptyRow = (cols, text) => el('tr', {}, el('td', { colSpan: cols, style: 'color:var(--muted)', textContent: text }));
 /** Pesan error di dalam satu kartu (data kartu itu gagal dimuat); kartu lain tetap tampil. */
@@ -1723,17 +1723,17 @@ const FILTERS = () => [
 /** Arti tiap saringan (tooltip di saringan Percakapan dan chip tahap di Beranda). */
 const FILTER_HELP = () => ({
   semua: T('Semua pelanggan yang pernah chat.', 'Every customer who has chatted.'),
-  baru: T('Belum ada staf yang ikut. Bot masih melayani sendiri.', 'No staff member has stepped in. The bot handles the chat alone.'),
-  menunggu: T('Bot sudah menyerahkan chat ini ke tim, dan belum ada staf yang membalas. Pindah ke Dihubungi saat staf membalas atau menandai Sudah ditangani.',
+  baru: T('Belum ada staf yang ikut membalas. Bot masih melayani sendiri.', 'No staff member has stepped in. The bot handles the chat alone.'),
+  menunggu: T('Bot sudah meneruskan percakapan ini ke tim, dan belum ada staf yang membalas. Tahapnya pindah ke Dihubungi saat staf membalas atau menandainya sudah ditangani.',
     'The bot passed this chat to the team, and no staff member has replied yet. It moves to Contacted when staff reply or mark it as handled.'),
-  dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari web.', 'A staff member has replied to this customer, from the phone or the web.'),
-  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, karena bot tidak melihat pesanan di marketplace.',
+  dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari dashboard.', 'A staff member has replied to this customer, from the phone or the web.'),
+  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, karena bot tidak bisa melihat pesanan di marketplace.',
     'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, because the bot cannot see marketplace orders.'),
-  payment: T('Pelanggan sedang membayar atau sudah membayar. Hanya diubah staf.', 'The customer is paying or has paid. Only staff set this.'),
-  dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya diubah staf.', 'The goods are on the way to the customer. Only staff set this.'),
-  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Hanya diubah staf.', 'The order is complete: the customer received the goods. Only staff set this.'),
-  batal: T('Pelanggan tidak jadi membeli. Hanya diubah staf.', 'The customer did not buy. Only staff set this.'),
-  staf: T('Bukan tahap. Bot meminta bantuan staf dan belum ada staf yang membalas, di tahap apa pun. Hilang saat staf membalas, atau saat ditandai Sudah ditangani (mis. sudah ditelepon).',
+  payment: T('Pelanggan sedang membayar atau sudah membayar. Hanya staf yang mengubah tahap ini.', 'The customer is paying or has paid. Only staff set this.'),
+  dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya staf yang mengubah tahap ini.', 'The goods are on the way to the customer. Only staff set this.'),
+  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Hanya staf yang mengubah tahap ini.', 'The order is complete: the customer received the goods. Only staff set this.'),
+  batal: T('Pelanggan tidak jadi membeli. Hanya staf yang mengubah tahap ini.', 'The customer did not buy. Only staff set this.'),
+  staf: T('Ini bukan tahap. Bot meminta bantuan staf dan belum ada staf yang membalas, di tahap apa pun. Tanda ini hilang saat staf membalas, atau saat ditandai sudah ditangani (misalnya setelah pelanggan ditelepon).',
     'Not a stage. The bot asked staff for help and no staff member has replied yet, at any stage. It clears when staff reply, or when someone marks it as handled (for example after a phone call).'),
 });
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);
@@ -1783,12 +1783,12 @@ function renderLeads() {
   const head = el('tr', {}, el('th', { textContent: T('Pelanggan', 'Customer') }), el('th', { textContent: T('Tahap', 'Stage') }),
     ...fields.map((f) => el('th', { textContent: sentenceCase(f.label) })),
     el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
-    el('th', { textContent: T('Terakhir chat', 'Last message') }));
+    el('th', { textContent: T('Chat terakhir', 'Last message') }));
   const list = visibleLeads();
   const rows = list.map((c) => {
     // Menunggu jam tenang = bot tetap aktif di chat ini, hanya balasannya tertunda.
     const box = el('input', { type: 'checkbox', checked: !c.hold || c.hold === 'tenang' });
-    box.setAttribute('aria-label', T('Bot aktif di chat ini', 'Bot active in this chat'));
+    box.setAttribute('aria-label', T('Bot aktif di percakapan ini', 'Bot active in this chat'));
     box.addEventListener('change', async () => {
       if (box.checked && c.hold === 'berhenti' && !confirmOptOutResume()) {
         box.checked = false;
@@ -1797,7 +1797,7 @@ function renderLeads() {
       box.disabled = true;
       try {
         await api('leads/' + encodeURIComponent(c.phone) + '/bot', { method: 'POST', body: JSON.stringify({ mode: box.checked ? 'on' : 'off' }) });
-        toast(box.checked ? T('Chat ini dikembalikan ke bot.', 'This chat is handed back to the bot.') : T('Bot dijeda di chat ini.', 'The bot is paused in this chat.'));
+        toast(box.checked ? T('Percakapan ini dikembalikan ke bot.', 'This chat is handed back to the bot.') : T('Bot dijeda di percakapan ini.', 'The bot is paused in this chat.'));
       } catch (e) { toast(e.message, true); }
       await loadLeads();
     });
@@ -1825,7 +1825,7 @@ function renderLeads() {
     });
     return tr;
   });
-  const empty = r.rows.length ? T('Tidak ada yang cocok dengan pencarian atau saringan ini.', 'Nothing matches this search or filter.') : T('Belum ada percakapan.', 'No conversations yet.');
+  const empty = r.rows.length ? T('Tidak ada yang cocok dengan pencarian atau saringan ini. Coba kata lain atau pilih Semua.', 'Nothing matches this search or filter.') : T('Belum ada percakapan. Percakapan muncul di sini setelah pelanggan chat ke nomor bot.', 'No conversations yet.');
   $('leads').replaceChildren(el('thead', {}, head), el('tbody', {}, ...(rows.length ? rows : [emptyRow(fields.length + 6, empty)])));
   $('leadCount').textContent = list.length + T(' dari ', ' of ') + r.rows.length + T(' kontak', ' contacts');
   $('knownCount').textContent = profile.knownCount
@@ -1841,7 +1841,7 @@ $('leadExport').addEventListener('click', () => {
   const r = leadData;
   const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const lines = [[T('Nomor', 'Number'), ...r.fields.map((f) => sentenceCase(f.label)), T('Tahap', 'Stage'), T('Catatan', 'Note'), T('Ringkasan', 'Summary'), T('Lengkap', 'Complete'),
-    T('Perlu staf', 'Needs staff'), 'Bot', T('Terakhir chat', 'Last message')]];
+    T('Perlu staf', 'Needs staff'), 'Bot', T('Chat terakhir', 'Last message')]];
   for (const c of visibleLeads()) {
     lines.push([c.phone, ...r.fields.map((f) => c.lead[f.key] || ''), stageLabel(c.stage || 'baru'), c.note || '', c.summary || '', c.complete ? T('ya', 'yes') : T('tidak', 'no'),
       c.needsSales ? T('ya', 'yes') : '', botHeld(c.hold) ? T('diam', 'off') : T('aktif', 'on'), c.lastAt ? new Date(c.lastAt).toLocaleString(locale()) : '']);
@@ -1923,11 +1923,11 @@ function holdLabel(hold) {
   return hold === 'berhenti' ? T('minta tidak dihubungi', 'asked not to be contacted')
     : hold === 'admin' ? T('admin membalas', 'an admin replied')
     : hold === 'tombol' ? T('dijeda', 'paused')
-    : hold === 'tenang' ? T('menunggu jam tenang berakhir', 'waiting for quiet hours to end') : '';
+    : hold === 'tenang' ? T('menunggu jam tenang selesai', 'waiting for quiet hours to end') : '';
 }
 /** Pelanggan ini minta tidak dihubungi: menyalakan bot lagi berarti mengabaikan permintaannya. */
 function confirmOptOutResume() {
-  return confirm(T('Pelanggan ini minta tidak dihubungi lagi. Aktifkan bot lagi dan abaikan permintaannya?',
+  return confirm(T('Pelanggan ini minta tidak dihubungi lagi. Nyalakan bot lagi dan abaikan permintaan itu?',
     'This customer asked not to be contacted again. Turn the bot back on and ignore the request?'));
 }
 
@@ -1940,14 +1940,14 @@ function renderConvHead() {
   document.title = (name || c.phone) + ' · Alice AI';
   const [holdText, holdCls] = c.hold === 'berhenti' ? [T('Minta tidak dihubungi', 'Asked not to be contacted'), 'danger']
     : c.hold === 'admin' ? [T('Bot diam: admin membalas', 'Bot quiet: an admin replied'), 'warn']
-    : c.hold === 'tombol' ? [T('Bot dijeda di chat ini', 'Bot paused in this chat'), 'warn']
-    : c.hold === 'tenang' ? [T('Bot aktif: menunggu jam tenang berakhir', 'Bot active: waiting for quiet hours to end'), 'warn']
+    : c.hold === 'tombol' ? [T('Bot dijeda di percakapan ini', 'Bot paused in this chat'), 'warn']
+    : c.hold === 'tenang' ? [T('Bot aktif, menunggu jam tenang selesai', 'Bot active: waiting for quiet hours to end'), 'warn']
     : [T('Bot aktif', 'Bot active'), 'ok'];
   $('convHold').textContent = holdText + (c.needsSales ? T(' · perlu staf', ' · needs staff') : '');
   $('convHold').className = 'chip ' + (c.needsSales ? 'danger' : holdCls);
   const off = botHeld(c.hold);
-  withIcon($('convBot'), off ? 'play' : 'pause', c.hold === 'berhenti' ? T('Aktifkan bot lagi (abaikan permintaan berhenti)', 'Turn the bot back on (ignore the stop request)')
-    : off ? T('Aktifkan bot lagi', 'Turn the bot back on') : T('Jeda bot di chat ini', 'Pause the bot in this chat'));
+  withIcon($('convBot'), off ? 'play' : 'pause', c.hold === 'berhenti' ? T('Nyalakan bot lagi (abaikan permintaan berhenti)', 'Turn the bot back on (ignore the stop request)')
+    : off ? T('Nyalakan bot lagi', 'Turn the bot back on') : T('Jeda bot di percakapan ini', 'Pause the bot in this chat'));
   $('convHandled').hidden = !c.needsSales;
   if ($('convStage').options.length !== STAGES.length || $('convStage').dataset.lang !== lang) {
     $('convStage').replaceChildren(...STAGES.map((s) => el('option', { value: s, textContent: stageLabel(s) })));
@@ -1978,12 +1978,12 @@ function bubble(m, pending) {
     const p = pending.get(m.id);
     if (!p) meta.push(T('terkirim ✓', 'sent ✓'));
     else if (p.failed) { meta.push(T('gagal terkirim', 'not sent')); bad = true; }
-    else meta.push(p.attempts ? T('mencoba lagi…', 'retrying…') : T('menunggu terkirim…', 'waiting to send…'));
+    else meta.push(p.attempts ? T('mencoba lagi…', 'retrying…') : T('menunggu dikirim…', 'waiting to send…'));
   }
   // Pelanggan membalas pesan tertentu (fitur "balas" WhatsApp): kutipannya di atas, seperti di WhatsApp.
   const q = m.quote;
   const quote = q ? el('div', { className: 'quote' + (q.by === 'us' ? ' us' : '') },
-    el('b', { textContent: q.by === 'us' ? (profile.brand || T('Kita', 'Us')) : q.by === 'customer' ? T('Pelanggan', 'Customer') : T('Pesan sebelumnya', 'Earlier message') }),
+    el('b', { textContent: q.by === 'us' ? (profile.brand || T('Anda', 'Us')) : q.by === 'customer' ? T('Pelanggan', 'Customer') : T('Pesan sebelumnya', 'Earlier message') }),
     el('span', { textContent: (q.media ? '[' + q.media + '] ' : '') + (q.text || '') })) : null;
   return el('div', { className: 'bubble ' + m.dir }, quote, m.text, el('span', { className: 'meta' + (bad ? ' bad' : ''), textContent: meta.join(' · ') }));
 }
@@ -2062,7 +2062,7 @@ $('convBot').addEventListener('click', async () => {
   $('convBot').disabled = true;
   try {
     await api('leads/' + encodeURIComponent(conv.phone) + '/bot', { method: 'POST', body: JSON.stringify({ mode: on ? 'on' : 'off' }) });
-    toast(on ? T('Bot aktif lagi di chat ini.', 'The bot is active again in this chat.') : T('Bot dijeda di chat ini.', 'The bot is paused in this chat.'));
+    toast(on ? T('Bot aktif lagi di percakapan ini.', 'The bot is active again in this chat.') : T('Bot dijeda di percakapan ini.', 'The bot is paused in this chat.'));
     await pollConv();
   } catch (e) { toast(e.message, true); }
   $('convBot').disabled = false;
@@ -2128,7 +2128,7 @@ function askedLine(g) {
 
 function renderHandoffs() {
   const list = handoffData || [];
-  $('questionList').replaceChildren(...(list.length ? list.map(questionItem) : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang menunggu jawaban. Pertanyaan yang dioper bot ke staf muncul di sini.', 'No questions waiting for an answer. Questions the bot hands to staff appear here.') })]));
+  $('questionList').replaceChildren(...(list.length ? list.map(questionItem) : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang menunggu jawaban. Pertanyaan yang diteruskan bot ke staf akan muncul di sini.', 'No questions waiting for an answer. Questions the bot hands to staff appear here.') })]));
 }
 
 /**
@@ -2150,7 +2150,7 @@ function questionItem(g) {
   const long = (ctx.before || '').length + (ctx.reply || '').length > 220 || /\n/.test(ctx.reply || '');
   const more = long ? el('button', { type: 'button', className: 'linkbtn', textContent: T('Lihat semua', 'Show all') }) : null;
   const context = ctx.before || ctx.reply ? el('div', { className: 'qctx' },
-    ctx.before ? line(T('Bot sebelumnya: ', 'Bot before: '), ctx.before) : null,
+    ctx.before ? line(T('Pesan bot sebelumnya: ', 'Bot before: '), ctx.before) : null,
     ctx.reply ? line(T('Balasan bot: ', 'Bot reply: '), ctx.reply) : line(T('Balasan bot: ', 'Bot reply: '), T('(tidak ada)', '(none)')), more) : null;
   if (more) {
     more.addEventListener('click', () => {
@@ -2161,7 +2161,7 @@ function questionItem(g) {
 
   // "Ajari bot": tulis pelajarannya (atau minta usulan), coba dulu, lalu simpan.
   const lesson = el('textarea', { rows: 3, maxLength: 600,
-    placeholder: T('mis. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan. Pakai untuk menghitung kebutuhan udaranya.',
+    placeholder: T('Contoh: Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan bot soal pemakaian ruangan. Pakai untuk menghitung kebutuhan udaranya.',
       'e.g. Kalau pelanggan menyebut jumlah orang, itu jawaban atas pertanyaan kita soal pemakaian ruangan. Pakai untuk menghitung kebutuhan udaranya.') });
   lesson.setAttribute('aria-label', T('Pelajaran untuk bot', 'Lesson for the bot'));
   const why = el('p', { className: 'qwhy', hidden: true });
@@ -2171,7 +2171,7 @@ function questionItem(g) {
   const explain = el('button', { type: 'button', className: 'btn ghost' }, ico('sparkles'), T('Bantu jelaskan', 'Help me explain'));
   const cancel = el('button', { type: 'button', className: 'btn ghost' }, T('Batal', 'Cancel'));
   const panel = el('div', { className: 'qteach', hidden: true },
-    el('p', { className: 'help', textContent: T('Jelaskan arti pesan seperti ini dan yang harus dilakukan bot. Bot membacanya di tiap balasan, dan menerapkannya juga pada pesan yang mirip.',
+    el('p', { className: 'help', textContent: T('Jelaskan arti pesan seperti ini dan apa yang harus dilakukan bot. Bot membaca pelajaran di tiap balasan, dan juga menerapkannya pada pesan yang mirip.',
       'Explain what a message like this means and what the bot must do. The bot reads it on every reply, and applies it to similar messages too.') }),
     why, lesson, el('div', { className: 'acts' }, save, retry, explain, cancel), result);
   const answer = el('div', {}, box, el('div', { className: 'acts' }, add, teach, skip));
@@ -2183,8 +2183,8 @@ function questionItem(g) {
     busyBtns(true);
     try {
       const r = await api('handoffs/' + g.id + '/explain', { method: 'POST', body: '{}' });
-      const parts = [r.why ? T('Kenapa: ', 'Why: ') + r.why : ''];
-      if (!r.lesson) parts.push(T('Yang kurang adalah data dari tim. Lebih tepat pakai “Tambahkan ke pengetahuan”.', 'What is missing is data from the team. “Add to knowledge” fits better.'));
+      const parts = [r.why ? T('Alasannya: ', 'Why: ') + r.why : ''];
+      if (!r.lesson) parts.push(T('Bot kurang data dari tim, jadi lebih cocok pakai “Tambahkan ke pengetahuan”.', 'What is missing is data from the team. “Add to knowledge” fits better.'));
       else if (lesson.value.trim()) parts.push(T('Usulan pelajaran: ', 'Suggested lesson: ') + r.lesson);
       else lesson.value = r.lesson;
       why.textContent = parts.filter(Boolean).join(' ');
@@ -2200,7 +2200,7 @@ function questionItem(g) {
       const r = await api('handoffs/' + g.id + '/retry', { method: 'POST', body: JSON.stringify({ lesson: lesson.value }) });
       const passed = r.intent === 'handoff' || r.intent === 'human';
       const verdict = r.rejected ? el('span', { className: 'chip danger', textContent: T('Tidak akan dikirim: ', 'Would not be sent: ') + r.rejected })
-        : passed ? el('span', { className: 'chip warn', textContent: T('Masih diserahkan ke tim', 'Still passed to the team') })
+        : passed ? el('span', { className: 'chip warn', textContent: T('Masih diteruskan ke tim', 'Still passed to the team') })
           : el('span', { className: 'chip ok', textContent: T('Dijawab bot', 'Answered by the bot') });
       const files = [...(r.photos || []), ...(r.docs || [])].map((f) => f.name);
       result.replaceChildren(
@@ -2223,11 +2223,11 @@ function questionItem(g) {
 async function resolveQuestion(g, resolution, answer, buttons) {
   if (resolution === 'ditambahkan') {
     if (!answer.trim()) return toast(T('Tulis jawabannya dulu.', 'Write the answer first.'), true);
-    if (changed.has('notes')) return toast(T('Simpan dulu perubahan di "Pengetahuan lain" sebelum menambahkan jawaban.', 'Save your changes to "Other knowledge" before adding an answer.'), true);
+    if (changed.has('notes')) return toast(T('Simpan dulu perubahan di “Pengetahuan lain”, lalu tambahkan jawaban ini.', 'Save your changes to "Other knowledge" before adding an answer.'), true);
   }
   if (resolution === 'diajarkan') {
     if (!answer.trim()) return toast(T('Tulis pelajarannya dulu.', 'Write the lesson first.'), true);
-    if (changed.has('lessons')) return toast(T('Simpan dulu perubahan di "Pelajaran dari percakapan" sebelum menambahkan pelajaran.', 'Save your changes to "Lessons from real chats" before adding a lesson.'), true);
+    if (changed.has('lessons')) return toast(T('Simpan dulu perubahan di “Pelajaran dari percakapan”, lalu tambahkan pelajaran ini.', 'Save your changes to "Lessons from real chats" before adding a lesson.'), true);
   }
   for (const b of buttons) b.disabled = true;
   try {
@@ -2245,9 +2245,9 @@ async function resolveQuestion(g, resolution, answer, buttons) {
     renderHandoffs();
     if (homeData) renderHome();
     toast(resolution === 'ditambahkan'
-      ? T('Jawaban ditambahkan ke "Pengetahuan lain". Bot memakainya mulai pesan berikutnya.', 'Answer added to "Other knowledge". The bot uses it from the next message.')
+      ? T('Jawaban ditambahkan ke “Pengetahuan lain”. Bot memakainya mulai pesan berikutnya.', 'Answer added to "Other knowledge". The bot uses it from the next message.')
       : resolution === 'diajarkan'
-        ? T('Pelajaran disimpan di "Cara bot bicara". Bot memakainya mulai pesan berikutnya.', 'Lesson saved in "How the bot talks". The bot uses it from the next message.')
+        ? T('Pelajaran disimpan di “Cara bot bicara”. Bot memakainya mulai pesan berikutnya.', 'Lesson saved in "How the bot talks". The bot uses it from the next message.')
         : T('Pertanyaan diabaikan.', 'Question ignored.'));
   } catch (e) {
     toast(e.message, true);
@@ -2283,9 +2283,9 @@ async function loadHome() {
 /** Lama waktu dalam detik -> "45 dtk" / "3 mnt" / "1 jam". */
 function duration(s) {
   if (s === null || s === undefined) return '-';
-  if (s < 60) return s + T(' dtk', ' s');
-  if (s < 3600) return Math.round(s / 60) + T(' mnt', ' min');
-  return T('≥ 1 jam', '≥ 1 h');
+  if (s < 60) return s + T(' detik', ' s');
+  if (s < 3600) return Math.round(s / 60) + T(' menit', ' min');
+  return T('1 jam atau lebih', '≥ 1 h');
 }
 
 /**
@@ -2319,9 +2319,9 @@ function renderHome() {
     const week = m.days.reduce((a, x) => a + x.conversations, 0);
     const pctText = (a, b) => (loading ? '00%' : pct(a, b));
     $('tiles').replaceChildren(
-      tileNode(T('Percakapan hari ini', 'Conversations today'), loading ? '00' : int(m.today), T('Orang yang chat hari ini; ', 'People chatting today; ') + int(week) + T(' dalam 7 hari', ' in 7 days'), null, loading),
-      tileNode(T('Dioper ke staf', 'Handed to staff'), pctText(m.handed.count, m.handed.total), int(m.handed.count) + T(' dari ', ' of ') + int(m.handed.total) + T(' percakapan dalam 7 hari', ' conversations in 7 days'), meter(m.handed.count, m.handed.total, loading), loading),
-      tileNode(T('Waktu balas median', 'Median reply time'), loading ? T('00 dtk', '00 s') : duration(m.replyMedianSec), T('Dari pesan pelanggan sampai balasan bot', 'From a customer message to the bot\'s reply'), null, loading),
+      tileNode(T('Percakapan hari ini', 'Conversations today'), loading ? '00' : int(m.today), T('Orang yang chat hari ini, dan ', 'People chatting today; ') + int(week) + T(' dalam 7 hari terakhir', ' in 7 days'), null, loading),
+      tileNode(T('Diteruskan ke staf', 'Handed to staff'), pctText(m.handed.count, m.handed.total), int(m.handed.count) + T(' dari ', ' of ') + int(m.handed.total) + T(' percakapan dalam 7 hari', ' conversations in 7 days'), meter(m.handed.count, m.handed.total, loading), loading),
+      tileNode(T('Waktu balas (median)', 'Median reply time'), loading ? T('00 detik', '00 s') : duration(m.replyMedianSec), T('Dari pesan pelanggan sampai balasan bot', 'From a customer message to the bot\'s reply'), null, loading),
       tileNode(T('Follow-up dijawab', 'Follow-ups answered'), pctText(m.followup.answered, m.followup.sent), int(m.followup.answered) + T(' dari ', ' of ') + int(m.followup.sent) + T(' pelanggan membalas dalam 48 jam', ' customers replied within 48 h'), meter(m.followup.answered, m.followup.sent, loading), loading));
   }
 
@@ -2357,9 +2357,9 @@ function renderHome() {
     : qs.length ? qs.map((g) => el('div', { className: 'qrow' },
       el('a', { className: 'q link', href: pathOf('produk') + '#questions', textContent: g.question, title: g.question }),
       el('small', { textContent: g.count + '× · ' + when(g.last_at) })))
-    : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang dioper ke staf.', 'No questions handed to staff yet.') })]));
+    : [el('p', { className: 'help', textContent: T('Belum ada pertanyaan yang diteruskan ke staf.', 'No questions handed to staff yet.') })]));
   $('allQuestions').textContent = !loading && (handoffData || []).length > 5
-    ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan bot > Produk →', 'Open in Bot knowledge > Products →');
+    ? T('Lihat semua (', 'See all (') + handoffData.length + ') →' : T('Buka di Pengetahuan bot › Produk →', 'Open in Bot knowledge > Products →');
 }
 
 /** Isi kartu "Perlu perhatian" dari daftar pelanggan dan warning bot. */
@@ -2376,14 +2376,14 @@ function renderAttention() {
       } catch (e) { toast(e.message, true); done.disabled = false; }
     });
     const name = nameOf(c);
-    const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka chat', 'Open chat'));
+    const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka percakapan', 'Open chat'));
     rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
       el('td', {}, el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') })),
       el('td', { className: 'sum', textContent: c.summary || '-' }),
       el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
   }
   // Petunjuk satu baris di atas daftar, hanya kalau ada pelanggan yang menunggu staf.
-  $('attentionHelp').textContent = T('Pelanggan di bawah menanyakan hal yang harus dijawab staf. Buka chatnya, balas, lalu tandai sudah ditangani.',
+  $('attentionHelp').textContent = T('Pelanggan di bawah menanyakan hal yang harus dijawab staf. Buka percakapannya, balas, lalu tandai sudah ditangani.',
     'The customers below asked something that your staff must answer. Open the chat, reply, then mark it as handled.');
   $('attentionHelp').hidden = !rows.length;
   const day = Date.now() - 86400000;
@@ -2396,9 +2396,9 @@ function renderAttention() {
   if (mins !== null) {
     rows.unshift(el('tr', { className: 'stale' }, el('td', { textContent: T('sekarang', 'now') }),
       el('td', {}, el('span', { className: 'chip danger', textContent: T('Bot tidak melapor', 'Bot not reporting') })),
-      el('td', { colSpan: 2, textContent: T('Bot terakhir melapor ', 'The bot last reported ') + mins + T(' menit lalu. Kemungkinan bot mati atau mesinnya tidak tersambung internet.', ' minutes ago. It is probably stopped, or its machine is offline.') })));
+      el('td', { colSpan: 2, textContent: T('Bot terakhir melapor ', 'The bot last reported ') + mins + T(' menit lalu. Mungkin bot berhenti, atau servernya tidak tersambung ke internet.', ' minutes ago. It is probably stopped, or its machine is offline.') })));
   }
-  $('attention').replaceChildren(el('tbody', {}, ...(rows.length ? rows : [emptyRow(4, T('Tidak ada yang perlu perhatian.', 'Nothing needs attention.'))])));
+  $('attention').replaceChildren(el('tbody', {}, ...(rows.length ? rows : [emptyRow(4, T('Tidak ada yang perlu perhatian saat ini.', 'Nothing needs attention.'))])));
 }
 
 // ---------- warning & catatan error ----------
@@ -2445,7 +2445,7 @@ function renderAlerts(r) {
   const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
     el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? 'Error' : 'Warning' })),
     el('td', { className: 'mono', textContent: e.text })));
-  $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Isi', 'Message')),
+  $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Pesan', 'Message')),
     el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
 }
 
@@ -2522,7 +2522,7 @@ function renderUsage() {
 
   // Kotak angka: hari ini, seluruh rentang, dan rata-rata per hari dalam rentang.
   const total = sum(used);
-  const tile = (k, v, s) => tileNode(k, loading ? 'Rp 00.000' : v, s, null, loading);
+  const tile = (k, v, s) => tileNode(k, loading ? 'Rp00.000' : v, s, null, loading);
   const todaySum = sum(used.filter((d) => d.day === last));
   if (error) $('usageTiles').replaceChildren(el('div', { className: 'tile tile-err' }, errorNote(error)));
   else $('usageTiles').replaceChildren(
@@ -2545,7 +2545,7 @@ function renderUsage() {
   // Satu baris keterangan tarif dan kurs di bawah grafik (selama dimuat: kerangka sepanjang teks biasanya).
   if (loading) {
     host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note' },
-      skelText(T('Model gpt-4o-mini · tarif per 1 juta token: input $0.1500, dari cache $0.0750, output $0.6000 · kurs Rp 16.000 per USD',
+      skelText(T('Model gpt-4o-mini · tarif per 1 juta token: input $0.1500, dari cache $0.0750, output $0.6000 · kurs Rp16.000 per USD',
         'Model gpt-4o-mini · rates per 1M tokens: input $0.1500, cached $0.0750, output $0.6000 · exchange rate Rp 16.000 per USD'))));
   }
   if (loading || error) {
@@ -2556,7 +2556,7 @@ function renderUsage() {
   }
   if (u) {
     host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note', textContent: 'Model ' + u.model + T(' · tarif per 1 juta token: input ', ' · rates per 1M tokens: input ') + usd(price.in) +
-      T(', dari cache ', ', cached ') + usd(price.cached) + ', output ' + usd(price.out) + T(' · kurs Rp ', ' · exchange rate Rp ') + int(rate) + T(' per USD', ' per USD') }));
+      T(', dari cache ', ', cached ') + usd(price.cached) + ', output ' + usd(price.out) + T(' · kurs Rp', ' · exchange rate Rp ') + int(rate) + T(' per USD', ' per USD') }));
   }
 
   // Tampilan "Tabel" grafik biaya = tabel pemakaian lengkap (hari dengan pemakaian, terbaru di atas).
@@ -2583,8 +2583,8 @@ const WA_STATES = {
   pairing: () => [T('menunggu kode pairing', 'waiting for pairing code'), 'warn'],
   connected: () => [T('tersambung', 'connected'), 'ok'],
   disconnected: () => [T('terputus, menyambung lagi', 'disconnected, reconnecting'), 'warn'],
-  logged_out: () => [T('sesi dicabut dari HP', 'session removed on the phone'), 'danger'],
-  conflict: () => [T('sesi direbut sesi lain', 'session taken over'), 'danger'],
+  logged_out: () => [T('sesi diputus dari HP', 'session removed on the phone'), 'danger'],
+  conflict: () => [T('sesi diambil alih sesi lain', 'session taken over'), 'danger'],
   stopped: () => [T('bot berhenti', 'bot stopped'), 'danger'],
 };
 const waLabel = (s) => (WA_STATES[s] ? WA_STATES[s]()[0] : s || '-');
@@ -2609,10 +2609,10 @@ function renderStatus() {
     const cut = guard.indexOf(' · antiban: ');
     const own = cut >= 0 ? guard.slice(0, cut) : guard;
     const ab = cut >= 0 ? guard.slice(cut + ' · antiban: '.length) : '';
-    info = [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Kabar lead lewat WA ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
+    info = [[T('Jalur WhatsApp', 'WhatsApp channel'), st.transport], [T('Notifikasi lead lewat WhatsApp ke', 'Lead news on WA goes to'), st.sales || T('belum ada nomor', 'no number yet')],
       ['LLM', state.testReady ? T('siap', 'ready') : T('belum diatur (LLM_API_KEY di .env)', 'not set (LLM_API_KEY in .env)')],
-      [T('Transkripsi pesan suara', 'Voice note transcription'), st.channels && st.channels.stt ? T('siap', 'ready') : T('belum diatur di .env bot (STT_API_KEY)', 'not set in the bot\'s .env (STT_API_KEY)')],
-      [T('Yang dibalas', 'Who gets a reply'), st.onlyNumbers ? T('MODE UJI: hanya ', 'TEST MODE: only ') + st.onlyNumbers + T(' nomor', ' numbers') : T('semua nomor', 'every number')],
+      [T('Ubah pesan suara jadi teks', 'Voice note transcription'), st.channels && st.channels.stt ? T('siap', 'ready') : T('belum diatur di .env bot (STT_API_KEY)', 'not set in the bot\'s .env (STT_API_KEY)')],
+      [T('Yang dibalas', 'Who gets a reply'), st.onlyNumbers ? T('Mode uji: hanya ', 'TEST MODE: only ') + st.onlyNumbers + T(' nomor', ' numbers') : T('semua nomor', 'every number')],
       [T('Panggilan LLM hari ini', 'LLM calls today'), st.usage.calls + T(' dari batas ', ' of limit ') + st.usage.limit],
       [T('Pengaman nomor', 'Number safeguard'), own || (st.transport === 'baileys' ? T('belum dilaporkan bot', 'not reported by the bot yet') : T('tidak dipakai (Cloud API)', 'not used (Cloud API)'))],
       ['Antiban', ab || (st.transport === 'baileys' ? T('belum dilaporkan bot', 'not reported by the bot yet') : T('tidak dipakai (Cloud API)', 'not used (Cloud API)'))]];
@@ -2647,7 +2647,7 @@ function renderWaPending() {
     : WA_NEVER()));
 }
 /** Kaki kartu WhatsApp kalau bot proyek ini belum pernah melapor. */
-const WA_NEVER = () => T('Bot proyek ini belum pernah melapor. Di server, bot dinyalakan dalam ±1 menit setelah proyek dibuat.', 'This project\'s bot has never reported. On the server it starts within a minute after the project is created.');
+const WA_NEVER = () => T('Bot proyek ini belum pernah melapor. Di server, bot menyala sekitar 1 menit setelah proyek dibuat.', 'This project\'s bot has never reported. On the server it starts within a minute after the project is created.');
 
 function renderWa() {
   if (waPending || (!wa && waError)) return renderWaPending();
@@ -2725,7 +2725,7 @@ $('waReset').addEventListener('click', async () => {
   if (!confirm(T('Putuskan WhatsApp proyek ini dan tautkan dari awal? Bot berhenti membalas sampai ditautkan lagi.', 'Disconnect this project\'s WhatsApp and link it again? The bot stops replying until it is linked again.'))) return;
   try {
     await api('wa/reset', { method: 'POST' });
-    toast(T('Sesi lama diputus. QR baru muncul di sini sebentar lagi.', 'Old session disconnected. A new QR code appears here shortly.'));
+    toast(T('Sesi lama sudah diputus. Kode QR baru akan muncul di sini sebentar lagi.', 'Old session disconnected. A new QR code appears here shortly.'));
   } catch (e) { toast(e.message, true); }
   void loadWa();
 });
@@ -2745,7 +2745,7 @@ function renderStrip() {
   else if (w.state === 'connected') out.push(chip('ok', T('WhatsApp tersambung', 'WhatsApp connected'), waHref, 'smartphone'));
   else out.push(chip('warn', T('WhatsApp belum tertaut', 'WhatsApp not linked') + ' · ' + waLabel(w.state), waHref, 'smartphone'));
   if (p && p.paused) out.push(chip('danger', T('Bot dijeda', 'Bot paused'), pathOf('pengaturan'), 'pause-circle'));
-  if (st && st.onlyNumbers) out.push(chip('warn', T('MODE UJI', 'TEST MODE') + ' · ' + st.onlyNumbers + T(' nomor', ' numbers'), pathOf('lanjutan'), 'flask'));
+  if (st && st.onlyNumbers) out.push(chip('warn', T('Mode uji', 'TEST MODE') + ' · ' + st.onlyNumbers + T(' nomor', ' numbers'), pathOf('lanjutan'), 'flask'));
   if (!state.testReady) out.push(chip('warn', T('LLM belum diatur', 'LLM not configured'), waHref, 'alert'));
   const month = state.month || { idr: 0 };
   // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
@@ -2799,7 +2799,7 @@ for (const id of ['projName', 'projTransport', 'projEnabled']) {
 $('projPaused').addEventListener('change', async () => {
   const paused = $('projPaused').checked;
   try {
-    await putProject({ paused }, paused ? T('Bot dijeda untuk semua chat.', 'The bot is paused for all chats.') : T('Bot aktif lagi untuk semua chat.', 'The bot is active again for all chats.'));
+    await putProject({ paused }, paused ? T('Bot dijeda di semua percakapan.', 'The bot is paused for all chats.') : T('Bot aktif lagi di semua percakapan.', 'The bot is active again for all chats.'));
   } catch (e) { toast(e.message, true); renderProject(); }
 });
 
@@ -2836,7 +2836,7 @@ $('newProjectForm').addEventListener('submit', async (e) => {
     $('newProject').classList.remove('on');
     $('newProjectForm').reset();
     projects = (await api('projects')).projects;
-    toast(T('Proyek dibuat. Tautkan WhatsApp-nya di sini.', 'Project created. Link its WhatsApp here.'));
+    toast(T('Proyek sudah dibuat. Sekarang tautkan WhatsApp-nya di halaman ini.', 'Project created. Link its WhatsApp here.'));
     dirty = false;
     changed.clear();
     projectDirty = false;
@@ -3100,7 +3100,7 @@ function show(next, r = {}) {
     renderUsage();
     void loadAdvanced();
   }
-  if (page === 'notfound') $('notFoundText').textContent = r.text || T('Alamat ini tidak ada di dashboard.', 'This address does not exist in the dashboard.');
+  if (page === 'notfound') $('notFoundText').textContent = r.text || T('Alamat ini tidak ada di dashboard. Pilih menu di samping, atau kembali ke beranda.', 'This address does not exist in the dashboard.');
   renderToc();
   // Tautan ke bagian tertentu (#cost, #questions): buka lipatannya dan gulung ke sana.
   const target = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
@@ -3121,7 +3121,7 @@ async function go(url, opts = {}) {
   if (path === '/' && project) path = pathOf('beranda');
   const r = parseRoute(path);
   if (r.project && project && r.project !== project && dirty &&
-    !confirm(T('Ada perubahan yang belum disimpan. Pindah proyek tanpa menyimpan?', 'There are unsaved changes. Switch project without saving?'))) return;
+    !confirm(T('Ada perubahan yang belum disimpan. Kalau pindah proyek sekarang, perubahan itu hilang. Tetap pindah?', 'There are unsaved changes. Switch project without saving?'))) return;
   const target = path + u.search + u.hash;
   // Alamat yang sama tidak menambah riwayat (mis. klik menu yang sedang dibuka).
   const same = target === location.pathname + location.search + location.hash;
@@ -3132,7 +3132,7 @@ async function go(url, opts = {}) {
 window.addEventListener('popstate', () => {
   const r = parseRoute(location.pathname);
   if (r.project && project && r.project !== project && dirty &&
-    !confirm(T('Ada perubahan yang belum disimpan. Pindah proyek tanpa menyimpan?', 'There are unsaved changes. Switch project without saving?'))) {
+    !confirm(T('Ada perubahan yang belum disimpan. Kalau pindah proyek sekarang, perubahan itu hilang. Tetap pindah?', 'There are unsaved changes. Switch project without saving?'))) {
     history.pushState(null, '', currentUrl);
     return;
   }
@@ -3217,7 +3217,7 @@ async function route() {
     if (r.page !== 'beranda' && r.page !== 'percakapan') void loadLeads();
   }
   renderProjects();
-  if (!exists) show('notfound', { text: T('Proyek "', 'Project "') + r.project + T('" tidak ada. Pilih proyek di atas.', '" does not exist. Choose a project above.') });
+  if (!exists) show('notfound', { text: T('Proyek “', 'Project "') + r.project + T('” tidak ditemukan. Pilih proyek lain di menu samping.', '" does not exist. Choose a project above.') });
   else show(r.page, r);
   currentUrl = location.pathname + location.search + location.hash;
 }
@@ -3287,9 +3287,9 @@ async function save(quiet = false) {
     }
     setDirty(false);
     renderAll();
-    if (!quiet) toast(T('Tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.') +
+    if (!quiet) toast(T('Perubahan tersimpan. Bot memakai pengaturan baru mulai pesan berikutnya.', 'Saved. The bot uses the new settings from the next message.') +
       (r.autoPdf ? ' ' + r.autoPdf + T(' produk baru otomatis dipasangi PDF.', ' new products were given a PDF automatically.') : '') +
-      (moved ? T(' Jalur WhatsApp diganti: bot menyala ulang di jalur baru.', ' WhatsApp channel changed: the bot restarts on the new channel.') : ''));
+      (moved ? T(' Jalur WhatsApp diganti, jadi bot menyala ulang di jalur baru.', ' WhatsApp channel changed: the bot restarts on the new channel.') : ''));
   } catch (e) {
     toast(e.message, true);
     setDirty(true);
@@ -3305,7 +3305,7 @@ $('discard').addEventListener('click', async () => {
     profile = state.profile;
     setDirty(false);
     renderAll();
-    toast(T('Perubahan dibatalkan.', 'Changes discarded.'));
+    toast(T('Perubahan dibuang.', 'Changes discarded.'));
   } catch (e) { toast(e.message, true); }
   $('discard').disabled = false;
 });
