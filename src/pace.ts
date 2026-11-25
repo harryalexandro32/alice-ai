@@ -35,7 +35,7 @@ const PAUSE_MIN_MS = 800;
 const PAUSE_MAX_MS = 2500;
 /** Batas lama mengetik satu pesan. */
 export const TYPING_MIN_MS = 1500;
-export const TYPING_MAX_MS = 15_000;
+export const TYPING_MAX_MS = 6000;
 /** WhatsApp menghapus "sedang mengetik…" setelah ±10 detik: kirim ulang tiap 7 detik. */
 export const PRESENCE_REFRESH_MS = 7000;
 
@@ -90,7 +90,7 @@ const drawCps = (): number => between(CPS_MIN, CPS_MAX);
 
 /**
  * Urutan mengetik untuk pesan sepanjang `textLength`: potongan 90 huruf, di
- * antaranya jeda berpikir 0,8–2,5 detik. Totalnya dijepit 1,5–15 detik.
+ * antaranya jeda berpikir 0,8–2,5 detik. Totalnya dijepit 1,5–6 detik.
  */
 function typingSteps(textLength: number, cps: number): TypingStep[] {
   const len = Math.max(0, Math.round(textLength));
