@@ -81,7 +81,7 @@ export async function closeDb(): Promise<void> {
 export async function clearDb(): Promise<void> {
   await db().execute(
     sql.raw(
-      'TRUNCATE contacts, messages, handoffs, pauses, bot_off, human_seen, alerts, errors, outbox, llm_usage, project_status, profiles, projects RESTART IDENTITY CASCADE'
+      'TRUNCATE contacts, messages, handoffs, pauses, bot_off, human_seen, alerts, errors, outbox, llm_usage, track_usage, project_status, profiles, projects RESTART IDENTITY CASCADE'
     )
   );
 }

@@ -83,6 +83,10 @@ const base = {
   llmPriceCached: num('LLM_PRICE_CACHED', 0.006),
   llmPriceOut: num('LLM_PRICE_OUT', 1.2),
   usdIdr: num('USD_IDR', 16_500),
+  // Pelacakan resi lewat Binderbyte (opsional). Kosong = tanpa cek status otomatis.
+  binderbyteKey: str('BINDERBYTE_API_KEY'),
+  // Paling banyak sekian cek resi otomatis per proyek per hari (tombol "Cek resi" tidak dihitung).
+  trackDailyMax: num('TRACK_DAILY_MAX', 500),
 
   // Follow-up dikirim setelah pelanggan diam selama waktu yang diacak di antara
   // dua angka ini (seperti jeda balasan), supaya tidak selalu tepat di jam yang sama.

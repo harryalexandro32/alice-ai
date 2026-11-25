@@ -12,17 +12,18 @@
  * dikumpulkan ditentukan profil bisnis, bukan skema.
  */
 
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql } from 'drizzle-orm';
 
+import { now } from './clock';
 import { db } from './db';
 import {
-  alerts, botOff, contacts, errors, handoffs, humanSeen, llmUsage, messages, outbox, pauses, profiles, projects, projectStatus,
-  type PairingRequest, type Project, type ProjectStatus,
+  alerts, botOff, contacts, errors, handoffs, humanSeen, llmUsage, messages, outbox, pauses, profiles, projects, projectStatus, trackUsage,
+  type PairingRequest, type Project, type ProjectStatus, type ShipEvent,
 } from './db/schema';
 import { currentProject } from './project';
 import type { Quote } from './transport/types';
 
-export type { PairingRequest, Project, ProjectStatus };
+export type { PairingRequest, Project, ProjectStatus, ShipEvent };
 
 export type Dir = 'in' | 'out' | 'human';
 export type FollowupState = 'idle' | 'pending';
@@ -30,8 +31,9 @@ export type FollowupState = 'idle' | 'pending';
  * Tahap pipeline lead. Yang berubah otomatis: "baru" -> "menunggu" (bot
  * menyerahkan chat ke tim), "baru"/"menunggu" -> "dihubungi" (manusia membalas
  * atau menandai sudah ditangani), dan "baru"/"menunggu"/"dihubungi" -> "link"
- * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis. Tahap pesanan
- * (payment, dikirim, selesai) dan batal hanya diubah staf.
+ * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis. "payment" dan
+ * "batal" hanya diubah staf; "dikirim" dan "selesai" diubah staf atau oleh
+ * pelacakan resi (src/tracking.ts).
  */
 export const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'payment', 'dikirim', 'selesai', 'batal'] as const;
 export type Stage = (typeof STAGES)[number];
@@ -69,6 +71,24 @@ export interface Contact {
   deferred_until: number | null;
   /** Kapan pelanggan minta tidak dihubungi lagi (ms), atau null. */
   opted_out_at: number | null;
+  /** Nomor pesanan marketplace atau nomor invoice, atau null. */
+  order_ref: string | null;
+  /** Nomor resi pengiriman, atau null. */
+  awb: string | null;
+  /** Kode kurir Binderbyte (lihat COURIERS di src/tracking.ts), atau null. */
+  courier: string | null;
+  /** Kapan resi terakhir diisi atau diganti (ms), atau null. */
+  awb_at: number | null;
+  /** Status kurir dari pelacakan terakhir yang berhasil, apa adanya, atau null. */
+  ship_status: string | null;
+  /** Riwayat perjalanan paket, terbaru dulu (maks. 20), atau null. */
+  ship_history: ShipEvent[] | null;
+  /** Kapan resi terakhir dicek, berhasil atau error (ms), atau null. */
+  ship_checked_at: number | null;
+  /** Pesan error dari pengecekan terakhir yang gagal; null setelah berhasil. */
+  ship_error: string | null;
+  /** Fase dari status kurir saat dicek (lihat phaseOf di src/tracking.ts), atau null. */
+  ship_phase: string | null;
 }
 
 /** sales = lead dan "butuh staf"; reply = balasan dari dashboard; test = pesan tes ke satu penerima notifikasi. */
@@ -89,7 +109,8 @@ function toContact(r: typeof contacts.$inferSelect | undefined): Contact | undef
   const { project: _project, ...rest } = r;
   // Baris rusak diperlakukan sebagai belum ada data, bukan bikin bot mati.
   const lead = rest.lead && typeof rest.lead === 'object' ? rest.lead : {};
-  return { ...rest, lead, last_dir: rest.last_dir as Dir, followup_state: rest.followup_state as FollowupState, stage: rest.stage as Stage };
+  const ship_history = Array.isArray(rest.ship_history) ? rest.ship_history : null;
+  return { ...rest, lead, ship_history, last_dir: rest.last_dir as Dir, followup_state: rest.followup_state as FollowupState, stage: rest.stage as Stage };
 }
 
 export async function getContact(phone: string): Promise<Contact | undefined> {
@@ -111,6 +132,7 @@ const UPDATABLE = new Set<keyof Contact>([
   'address', 'lead', 'needs_sales', 'last_inbound_at', 'last_dir', 'last_out_text',
   'followup_state', 'followup_total', 'lead_sent_at', 'handoff_sent_at', 'summary', 'wa_name', 'handled_at', 'pending_off', 'stage', 'note',
   'deferred_until', 'opted_out_at',
+  'order_ref', 'awb', 'courier', 'awb_at', 'ship_status', 'ship_history', 'ship_checked_at', 'ship_error', 'ship_phase',
 ]);
 
 export async function updateContact(phone: string, patch: Partial<Contact>): Promise<Contact> {
@@ -496,10 +518,161 @@ export async function resolveHandoffs(ids: number[], resolution: 'ditambahkan' |
     .where(and(eq(handoffs.project, pid()), inArray(handoffs.id, ids)));
 }
 
-/** Ubah tahap pipeline dan/atau catatan satu kontak. False kalau kontaknya tidak ada. */
-export async function setStageNote(phone: string, patch: { stage?: Stage; note?: string | null }): Promise<Contact | undefined> {
-  if (!(await getContact(phone))) return undefined;
-  return updateContact(phone, patch);
+/** Isian staf untuk satu kontak: tahap, catatan, nomor pesanan, resi, kurir (null = kosongkan). */
+export interface StaffPatch {
+  stage?: Stage;
+  note?: string | null;
+  order_ref?: string | null;
+  awb?: string | null;
+  courier?: string | null;
+}
+
+/** Hasil pelacakan dikosongkan: resi atau kurirnya berganti, jadi status lama tidak berlaku lagi. */
+const SHIP_RESET = { ship_status: null, ship_history: null, ship_checked_at: null, ship_error: null, ship_phase: null } as const;
+
+/**
+ * Ubah tahap pipeline, catatan, dan/atau data pesanan satu kontak. Undefined
+ * kalau kontaknya tidak ada. Resi berganti (termasuk dikosongkan): `awb_at`
+ * diisi ulang dan hasil pelacakan dikosongkan. Hanya kurir yang berganti
+ * padahal resi ada: sama, supaya resi lama yang kurirnya baru dibetulkan staf
+ * dicek lagi selama 30 hari.
+ */
+export async function setStageNote(phone: string, patch: StaffPatch, at = now()): Promise<Contact | undefined> {
+  const c = await getContact(phone);
+  if (!c) return undefined;
+  const set: Partial<Contact> = { ...patch };
+  const awbChanged = 'awb' in patch && (patch.awb ?? null) !== c.awb;
+  const courierChanged = 'courier' in patch && (patch.courier ?? null) !== c.courier;
+  if (awbChanged) Object.assign(set, { awb_at: patch.awb ? at : null }, SHIP_RESET);
+  else if (courierChanged && c.awb) Object.assign(set, { awb_at: at }, SHIP_RESET);
+  return updateContact(phone, set);
+}
+
+/** Isian pesanan dari chat pelanggan (src/flow.ts captureOrder). */
+export interface OrderFill {
+  order_ref?: string;
+  awb?: string;
+  courier?: string;
+}
+
+/**
+ * Isi nomor pesanan, resi, dan kurir dari chat, hanya kalau kolomnya di
+ * database masih kosong, dengan UPDATE bersyarat per kolom: isian staf yang
+ * masuk sesaat sebelumnya tidak ditimpa. Resi yang diisi: `awb_at` = `at` dan
+ * hasil pelacakan dikosongkan. Kurir hanya diisi kalau resi di database sama
+ * dengan `fill.awb` (resi yang baru diisi atau yang sudah tersimpan); tanpa
+ * `fill.awb` kurir tidak diisi. Mengembalikan kontak sesudahnya.
+ */
+export async function fillOrder(phone: string, fill: OrderFill, at: number): Promise<Contact> {
+  const where = (...cond: ReturnType<typeof eq>[]) => and(eq(contacts.project, pid()), eq(contacts.phone, phone), ...cond);
+  if (fill.order_ref) {
+    await db().update(contacts).set({ order_ref: fill.order_ref }).where(where(isNull(contacts.order_ref)));
+  }
+  if (fill.awb) {
+    await db().update(contacts).set({ awb: fill.awb, awb_at: at, ...SHIP_RESET }).where(where(isNull(contacts.awb)));
+  }
+  if (fill.courier && fill.awb) {
+    await db().update(contacts).set({ courier: fill.courier }).where(where(isNull(contacts.courier), eq(contacts.awb, fill.awb)));
+  }
+  return (await getContact(phone)) as Contact;
+}
+
+/** Resi, kurir, dan `awb_at` yang dicek; hasil pelacakan hanya berlaku kalau ketiganya di database masih sama. */
+export interface TrackExpect {
+  awb: string;
+  courier: string;
+  awb_at: number | null;
+}
+
+/** Syarat WHERE: resi, kurir, dan `awb_at` di database sama dengan `expect`. */
+function sameAwb(expect: TrackExpect) {
+  return and(
+    eq(contacts.awb, expect.awb),
+    eq(contacts.courier, expect.courier),
+    sql`${contacts.awb_at} is not distinct from ${expect.awb_at}::bigint`,
+  );
+}
+
+/**
+ * Naikkan tahap ke `to` hanya kalau tahap di database saat ini salah satu dari
+ * `from`, dalam satu UPDATE bersyarat. Perubahan staf yang terjadi sementara
+ * itu (misalnya "batal") tidak ditimpa. Dengan `expect`: hanya kalau resi,
+ * kurir, dan `awb_at` di database masih sama (staf bisa menggantinya sesaat
+ * sebelumnya). True kalau tahapnya berubah.
+ */
+export async function advanceStage(phone: string, from: readonly Stage[], to: Stage, expect?: TrackExpect): Promise<boolean> {
+  if (!from.length) return false;
+  const rows = await db()
+    .update(contacts)
+    .set({ stage: to })
+    .where(and(
+      eq(contacts.project, pid()),
+      eq(contacts.phone, phone),
+      inArray(contacts.stage, [...from]),
+      expect ? sameAwb(expect) : undefined,
+    ))
+    .returning({ phone: contacts.phone });
+  return rows.length > 0;
+}
+
+/**
+ * Simpan hasil pelacakan hanya kalau resi, kurir, dan `awb_at` di database
+ * masih sama dengan yang dicek, dalam satu UPDATE bersyarat. Staf bisa
+ * mengganti resi selama menunggu jawaban kurir; hasil untuk resi lama tidak
+ * boleh menempel di resi baru. True kalau barisnya berubah.
+ */
+export async function saveTracking(phone: string, expect: TrackExpect, patch: Partial<Contact>): Promise<boolean> {
+  const set = Object.fromEntries(Object.entries(patch).filter(([k]) => UPDATABLE.has(k as keyof Contact)));
+  if (!Object.keys(set).length) return false;
+  const rows = await db()
+    .update(contacts)
+    .set(set)
+    .where(and(eq(contacts.project, pid()), eq(contacts.phone, phone), sameAwb(expect)))
+    .returning({ phone: contacts.phone });
+  return rows.length > 0;
+}
+
+/** Resi dilacak paling lama sekian lama sejak diisi. */
+export const TRACK_WINDOW_MS = 30 * 24 * 3_600_000;
+/** Satu resi dicek paling sering sekali dalam sekian lama. */
+export const TRACK_EVERY_MS = 30 * 60_000;
+/** Pengecekan terakhir error atau statusnya bermasalah: dicek lagi paling cepat sekian lama kemudian (hemat saldo Binderbyte). */
+export const TRACK_RETRY_MS = 6 * 3_600_000;
+
+/**
+ * Kontak yang resinya perlu dicek sekarang: resi dan kurir terisi, tahap belum
+ * selesai/batal, resi diisi dalam 30 hari terakhir, dan belum dicek dalam 30
+ * menit terakhir (6 jam kalau pengecekan terakhir error atau statusnya
+ * bermasalah). Yang paling lama tidak dicek dulu. Jeda 6 jam ada di SQL,
+ * bukan di JS: kalau tidak, baris bermasalah memenuhi batas `limit` dan resi
+ * lain tidak pernah dicek.
+ */
+export async function trackingCandidates(at: number, limit: number): Promise<Contact[]> {
+  const rows = await db()
+    .select()
+    .from(contacts)
+    .where(and(
+      eq(contacts.project, pid()),
+      isNotNull(contacts.awb),
+      isNotNull(contacts.courier),
+      notInArray(contacts.stage, ['selesai', 'batal']),
+      gte(contacts.awb_at, at - TRACK_WINDOW_MS),
+      or(
+        isNull(contacts.ship_checked_at),
+        and(
+          isNull(contacts.ship_error),
+          or(isNull(contacts.ship_phase), ne(contacts.ship_phase, 'problem')),
+          lt(contacts.ship_checked_at, at - TRACK_EVERY_MS),
+        ),
+        and(
+          or(isNotNull(contacts.ship_error), eq(contacts.ship_phase, 'problem')),
+          lt(contacts.ship_checked_at, at - TRACK_RETRY_MS),
+        ),
+      ),
+    ))
+    .orderBy(sql`${contacts.ship_checked_at} asc nulls first`, contacts.phone)
+    .limit(limit);
+  return rows.map((r) => toContact(r) as Contact);
 }
 
 // ---------------------------------------------------------------------------
@@ -643,6 +816,25 @@ export async function usageDays(n: number): Promise<UsageDay[]> {
     .where(eq(llmUsage.project, pid()))
     .orderBy(desc(llmUsage.day))
     .limit(n);
+}
+
+/** Jumlah cek resi otomatis proyek ini pada `day` (YYYY-MM-DD, tanggal lokal); 0 kalau belum ada. */
+export async function trackUsageToday(day: string): Promise<number> {
+  const [r] = await db()
+    .select({ n: trackUsage.n })
+    .from(trackUsage)
+    .where(and(eq(trackUsage.project, pid()), eq(trackUsage.day, day)));
+  return r?.n ?? 0;
+}
+
+/** Tambah satu cek resi otomatis pada `day`; mengembalikan jumlah sesudahnya. */
+export async function bumpTrackUsage(day: string): Promise<number> {
+  const [r] = await db()
+    .insert(trackUsage)
+    .values({ project: pid(), day, n: 1 })
+    .onConflictDoUpdate({ target: [trackUsage.project, trackUsage.day], set: { n: sql`${trackUsage.n} + 1` } })
+    .returning({ n: trackUsage.n });
+  return r?.n ?? 0;
 }
 
 // ---------------------------------------------------------------------------

@@ -222,6 +222,22 @@
               <button class="btn ghost" type="button" id="convHandled"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span data-en="Mark as handled">Tandai sudah ditangani</span></button>
             </div>
             <label class="f" style="margin:12px 0 0"><span data-en="Note">Catatan</span><textarea rows="2" id="convNote" placeholder="Catatan untuk tim, misalnya minta penawaran hari Senin" data-en-ph="Note for the team, e.g. wants a quote on Monday"></textarea><small id="convNoteState"></small></label>
+            <div class="order" id="convOrder">
+              <div class="order-row">
+                <label class="f"><span data-en="Order number">Nomor pesanan</span><input type="text" id="orderRef" maxlength="60" autocomplete="off" placeholder="Dari Tokopedia atau Shopee" data-en-ph="From Tokopedia or Shopee"></label>
+                <label class="f"><span data-en="Tracking number">Nomor resi</span><input type="text" id="orderAwb" maxlength="40" autocomplete="off"></label>
+                <label class="f"><span data-en="Courier">Kurir</span><select id="orderCourier"></select></label>
+              </div>
+              <small class="help" id="orderState"></small>
+              <div class="order-row">
+                <button class="btn ghost sm" type="button" id="orderTrack"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Check tracking">Cek resi</span></button>
+                <span class="chip" id="orderStatus"></span>
+                <span class="help" id="orderChecked"></span>
+                <span class="order-links" id="orderLinks"></span>
+              </div>
+              <p class="help" id="orderOff" hidden data-en="Automatic tracking is not set up yet (BINDERBYTE_API_KEY). The links beside it still work.">Pelacakan otomatis belum diatur (BINDERBYTE_API_KEY). Tautan di samping tetap bisa dipakai.</p>
+              <ul class="order-hist" id="orderHistory"></ul>
+            </div>
           </div>
           <div class="cardfoot" id="convLead"></div>
         </div>

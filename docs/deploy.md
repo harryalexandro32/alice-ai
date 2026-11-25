@@ -23,7 +23,9 @@ pemilik ──▶ Vercel  https://alice.lukicenturi.com  (hanya meneruskan, tanp
   sendiri; keadaan bot (WhatsApp, QR, kode pairing, jatah LLM) dibaca dari tabel `project_status`
   yang ditulis tiap bot tiap 30 detik.
 - **`.env`** hanya berisi yang dipakai bersama: `DATABASE_URL`, `LLM_*`, `ADMIN_PASSWORD`,
-  `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_ORIGINS`, `DATA_DIR`, `BOT_TZ`, STT, `LOG_*`.
+  `ADMIN_PORT`, `ADMIN_HOST`, `ADMIN_ORIGINS`, `DATA_DIR`, `BOT_TZ`, STT, `LOG_*`, dan
+  `BINDERBYTE_API_KEY` (opsional: pelacakan resi otomatis; kosong = tanpa cek status kurir) dan
+  `TRACK_DAILY_MAX` (opsional: batas cek resi otomatis per proyek per hari, bawaan 500).
   Jalur WhatsApp, nomor bot, penerima notifikasi, mode uji, dan follow-up diatur per proyek di dashboard.
 - **Vercel** hanya memberi alamat `alice.lukicenturi.com`: `vercel.json` meneruskan semua
   permintaan ke server. Karena itu `.env` berisi `ADMIN_ORIGINS=https://alice.lukicenturi.com`, dan

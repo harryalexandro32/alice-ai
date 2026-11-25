@@ -1235,6 +1235,50 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(B))?.stage, 'menunggu');
   }],
 
+  ['nomor pesanan dan resi dari chat dicatat', async () => {
+    await say('halo');
+    await say('pesanan saya 576123456789012345 sudah dibayar ya');
+    let c = await getContact(A);
+    assert.equal(c?.order_ref, '576123456789012345');
+    assert.equal(c?.stage, 'baru', 'tahap tidak diubah');
+    assert.equal(c?.awb, null, 'angka tanpa kata resi bukan resi');
+
+    advance(MINUTE);
+    // Sisa pengecekan lama (tanpa resi) tidak boleh menunda pengecekan resi baru.
+    await updateContact(A, { ship_checked_at: now() - MINUTE, ship_status: 'DELIVERED', ship_error: 'lama', ship_phase: 'delivered' });
+    await say('resi J&T: JP1234567890');
+    c = await getContact(A);
+    assert.deepEqual([c?.awb, c?.courier, c?.awb_at], ['JP1234567890', 'jnt', now()]);
+    assert.deepEqual([c?.ship_checked_at, c?.ship_status, c?.ship_error, c?.ship_phase], [null, null, null, null], 'hasil pelacakan lama dikosongkan');
+    assert.equal(c?.stage, 'baru');
+
+    // Yang sudah terisi tidak ditimpa tangkapan berikutnya.
+    await say('eh salah, nomornya 577999999999999999, resi JNE: CGK0123456789');
+    c = await getContact(A);
+    assert.deepEqual([c?.order_ref, c?.awb, c?.courier], ['576123456789012345', 'JP1234567890', 'jnt']);
+
+    // Saat admin membalas (bot diam), nomornya tetap dicatat.
+    const B = '+6281211110002';
+    await say('halo', B);
+    await handleHumanReply({ address: B, text: 'Halo pak, dengan saya Rina' });
+    const before = sent.length;
+    await say('no. resi: tkp01-abc1234 ya kak, invoice INV/20261120/MPL/1234567890', B);
+    assert.equal(sent.length, before, 'bot tetap diam');
+    c = await getContact(B);
+    assert.deepEqual([c?.order_ref, c?.awb, c?.courier], ['INV/20261120/MPL/1234567890', 'TKP01-ABC1234', 'kurir_tokopedia']);
+
+    // Resi tersimpan tanpa kurir: tebakan kurir dari resi lain tidak dipakai, dari resi yang sama dipakai.
+    const D = '+6281211110005';
+    await say('halo', D);
+    await updateContact(D, { awb: 'JP1234567890', awb_at: now() });
+    await say('resi JNE: CGK0123456789 itu punya teman', D);
+    c = await getContact(D);
+    assert.deepEqual([c?.awb, c?.courier], ['JP1234567890', null], 'kurir resi lain tidak menempel');
+    await say('resi J&T JP1234567890', D);
+    c = await getContact(D);
+    assert.deepEqual([c?.awb, c?.courier], ['JP1234567890', 'jnt']);
+  }],
+
   ['dioper ke tim: tahap "baru" jadi "menunggu"; balasan admin, "sudah ditangani", atau tautan beli memindahkannya', async () => {
     // Pertanyaan biasa: tahap tetap.
     await say('halo');
