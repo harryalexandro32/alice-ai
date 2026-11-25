@@ -92,8 +92,26 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   Tanda **Perlu staf** (bukan tahap) muncul saat bot meminta bantuan staf, di tahap apa pun, dan
   hilang saat staf membalas (dari HP atau dari web) atau menandai **Sudah ditangani**.
 
-  Tahap tidak pernah turun sendiri. Pembayaran, barang terkirim, pesanan selesai, dan batal hanya diubah
-  staf dari dashboard; bot tidak pernah memasang atau mengubahnya.
+  Tahap tidak pernah turun sendiri. Pembayaran dan batal hanya diubah staf dari dashboard; bot tidak
+  pernah memasang atau mengubahnya. Barang terkirim dan pesanan selesai diubah staf, atau dipasang oleh
+  pelacakan resi (lihat **Pesanan dan resi**).
+- **Pesanan dan resi**: di kepala tiap percakapan ada kolom **Nomor pesanan**, **Nomor resi**, dan
+  **Kurir**. Bot mencatat nomor pesanan (id 18 digit Tokopedia atau TikTok Shop yang mulai dengan 576
+  atau 577, atau nomor invoice `INV/…`) dan resi (setelah kata "resi" atau "awb", atau resi `TKP…`
+  Kurir Rekomendasi Tokopedia) yang ditempel pelanggan di chat, hanya ke kolom yang masih kosong, juga
+  saat admin sedang membalas. Tombol **Cek resi** menanyakan status kurir sekarang; selain itu bot
+  mengecek tiap 5 menit, dan tiap resi paling sering sekali per 30 menit (6 jam setelah error), selama
+  30 hari sejak resinya diisi. Status kurir menaikkan tahap ke "barang terkirim" (paket di jalan) atau
+  "pesanan selesai" (paket diterima); tahap tidak pernah turun dan "batal" tidak disentuh. Pengecekan
+  otomatis hanya menaikkan tahap: kalau staf menurunkan tahap sendiri (misalnya dari "pesanan selesai" ke
+  "barang terkirim"), pengecekan berikutnya menaikkannya lagi selama resi masih dalam 30 hari. Supaya
+  tidak naik lagi, kosongkan resinya atau pilih "batal". Status retur, batal, hilang, atau rusak tampil
+  sebagai "Bermasalah", tidak mengubah tahap, dan dicek lagi paling cepat 6 jam kemudian. Status
+  sebelum paket diambil kurir (misalnya "menunggu pickup" atau "manifested") tampil sebagai "Menunggu
+  kurir" dan juga tidak mengubah tahap. Pelacakan memakai Binderbyte
+  dan butuh `BINDERBYTE_API_KEY` di `.env`. Tanpa key itu, kolomnya tetap bisa diisi dan tautan cek
+  resi tetap ada, tapi tanpa status otomatis. Pengecekan otomatis paling banyak `TRACK_DAILY_MAX` resi
+  per proyek per hari (bawaan 500); tombol **Cek resi** tidak dibatasi.
 - **Tautan marketplace**: tiap produk punya kolom Tokopedia dan Shopee (https, di situs
   marketplace itu). Kalau pelanggan ingin membeli produk yang punya tautan, LLM hanya memilih
   produknya (`buy`); kode mengirim tautannya sebagai pesan sendiri dan mencatatnya di riwayat

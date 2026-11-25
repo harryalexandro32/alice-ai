@@ -30,6 +30,13 @@ export interface PairingRequest {
   at: number;
 }
 
+/** Satu baris riwayat perjalanan paket dari kurir (lihat src/tracking.ts). */
+export interface ShipEvent {
+  date: string;
+  desc: string;
+  location: string;
+}
+
 /** Satu baris per bisnis. `id` = slug pendek, mis. "gfan". */
 export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
@@ -119,6 +126,24 @@ export const contacts = pgTable(
     deferred_until: ms('deferred_until'),
     /** Pelanggan minta tidak dihubungi lagi (ms); null = tidak. Dihapus hanya oleh pemilik. */
     opted_out_at: ms('opted_out_at'),
+    /** Nomor pesanan marketplace atau nomor invoice, apa adanya. */
+    order_ref: text('order_ref'),
+    /** Nomor resi pengiriman. */
+    awb: text('awb'),
+    /** Kode kurir Binderbyte (lihat COURIERS di src/tracking.ts). */
+    courier: text('courier'),
+    /** Kapan resi terakhir diisi atau diganti (ms). */
+    awb_at: ms('awb_at'),
+    /** Status kurir dari pelacakan terakhir yang berhasil, apa adanya (mis. DELIVERED). */
+    ship_status: text('ship_status'),
+    /** Riwayat perjalanan paket, terbaru dulu, paling banyak 20 baris. */
+    ship_history: jsonb('ship_history').$type<ShipEvent[] | null>(),
+    /** Kapan resi terakhir dicek (berhasil atau error), ms. */
+    ship_checked_at: ms('ship_checked_at'),
+    /** Pesan error dari pengecekan terakhir yang gagal; null setelah berhasil. */
+    ship_error: text('ship_error'),
+    /** Fase dari status kurir saat dicek: delivered | transit | pending | problem | unknown; lihat phaseOf. */
+    ship_phase: text('ship_phase'),
   },
   (t) => [
     primaryKey({ columns: [t.project, t.phone] }),
@@ -248,6 +273,21 @@ export const llmUsage = pgTable(
     prompt_tokens: integer('prompt_tokens').notNull().default(0),
     cached_tokens: integer('cached_tokens').notNull().default(0),
     completion_tokens: integer('completion_tokens').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.project, t.day] })]
+);
+
+/**
+ * Jumlah cek resi otomatis per proyek per hari (tanggal lokal, YYYY-MM-DD).
+ * Disimpan di database supaya batas harian TRACK_DAILY_MAX tetap berlaku
+ * walau bot dijalankan ulang. Tombol "Cek resi" di dashboard tidak dihitung.
+ */
+export const trackUsage = pgTable(
+  'track_usage',
+  {
+    project: text('project').notNull(),
+    day: text('day').notNull(),
+    n: integer('n').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.project, t.day] })]
 );

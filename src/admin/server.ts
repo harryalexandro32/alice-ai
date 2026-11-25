@@ -45,8 +45,9 @@ import { MAX_REPLY_ATTEMPTS, type ReplyPayload } from '../sinks/outbox';
 import {
   countImported, getContact, getHandoff, getProject, importContact, listHandoffs, listProjects, messagePage, messagesAround, metrics, normQuestion,
   outboxAdd, outboxState, pendingReplies, readAllStatus, readStatus, resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
-  type HandoffRow, type Project, type ProjectPatch, type Stage,
+  type Contact, type HandoffRow, type Project, type ProjectPatch, type StaffPatch, type Stage,
 } from '../store';
+import { COURIERS, isCourier, phaseOf, trackContact, trackingEnabled, trackingLinks } from '../tracking';
 import { matchProducts, pdfPlain, squash } from './pdftext';
 import { renamedPath, ROUTES } from './routes';
 import type { AdminStore, UsageReport } from './stores';
@@ -310,6 +311,17 @@ export function createAdminHandler(store: AdminStore) {
     return { readable: Boolean(text), matches: matchProducts(text, names) };
   };
 
+  /** Data pesanan satu kontak untuk dashboard: nomor pesanan, resi, kurir, dan hasil pelacakan terakhir. */
+  function orderView(c: Contact) {
+    return {
+      ref: c.order_ref ?? '', awb: c.awb ?? '', courier: c.courier ?? '',
+      status: c.ship_status ?? null, phase: phaseOf(c.ship_status), history: c.ship_history ?? [],
+      checkedAt: c.ship_checked_at, error: c.ship_error ?? null,
+      links: c.awb ? trackingLinks(c.awb, c.courier ?? '') : [],
+      trackingEnabled: trackingEnabled(),
+    };
+  }
+
   /** Satu pelanggan untuk halaman percakapan: data, riwayat pesan (per halaman), balasan yang belum terkirim. */
   async function leadDetail(phone: string, url: URL, json: (code: number, body: unknown) => void): Promise<void> {
     const c = await getContact(phone);
@@ -325,6 +337,8 @@ export function createAdminHandler(store: AdminStore) {
         imported: Boolean(c.imported), handledAt: c.handled_at, canReply: Boolean(c.address),
       },
       fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })),
+      order: orderView(c),
+      couriers: COURIERS,
       messages,
       more: messages.length === limit,
       // Balasan dari dashboard yang belum terkirim; yang hilang dari sini sudah terkirim.
@@ -610,10 +624,10 @@ export function createAdminHandler(store: AdminStore) {
       });
     }
 
-    // Satu pelanggan: percakapannya, tahap pipeline + catatan, balasan dari
-    // web, dan tombol bot / sudah ditangani. Ditulis langsung ke database; bot
-    // membaca penahan chat di tiap giliran, jadi berlaku seketika.
-    const lead = path.match(/^\/leads\/([^/]+)(?:\/(bot|handled|reply))?$/);
+    // Satu pelanggan: percakapannya, tahap pipeline + catatan, data pesanan dan
+    // resi, balasan dari web, dan tombol bot / sudah ditangani. Ditulis langsung
+    // ke database; bot membaca penahan chat di tiap giliran, jadi berlaku seketika.
+    const lead = path.match(/^\/leads\/([^/]+)(?:\/(bot|handled|reply|track))?$/);
     if (lead) {
       let phone = '';
       try {
@@ -625,7 +639,7 @@ export function createAdminHandler(store: AdminStore) {
       if (!lead[2] && method === 'GET') return leadDetail(phone, url, json);
       if (!lead[2] && method === 'PUT') {
         const body = JSON.parse((await readBody(req, 8000)).toString('utf8') || '{}') as Record<string, unknown>;
-        const patch: { stage?: Stage; note?: string | null } = {};
+        const patch: StaffPatch = {};
         if ('stage' in body) {
           if (!STAGES.includes(body.stage as Stage)) return json(400, { error: `Tahap harus salah satu dari: ${STAGES.join(', ')}.` });
           patch.stage = body.stage as Stage;
@@ -635,10 +649,36 @@ export function createAdminHandler(store: AdminStore) {
           if (note.length > 2000) return json(400, { error: 'Catatan terlalu panjang. Maksimal 2.000 karakter.' });
           patch.note = note || null;
         }
-        if (!Object.keys(patch).length) return json(400, { error: 'Isi tahap atau catatan.' });
+        // Data pesanan: string kosong = kosongkan kolomnya.
+        if ('order_ref' in body) {
+          const ref = String(body.order_ref ?? '').trim();
+          if (ref.length > 60) return json(400, { error: 'Nomor pesanan terlalu panjang. Maksimal 60 karakter.' });
+          patch.order_ref = ref || null;
+        }
+        if ('awb' in body) {
+          const awb = String(body.awb ?? '').trim().toUpperCase();
+          if (!/^[A-Z0-9-]{0,40}$/.test(awb)) return json(400, { error: 'Nomor resi hanya boleh huruf, angka, dan tanda minus.' });
+          patch.awb = awb || null;
+        }
+        if ('courier' in body) {
+          const courier = String(body.courier ?? '').trim();
+          if (courier && !isCourier(courier)) return json(400, { error: 'Kurir tidak dikenal.' });
+          patch.courier = courier || null;
+        }
+        if (!Object.keys(patch).length) return json(400, { error: 'Isi tahap, catatan, atau data pesanan.' });
         const c = await setStageNote(phone, patch);
         if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
-        return json(200, { ok: true, stage: c.stage, note: c.note });
+        return json(200, { ok: true, stage: c.stage, note: c.note, order: orderView(c) });
+      }
+      // "Cek resi": tanya status kurir sekarang. Pelacak yang gagal bukan 500:
+      // pesannya ikut di order.error dan ditampilkan di dashboard.
+      if (lead[2] === 'track' && method === 'POST') {
+        const c = await getContact(phone);
+        if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
+        if (!trackingEnabled()) return json(503, { error: 'Pelacakan resi belum diatur. Isi BINDERBYTE_API_KEY di .env server.' });
+        if (!c.awb || !isCourier(c.courier)) return json(400, { error: 'Isi nomor resi dan kurir dulu.' });
+        const t = (await trackContact(phone)) ?? c;
+        return json(200, { ok: true, stage: t.stage, order: orderView(t) });
       }
       if (lead[2] === 'reply' && method === 'POST') {
         const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as { text?: unknown };
@@ -661,7 +701,7 @@ export function createAdminHandler(store: AdminStore) {
           stage: taken?.contact.stage ?? c.stage,
         });
       }
-      if (lead[2] && lead[2] !== 'reply' && method === 'POST') {
+      if ((lead[2] === 'bot' || lead[2] === 'handled') && method === 'POST') {
         if (lead[2] === 'bot') {
           const body = JSON.parse((await readBody(req, 200)).toString('utf8') || '{}') as { mode?: string };
           if (body.mode !== 'on' && body.mode !== 'off') return json(400, { error: 'Mode harus "on" atau "off".' });

@@ -23,10 +23,12 @@ import { recipientPhones } from './notify';
 import { currentProject } from './project';
 import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
-  addHandoff, addMessage, contactByAddress, countInboundSince, createContact, dueDeferred, getContact, humanSeenAt, isBotOff, markHuman,
-  outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact, type MessageKind,
+  addHandoff, addMessage, contactByAddress, countInboundSince, createContact, dueDeferred, fillOrder, getContact, humanSeenAt, isBotOff,
+  markHuman, outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact, type MessageKind,
+  type OrderFill,
 } from './store';
 import { inQuiet, quietEndAfter } from './quiet';
+import { parseOrderHints } from './tracking';
 import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK } from './texts';
 import type { MediaKind, Quote } from './transport/types';
 
@@ -301,6 +303,36 @@ async function recordQuestion(phone: string, question: string, at: number): Prom
   }
 }
 
+/**
+ * Catat nomor pesanan, resi, dan kurir dari pesan pelanggan. Hanya mengisi
+ * kolom yang masih kosong: isian staf dan tangkapan sebelumnya tidak ditimpa.
+ * Syarat "masih kosong" diperiksa lagi di database (fillOrder), jadi isian
+ * staf yang masuk sesaat sebelumnya juga aman. Tidak membalas dan tidak
+ * mengubah tahap.
+ */
+async function captureOrder(c: Contact, text: string, at: number): Promise<Contact> {
+  const hints = parseOrderHints(text);
+  const fill: OrderFill = {};
+  if (hints.orderRef && !c.order_ref) fill.order_ref = hints.orderRef.slice(0, 60);
+  const awb = hints.awb?.slice(0, 40);
+  const awbNow = Boolean(awb && !c.awb);
+  // Tebakan kurir hanya untuk resi yang dicatat sekarang atau resi yang sama
+  // dengan yang tersimpan, bukan untuk resi lain (misalnya resi milik teman).
+  const courierNow = Boolean(hints.courier && !c.courier && (awbNow || awb === c.awb));
+  if (awbNow || courierNow) fill.awb = awb;
+  if (courierNow) fill.courier = hints.courier;
+  if (!Object.keys(fill).length) return c;
+  const updated = await fillOrder(c.phone, fill, at);
+  // Log hanya untuk kolom yang benar-benar ditulis oleh panggilan ini.
+  const wroteRef = Boolean(fill.order_ref && !c.order_ref && updated.order_ref === fill.order_ref);
+  const wroteAwb = Boolean(awbNow && updated.awb === fill.awb && updated.awb_at === at);
+  const wroteCourier = Boolean(fill.courier && !c.courier && updated.courier === fill.courier);
+  if (wroteRef) console.log(`[alur] ${c.phone}: nomor pesanan dicatat: ${fill.order_ref}`);
+  if (wroteAwb) console.log(`[alur] ${c.phone}: resi dicatat: ${fill.awb}${wroteCourier ? ` (${fill.courier})` : ''}`);
+  else if (wroteCourier) console.log(`[alur] ${c.phone}: kurir dicatat: ${fill.courier}`);
+  return updated;
+}
+
 export async function handleInbound(m: Inbound): Promise<void> {
   // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
   await beforeTurn();
@@ -336,6 +368,9 @@ export async function handleInbound(m: Inbound): Promise<void> {
     last_dir: 'in',
     followup_state: 'idle',
   });
+  // Nomor pesanan dan resi yang ditempel pelanggan dicatat apa pun keadaannya
+  // (juga saat ditangani admin), sebelum pemeriksaan berhenti dan jeda.
+  if (m.text?.trim()) c = await captureOrder(c, m.text, at);
 
   // Pelanggan lama yang diimpor dengan "bot diam": baru sekarang alamat chatnya diketahui.
   if (c.pending_off) {

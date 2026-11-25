@@ -21,6 +21,7 @@ import { humanHolds } from '../flow';
 import { handlePairingRequest, reportState, resetWaNumberCheck, startHeartbeat } from '../heartbeat';
 import { pickDelayMs, typingMs } from '../pace';
 import { withProject } from '../project';
+import { setTracker } from '../tracking';
 import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setTestSender } from '../sinks/outbox';
 import {
   addHandoff, addMessage, addUsage, createContact, getContact, getProfile, getProject, humanSeenAt, pendingReplies, readStatus, recentAlerts,
@@ -725,7 +726,8 @@ const PNG = Buffer.from(
 
       // Tahap pipeline dan catatan.
       assert.match((await putLead({ stage: 'menang' })).body.error, /Tahap/);
-      assert.equal((await putLead({})).status, 400);
+      const empty = await putLead({});
+      assert.deepEqual([empty.status, empty.body.error], [400, 'Isi tahap, catatan, atau data pesanan.']);
       assert.match((await putLead({ note: 'x'.repeat(2001) })).body.error, /terlalu panjang/);
       assert.match((await putLead({ stage: 'closing' })).body.error, /Tahap/, '"closing" sudah diganti tiga tahap pesanan');
       for (const stage of ['dikirim', 'selesai']) assert.equal((await putLead({ stage })).body.stage, stage);
@@ -736,6 +738,71 @@ const PNG = Buffer.from(
       assert.deepEqual([row.stage, row.note], ['payment', 'minta penawaran Senin'], 'tahap dan catatan tampil di daftar');
       assert.equal((await putLead({ note: '' })).body.note, null, 'catatan bisa dikosongkan');
       await putLead({ stage: 'baru' });
+
+      // Pesanan dan resi: isian staf, lalu "Cek resi" dengan pelacak tiruan.
+      setTracker(null);
+      cfg.binderbyteKey = '';
+      const track = (phone = P) => post(`/api/gfan/leads/${encodeURIComponent(phone)}/track`);
+      const d0 = (await lead()).body;
+      assert.deepEqual(d0.order, {
+        ref: '', awb: '', courier: '', status: null, phase: 'unknown', history: [], checkedAt: null, error: null, links: [], trackingEnabled: false,
+      });
+      assert.equal(d0.couriers.length, 25);
+      assert.deepEqual(d0.couriers[0], { code: 'jne', label: 'JNE' });
+      const badAwb = await putLead({ awb: 'JP 123/4' });
+      assert.deepEqual([badAwb.status, badAwb.body.error], [400, 'Nomor resi hanya boleh huruf, angka, dan tanda minus.']);
+      assert.equal((await putLead({ awb: 'J'.repeat(41) })).status, 400, 'resi maksimal 40 karakter');
+      const badCourier = await putLead({ courier: 'dhl' });
+      assert.deepEqual([badCourier.status, badCourier.body.error], [400, 'Kurir tidak dikenal.']);
+      assert.match((await putLead({ order_ref: 'x'.repeat(61) })).body.error, /terlalu panjang/);
+      assert.equal((await getContact(P))?.awb, null, 'isian yang ditolak tidak disimpan');
+      const o1 = await putLead({ order_ref: '  576123456789012345 ', awb: ' jp1234567890 ', courier: 'jnt' });
+      assert.equal(o1.status, 200, 'badan hanya berisi data pesanan juga diterima');
+      assert.deepEqual([o1.body.order.ref, o1.body.order.awb, o1.body.order.courier, o1.body.stage], ['576123456789012345', 'JP1234567890', 'jnt', 'baru']);
+      assert.deepEqual(o1.body.order.links, [{ label: 'cekresi.com', url: 'https://cekresi.com/?noresi=JP1234567890' }]);
+      assert.ok(((await getContact(P))?.awb_at ?? 0) > 0, 'awb_at diisi');
+
+      const off = await track();
+      assert.deepEqual([off.status, off.body.error], [503, 'Pelacakan resi belum diatur. Isi BINDERBYTE_API_KEY di .env server.']);
+      assert.equal((await track('+6281299998888')).status, 404);
+
+      const hist = [{ date: '2026-11-25 09:00:00', desc: 'PAKET DIBAWA KURIR', location: 'JAKARTA' }];
+      setTracker(async () => ({ status: 'ON PROCESS', history: hist }));
+      await updateContact(P, { stage: 'payment' });
+      const t1 = await track();
+      assert.equal(t1.status, 200);
+      assert.deepEqual([t1.body.stage, t1.body.order.status, t1.body.order.phase, t1.body.order.history, t1.body.order.error, t1.body.order.trackingEnabled],
+        ['dikirim', 'ON PROCESS', 'transit', hist, null, true]);
+      assert.ok(t1.body.order.checkedAt > 0);
+      const d1 = (await lead()).body;
+      assert.deepEqual([d1.contact.stage, d1.order.status, d1.order.trackingEnabled], ['dikirim', 'ON PROCESS', true]);
+
+      // Pelacak gagal: bukan 500, pesannya ada di order.error; status dan tahap lama tetap.
+      setTracker(async () => { throw new Error('Credit tidak cukup, silakan lakukan topup credit.'); });
+      const t2 = await track();
+      assert.deepEqual([t2.status, t2.body.order.error, t2.body.order.status, t2.body.stage],
+        [200, 'Credit tidak cukup, silakan lakukan topup credit.', 'ON PROCESS', 'dikirim']);
+      // Retur: fase "problem", tahap tetap.
+      setTracker(async () => ({ status: 'RETURN TO SENDER', history: hist }));
+      const tp = await track();
+      assert.deepEqual([tp.body.order.phase, tp.body.order.status, tp.body.order.error, tp.body.stage], ['problem', 'RETURN TO SENDER', null, 'dikirim']);
+
+      // Kurir diganti: hasil pelacakan lama dikosongkan, resi tetap.
+      const o2 = await putLead({ courier: 'jne' });
+      assert.deepEqual([o2.body.order.awb, o2.body.order.status, o2.body.order.error, o2.body.order.checkedAt, o2.body.order.history],
+        ['JP1234567890', null, null, null, []]);
+      setTracker(async () => ({ status: 'DELIVERED', history: hist }));
+      assert.equal((await track()).body.stage, 'selesai');
+      // Resi dikosongkan: hasil pelacakan dan awb_at ikut kosong, "Cek resi" minta resi dulu.
+      const o3 = await putLead({ awb: '' });
+      assert.deepEqual([o3.body.order.awb, o3.body.order.status, o3.body.order.checkedAt, o3.body.order.links, o3.body.order.courier],
+        ['', null, null, [], 'jne']);
+      assert.equal((await getContact(P))?.awb_at, null);
+      const noAwb = await track();
+      assert.deepEqual([noAwb.status, noAwb.body.error], [400, 'Isi nomor resi dan kurir dulu.']);
+      setTracker(null);
+      await putLead({ stage: 'baru', order_ref: '', courier: '' });
+      assert.deepEqual((await lead()).body.order.ref, '');
 
       // Balas dari web: masuk antrean bot dan bot mundur, sama seperti membalas dari HP.
       assert.match((await reply('   ')).body.error, /kosong/);

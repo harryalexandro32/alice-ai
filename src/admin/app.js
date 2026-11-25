@@ -1880,10 +1880,31 @@ $('importForm').addEventListener('submit', async (e) => {
 let conv = null;
 let convTimer = null;
 let noteTimer = null;
+/** Isian pesanan (nomor pesanan, resi, kurir): jeda simpan, kolom yang menunggu disimpan, dan yang sedang disimpan. */
+let orderTimer = null;
+const orderPending = new Set();
+const orderSaving = new Set();
+/** Simpanan isian pesanan yang sedang berjalan (Promise), atau null. Simpanan berikutnya dan "Cek resi" menunggu yang ini. */
+let orderSave = null;
+/** Percakapan pemilik orderSave. Hasil simpanan percakapan lain tidak menghentikan simpanan atau "Cek resi" di percakapan ini. */
+let orderSaveConv = null;
+/** id kolom di halaman -> [nama kolom di server, kunci di conv.order]. */
+const ORDER_INPUTS = { orderRef: ['order_ref', 'ref'], orderAwb: ['awb', 'awb'], orderCourier: ['courier', 'courier'] };
 
 async function openConv(phone) {
   if (!conv || conv.phone !== phone) {
+    // Isian pesanan yang belum tersimpan ikut percakapan yang lama. Penanda
+    // kolomnya dikosongkan: percakapan baru langsung menampilkan isiannya sendiri.
+    if (orderTimer || orderPending.size) void saveOrder();
+    orderPending.clear();
+    orderSaving.clear();
     conv = { phone, older: [], olderMore: false, key: '', first: true };
+    for (const id of Object.keys(ORDER_INPUTS)) $(id).value = '';
+    $('orderState').textContent = '';
+    $('orderStatus').hidden = true;
+    $('orderChecked').textContent = '';
+    $('orderLinks').replaceChildren();
+    $('orderHistory').replaceChildren();
     $('thread').replaceChildren(el('div', { className: 'daysep', textContent: T('memuat…', 'loading…') }));
     $('convNote').value = '';
     $('convNoteState').textContent = '';
@@ -1901,9 +1922,18 @@ async function pollConv() {
   // Tab tidak terlihat: tidak perlu bertanya ke server, cukup jadwalkan lagi.
   if (!document.hidden || conv.first) {
     try {
+      const seq = conv.orderSeq || 0;
       const r = await api('leads/' + encodeURIComponent(phone));
       if (!conv || conv.phone !== phone || page !== 'chat') return;
+      // Isian pesanan disimpan atau resi dicek selama permintaan ini berjalan:
+      // data pesanan dan tahap di jawaban ini sudah basi, yang sekarang dipakai.
+      const keep = conv.order && (conv.orderBusy || orderSaving.size || (conv.orderSeq || 0) !== seq)
+        ? { order: conv.order, stage: conv.contact && conv.contact.stage } : null;
       Object.assign(conv, r);
+      if (keep) {
+        conv.order = keep.order;
+        if (conv.contact && keep.stage) conv.contact.stage = keep.stage;
+      }
       renderConv();
     } catch (e) {
       if (conv.first) {
@@ -1966,6 +1996,42 @@ function renderConvHead() {
   $('convLead').hidden = false;
   $('replyBlocked').hidden = c.canReply;
   $('replyText').disabled = $('replySend').disabled = !c.canReply;
+  renderConvOrder();
+}
+
+/** Nomor pesanan, resi, kurir, dan status kurir terakhir di kepala percakapan. */
+function renderConvOrder() {
+  const o = conv.order;
+  $('convOrder').hidden = !o;
+  if (!o) return;
+  const couriers = conv.couriers || [];
+  const sel = $('orderCourier');
+  if (sel.options.length !== couriers.length + 1 || sel.dataset.lang !== lang) {
+    const cur = sel.value;
+    sel.replaceChildren(el('option', { value: '', textContent: T('Pilih kurir', 'Choose a courier') }),
+      ...couriers.map((k) => el('option', { value: k.code, textContent: k.label })));
+    sel.dataset.lang = lang;
+    sel.value = cur;
+  }
+  // Kolom yang sedang diketik atau menunggu disimpan tidak ditimpa oleh pembaruan berkala.
+  for (const [id, [, key]] of Object.entries(ORDER_INPUTS)) {
+    if (document.activeElement !== $(id) && !orderPending.has(id) && !orderSaving.has(id)) $(id).value = o[key] || '';
+  }
+  const [text, cls] = o.error ? [T('Error: ', 'Error: ') + o.error, 'danger']
+    : o.phase === 'delivered' ? [T('Terkirim ke pelanggan: ', 'Delivered to the customer: ') + o.status, 'ok']
+    : o.phase === 'problem' ? [T('Bermasalah: ', 'Problem: ') + o.status, 'warn']
+    : o.phase === 'transit' ? [T('Dalam perjalanan: ', 'In transit: ') + o.status, 'info']
+    : o.phase === 'pending' ? [T('Menunggu kurir: ', 'Waiting for pickup: ') + o.status, '']
+    : [T('Belum dicek', 'Not checked yet'), ''];
+  $('orderStatus').textContent = text;
+  $('orderStatus').className = 'chip' + (cls ? ' ' + cls : '');
+  $('orderStatus').hidden = !o.awb;
+  $('orderChecked').textContent = o.awb && o.checkedAt ? T('dicek ', 'checked ') + clock(o.checkedAt) : '';
+  $('orderLinks').replaceChildren(...(o.links || []).map((l) => el('a', { href: l.url, target: '_blank', rel: 'noopener', textContent: l.label })));
+  $('orderTrack').hidden = !o.trackingEnabled;
+  $('orderOff').hidden = o.trackingEnabled;
+  $('orderHistory').replaceChildren(...(o.history || []).slice(0, 3).map((h) =>
+    el('li', { textContent: [h.date, h.desc, h.location].filter(Boolean).join(' · ') })));
 }
 
 function bubble(m, pending) {
@@ -2110,6 +2176,121 @@ $('convNote').addEventListener('input', () => {
   noteTimer = setTimeout(() => void saveNote(), 900);
 });
 $('convNote').addEventListener('blur', () => { if (noteTimer) void saveNote(); });
+
+/**
+ * Simpan isian pesanan yang berubah (hanya kolom yang berubah). Simpanan
+ * berjalan satu per satu: yang baru menunggu yang sebelumnya selesai, supaya
+ * dua simpanan untuk kolom yang sama tidak saling menyalip. Mengembalikan
+ * Promise<boolean> yang tidak pernah gagal: true = tersimpan atau tidak ada
+ * yang perlu disimpan, false = error (pesannya ditampilkan di #orderState),
+ * juga kalau simpanan sebelumnya dalam antrean error.
+ */
+function saveOrder() {
+  clearTimeout(orderTimer);
+  orderTimer = null;
+  // Percakapan bisa sudah berganti saat simpanan berjalan: pegang yang sekarang
+  // beserta isi kolomnya, karena openConv langsung mengosongkan kolom-kolom itu.
+  const cv = conv;
+  const ids = [...orderPending];
+  orderPending.clear();
+  if (!cv || !ids.length) return orderSave && orderSaveConv === cv ? orderSave : Promise.resolve(true);
+  const values = ids.map((id) => [id, id === 'orderAwb' ? $(id).value.trim().toUpperCase() : $(id).value.trim()]);
+  for (const id of ids) orderSaving.add(id);
+  cv.orderBusy = (cv.orderBusy || 0) + 1;
+  const prev = orderSave;
+  const prevConv = orderSaveConv;
+  const p = (async () => {
+    // Urutan tetap dijaga untuk semua percakapan, tetapi error simpanan milik
+    // percakapan lain tidak dihitung di sini.
+    const prevRes = prev ? await prev : true;
+    const prevOk = prevConv === cv ? prevRes : true;
+    let ok = true;
+    // Dibandingkan dengan data sesudah simpanan sebelumnya selesai. Data
+    // percakapan pertama belum datang (cv.order kosong): semua kolom yang
+    // menunggu dikirim apa adanya, tanpa perbandingan.
+    const body = {};
+    for (const [id, v] of values) {
+      const [field, key] = ORDER_INPUTS[id];
+      if (!cv.order || v !== (cv.order[key] || '')) body[field] = v;
+    }
+    if (!Object.keys(body).length) {
+      if (conv === cv && prevOk) $('orderState').textContent = '';
+    } else {
+      if (conv === cv) $('orderState').textContent = T('Menyimpan…', 'Saving…');
+      try {
+        const r = await api('leads/' + encodeURIComponent(cv.phone), { method: 'PUT', body: JSON.stringify(body) });
+        cv.order = r.order;
+        if (cv.contact) cv.contact.stage = r.stage;
+        if (conv === cv) $('orderState').textContent = T('Tersimpan.', 'Saved.');
+      } catch (e) {
+        ok = false;
+        if (conv === cv) $('orderState').textContent = e.message;
+      }
+    }
+    cv.orderBusy -= 1;
+    cv.orderSeq = (cv.orderSeq || 0) + 1;
+    // Penanda kolom milik percakapan lain (sesudah pindah) tidak disentuh.
+    if (conv === cv) for (const id of ids) orderSaving.delete(id);
+    if (conv === cv && cv.contact) renderConvHead();
+    return prevOk && ok;
+  })();
+  orderSave = p;
+  orderSaveConv = cv;
+  void p.finally(() => { if (orderSave === p) orderSave = orderSaveConv = null; });
+  return p;
+}
+for (const id of ['orderRef', 'orderAwb']) {
+  $(id).addEventListener('input', () => {
+    orderPending.add(id);
+    clearTimeout(orderTimer);
+    $('orderState').textContent = '';
+    orderTimer = setTimeout(() => void saveOrder(), 900);
+  });
+  $(id).addEventListener('blur', () => { if (orderPending.size) void saveOrder(); });
+}
+$('orderCourier').addEventListener('change', () => {
+  orderPending.add('orderCourier');
+  void saveOrder();
+});
+
+/** Bagian `order` yang berasal dari pelacakan, bukan dari isian staf. */
+const TRACK_FIELDS = ['status', 'phase', 'history', 'checkedAt', 'error', 'links', 'trackingEnabled'];
+function trackingPart(order) {
+  const out = {};
+  for (const k of TRACK_FIELDS) if (order && k in order) out[k] = order[k];
+  return out;
+}
+
+// "Cek resi": tanya status kurir sekarang; tahap bisa ikut naik ke dikirim atau selesai.
+$('orderTrack').addEventListener('click', async () => {
+  if (!conv || !conv.order) return;
+  const cv = conv;
+  $('orderTrack').disabled = true;
+  cv.orderBusy = (cv.orderBusy || 0) + 1;
+  try {
+    // Isian yang belum tersimpan atau sedang disimpan selesai dulu: yang dicek
+    // resi terbaru. Simpanan error: resi tidak dicek, pesan errornya sudah ada
+    // di #orderState.
+    // Simpanan yang berjalan untuk percakapan lain (sebelum pindah) tidak ditunggu.
+    const saved = orderTimer || orderPending.size ? saveOrder() : orderSaveConv === cv ? orderSave : null;
+    if (saved && !(await saved)) return;
+    const r = await api('leads/' + encodeURIComponent(cv.phone) + '/track', { method: 'POST' });
+    // Hanya hasil pelacakan yang diambil. Nomor pesanan, resi, dan kurir tetap
+    // dari cv.order: simpanan yang mulai selama pengecekan bisa selesai lebih
+    // dulu, dan isinya lebih baru daripada jawaban ini.
+    const { ref, awb, courier } = cv.order;
+    cv.order = { ...cv.order, ...trackingPart(r.order), ref, awb, courier };
+    if (cv.contact) cv.contact.stage = r.stage;
+    if (leadData) for (const c of leadData.rows) if (c.phone === cv.phone) c.stage = r.stage;
+    if (conv === cv && cv.contact) renderConvHead();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    cv.orderBusy -= 1;
+    cv.orderSeq = (cv.orderSeq || 0) + 1;
+    $('orderTrack').disabled = false;
+  }
+});
 
 // ---------- pertanyaan yang belum terjawab ----------
 let handoffData = null;
@@ -3064,7 +3245,11 @@ function show(next, r = {}) {
   if (!KNOWLEDGE.includes(page)) closeTry();
   clearTimeout(waTimer);
   clearTimeout(convTimer);
-  if (page !== 'chat') { if (noteTimer) void saveNote(); conv = null; }
+  if (page !== 'chat') {
+    if (noteTimer) void saveNote();
+    if (orderTimer || orderPending.size) void saveOrder();
+    conv = null;
+  }
   renderMeta();
   // Halaman berdata: kerangka digambar langsung (sebelum permintaan apa pun), lalu datanya dimuat.
   // Pindah halaman dan ganti proyek memakai jalur yang sama.
