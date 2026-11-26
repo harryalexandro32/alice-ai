@@ -278,9 +278,10 @@ export const llmUsage = pgTable(
 );
 
 /**
- * Jumlah cek resi otomatis per proyek per hari (tanggal lokal, YYYY-MM-DD).
- * Disimpan di database supaya batas harian TRACK_DAILY_MAX tetap berlaku
- * walau bot dijalankan ulang. Tombol "Cek resi" di dashboard tidak dihitung.
+ * Jumlah cek resi per proyek per hari (tanggal lokal, YYYY-MM-DD): `n` untuk
+ * cek otomatis, `n_manual` untuk tombol "Cek resi" di dashboard. Disimpan di
+ * database supaya batas harian TRACK_DAILY_MAX (hanya untuk `n`) tetap
+ * berlaku walau bot dijalankan ulang, dan supaya biayanya bisa ditampilkan.
  */
 export const trackUsage = pgTable(
   'track_usage',
@@ -288,6 +289,8 @@ export const trackUsage = pgTable(
     project: text('project').notNull(),
     day: text('day').notNull(),
     n: integer('n').notNull().default(0),
+    // Cek resi manual dari tombol "Cek resi" (tidak ikut batas harian).
+    n_manual: integer('n_manual').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.project, t.day] })]
 );

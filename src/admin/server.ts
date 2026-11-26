@@ -238,14 +238,22 @@ const DAY = 86_400_000;
 const METRIC_DAYS = 7;
 const MAX_METRIC_DAYS = 90;
 
-/** Perkiraan biaya LLM bulan ini (bulan menurut zona waktu bot), dalam USD dan Rupiah. */
-function monthCost(u: UsageReport | null): { usd: number; idr: number } {
-  if (!u) return { usd: 0, idr: 0 };
+/**
+ * Perkiraan biaya bulan ini (bulan menurut zona waktu bot). `usd` dan `llm` =
+ * biaya LLM (USD dan Rupiah), `resi` = cek resi (otomatis + manual) × tarif
+ * dalam Rupiah, `idr` = jumlah keduanya.
+ */
+function monthCost(u: UsageReport | null): { usd: number; idr: number; llm: number; resi: number } {
+  if (!u) return { usd: 0, idr: 0, llm: 0, resi: 0 };
   const month = localDay(Date.now()).slice(0, 7);
   const usd = u.days
     .filter((d) => d.day.startsWith(month))
     .reduce((a, d) => a + ((d.promptTokens - d.cachedTokens) * u.price.in + d.cachedTokens * u.price.cached + d.completionTokens * u.price.out) / 1e6, 0);
-  return { usd, idr: Math.round(usd * u.usdIdr) };
+  const llm = Math.round(usd * u.usdIdr);
+  const resi = Math.round(
+    u.resi.days.filter((d) => d.day.startsWith(month)).reduce((a, d) => a + d.auto + d.manual, 0) * u.resi.price
+  );
+  return { usd, idr: llm + resi, llm, resi };
 }
 
 /** Pesan yang dicatat dengan tanda di awal (berkas, tautan beli, kiriman yang tidak bisa dibaca), bukan teks balasan. */
@@ -595,7 +603,7 @@ export function createAdminHandler(store: AdminStore) {
     if (path === '/notify/test' && method === 'POST') {
       const phones = [...new Set(biz.recipients.map((r) => r.phone).filter(Boolean))];
       if (!phones.length) return json(400, { error: 'Belum ada penerima. Tambahkan penerima, simpan, lalu kirim tes lagi.' });
-      const KINDS = [['lead', 'lead baru'], ['butuh-staf', 'pelanggan butuh staf'], ['llm', 'LLM bermasalah']] as const;
+      const KINDS = [['lead', 'lead baru'], ['butuh-staf', 'pelanggan butuh staf'], ['llm', 'LLM bermasalah'], ['resi', 'saldo atau batas cek resi']] as const;
       const at = Date.now();
       const ids: number[] = [];
       for (const phone of phones) {
@@ -911,7 +919,7 @@ export function createAdminHandler(store: AdminStore) {
     }
 
     if (path === '/usage' && method === 'GET') {
-      return json(200, { usage: await store.usage() });
+      return json(200, { usage: await store.usage({ waitAccount: true }) });
     }
 
     if (path === '/test' && method === 'POST') {

@@ -5,7 +5,8 @@
  *   - bot tidak bisa menjawab pelanggan dan butuh staf (kurang pengetahuan,
  *     pelanggan minta orang, pelanggan mengirim sesuatu yang tidak terbaca);
  *   - WhatsApp terputus permanen, kiriman dijeda pengaman, balasan dari
- *     dashboard yang gagal terkirim, LLM bermasalah.
+ *     dashboard yang gagal terkirim, LLM bermasalah, saldo Binderbyte menipis
+ *     atau batas cek resi harian tercapai.
  *
  * Tiap warning dicatat (tampil di dashboard: Beranda dan Pengaturan > Lanjutan)
  * dan dikirim lewat WhatsApp ke penerima yang diatur di dashboard (lihat
@@ -30,6 +31,7 @@ export const ALERT_TITLES: Record<NotifyKind, string> = {
   'kiriman-gagal': 'Balasan dari dashboard gagal terkirim',
   llm: 'LLM bermasalah',
   'bot-mati': 'Bot berhenti',
+  resi: 'Cek resi: saldo atau batas',
 };
 
 /** Warning sejenis tidak diulang lebih sering dari ini. */
@@ -40,6 +42,7 @@ const QUIET: Record<AlertKind, number> = {
   'kiriman-gagal': 10 * MINUTE,
   llm: 6 * HOUR,
   'bot-mati': 10 * MINUTE,
+  resi: 24 * HOUR,
 };
 
 let signal: (() => void) | null = null;

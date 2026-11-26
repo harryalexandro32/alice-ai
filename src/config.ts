@@ -87,6 +87,10 @@ const base = {
   binderbyteKey: str('BINDERBYTE_API_KEY'),
   // Paling banyak sekian cek resi otomatis per proyek per hari (tombol "Cek resi" tidak dihitung).
   trackDailyMax: num('TRACK_DAILY_MAX', 500),
+  // Tarif Rp per cek resi sesudah kuota gratis, kalau tarif dari akun Binderbyte belum terbaca.
+  trackPriceIdr: num('TRACK_PRICE_IDR', 15),
+  // Warning ke pemilik kalau kuota gratis habis dan saldo Binderbyte di bawah sekian Rupiah.
+  trackBalanceMinIdr: num('TRACK_BALANCE_MIN_IDR', 3000),
 
   // Follow-up dikirim setelah pelanggan diam selama waktu yang diacak di antara
   // dua angka ini (seperti jeda balasan), supaya tidak selalu tepat di jam yang sama.

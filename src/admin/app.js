@@ -334,6 +334,7 @@ const NOTIFY = [
   ['lead', () => T('Lead baru (data pelanggan lengkap)', 'New lead (customer data complete)'), 'staff'],
   ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, pelanggan minta bicara dengan orang, atau mengirim suara atau dokumen)', 'Customer needs staff (bot cannot answer, asks for a person, sends voice/document)'), 'staff'],
   ['llm', () => T('LLM bermasalah atau jatah hariannya habis', 'LLM failing / daily limit reached'), 'owner'],
+  ['resi', () => T('Cek resi: saldo Binderbyte menipis atau batas harian tercapai', 'Tracking: Binderbyte balance low or daily cap reached'), 'owner'],
 ];
 function renderRecipients() {
   const list = profile.recipients;
@@ -1102,7 +1103,7 @@ $('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.
 const QS_KEYS = {
   beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt pelajaran ajari',
   produk: 'katalog harga stok marketplace tokopedia shopee', brosur: 'pdf katalog', pengaturan: 'proyek follow-up',
-  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'penerima sales wa kabar', lanjutan: 'biaya llm error warning mode uji',
+  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'penerima sales wa kabar', lanjutan: 'biaya llm error warning mode uji resi binderbyte saldo',
 };
 /** Huruf kecil tanpa aksen, untuk dicocokkan. */
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -2590,6 +2591,7 @@ const ALERT_KINDS = {
   'kiriman-gagal': () => T('Balasan gagal terkirim', 'Reply not sent'),
   llm: () => T('LLM bermasalah', 'LLM problem'),
   'bot-mati': () => T('Bot berhenti', 'Bot stopped'),
+  resi: () => T('Cek resi: saldo atau batas', 'Tracking: balance or cap'),
 };
 
 /** Level baris catatan error; nilai lama di baris yang sudah tersimpan juga dikenali. */
@@ -2659,7 +2661,7 @@ function renderUsage() {
   // usageData null = sedang dimuat: kotak dan grafik berupa kerangka. usageData.error = gagal dimuat.
   const loading = !usageData;
   const error = (usageData && usageData.error) || '';
-  busy(['usageTiles', 'chartCost', 'chartCalls'], loading);
+  busy(['usageTiles', 'chartCost', 'chartCalls', 'resiTiles', 'chartResi'], loading);
   const u = usageData && usageData.u;
   const price = u ? u.price : { in: 0, cached: 0, out: 0 };
   const rate = u ? u.usdIdr : 0;
@@ -2673,6 +2675,8 @@ function renderUsage() {
     b.addEventListener('click', () => { if (usageRange !== r) { usageRange = r; renderUsage(); } });
     return b;
   }));
+  // Kartu cek resi memakai data dan rentang yang sama.
+  renderResi(loading, error, u && u.resi, n);
 
   // Hari terakhir = hari ini menurut peramban, atau hari data terbaru kalau zona waktu bot sudah lebih dulu.
   const raw = u ? u.days : [];
@@ -2755,6 +2759,94 @@ function renderUsage() {
   columnChart({ el: $('chartCalls'), title: T('Panggilan LLM per hari', 'LLM calls per day'),
     help: T('Jumlah panggilan ke LLM, ' + n + ' hari terakhir.', 'Number of LLM calls, last ' + n + ' days.'),
     days, series: [{ key: 'calls', label: T('Panggilan', 'Calls'), slot: 1 }] });
+}
+
+/** Teks contoh kerangka kotak dan catatan kartu cek resi (sepanjang teks aslinya). */
+const RESI_SAMPLE = {
+  counts: () => T('000 cek · otomatis 000 · manual 00', '000 checks · automatic 000 · manual 00'),
+  balance: () => T('cukup untuk ±000 cek lagi · 00 cek gratis tersisa', 'enough for about 000 more checks · 00 free checks left'),
+  note: () => T('Tarif Rp15 per cek setelah kuota gratis · saldo dibaca 14.05', 'Rate Rp15 per check after the free quota · balance read at 14:05'),
+};
+
+/**
+ * Kartu "Pemakaian dan biaya cek resi" (usage.resi dari /usage). Rentangnya sama dengan kartu LLM.
+ * Biaya = jumlah cek × tarif: batas atas, karena kuota gratis berlaku untuk seluruh akun Binderbyte
+ * (semua proyek). Sisa kuota gratis tampil terpisah, tidak dikurangkan.
+ */
+function renderResi(loading, error, r, n) {
+  const resi = r || { enabled: false, price: 0, dailyMax: 0, days: [], account: null, accountError: null };
+  $('resiOff').hidden = loading || Boolean(error) || resi.enabled;
+
+  // Hari tanpa cek diisi 0; terlama dulu (paling kiri di grafik). Hari terakhir seperti di kartu LLM.
+  const raw = resi.days;
+  const today = new Date().toLocaleDateString('en-CA');
+  const last = raw.length && raw[0].day > today ? raw[0].day : today;
+  const first = shiftDay(last, 1 - n);
+  const byDay = new Map(raw.map((d) => [d.day, d]));
+  const days = [];
+  for (let i = 0; i < n; i++) {
+    const day = shiftDay(first, i);
+    const d = byDay.get(day);
+    days.push({ day, auto: d ? d.auto : 0, manual: d ? d.manual : 0 });
+  }
+  const price = resi.price;
+  const checks = (d) => d.auto + d.manual;
+  const sum = (list) => list.reduce((a, d) => ({ auto: a.auto + d.auto, manual: a.manual + d.manual }), { auto: 0, manual: 0 });
+  const counts = (c) => int(checks(c)) + T(' cek · otomatis ', ' checks · automatic ') + int(c.auto) + ' · manual ' + int(c.manual);
+  const todaySum = sum(days.filter((d) => d.day === last));
+  const total = sum(days);
+
+  // Kotak angka: hari ini, seluruh rentang, saldo akun, dan batas harian cek otomatis.
+  const acc = resi.account;
+  let balance = [T('Tidak aktif', 'Not active'), ''];
+  if (loading) balance = ['Rp00.000', RESI_SAMPLE.balance()];
+  else if (resi.enabled && !acc) balance = [T('belum terbaca', 'not read yet'), resi.accountError || ''];
+  else if (resi.enabled && resi.accountError) {
+    // Pembacaan terakhir gagal: saldo lama tetap tampil, dengan waktunya dan pesan error-nya.
+    balance = [idr(acc.balance), T('Saldo terakhir dibaca ', 'Balance last read ') + when(acc.at) + ' · Error: ' + resi.accountError];
+  } else if (resi.enabled) {
+    balance = [idr(acc.balance), T('cukup untuk ±', 'enough for about ') + int(price > 0 ? Math.floor(acc.balance / price) : 0) +
+      T(' cek lagi · ', ' more checks · ') + int(acc.freeLeft) + T(' cek gratis tersisa', ' free checks left')];
+  }
+  const tile = (k, v, sub) => tileNode(k, v, sub, null, loading);
+  if (error) $('resiTiles').replaceChildren(el('div', { className: 'tile tile-err' }, errorNote(error)));
+  else $('resiTiles').replaceChildren(
+    tile(T('Hari ini', 'Today'), loading ? 'Rp000' : idr(checks(todaySum) * price), loading ? RESI_SAMPLE.counts() : counts(todaySum)),
+    tile(T(n + ' hari terakhir', 'Last ' + n + ' days'), loading ? 'Rp0.000' : idr(checks(total) * price), loading ? RESI_SAMPLE.counts() : counts(total)),
+    tile(T('Saldo Binderbyte', 'Binderbyte balance'), balance[0], balance[1]),
+    // TRACK_DAILY_MAX=0 (atau kurang): cek otomatis dimatikan di bot, tombol "Cek resi" tetap jalan.
+    !loading && resi.dailyMax <= 0
+      ? tile(T('Batas harian', 'Daily cap'), T('Nonaktif', 'Off'),
+        T('Cek otomatis dimatikan (TRACK_DAILY_MAX=0); tombol Cek resi tetap bisa dipakai',
+          'Automatic checks are off (TRACK_DAILY_MAX=0); the Cek resi button still works'))
+      : tile(T('Batas harian', 'Daily cap'), loading ? '000 / 000' : int(todaySum.auto) + ' / ' + int(resi.dailyMax),
+        T('cek otomatis hari ini; manual tidak dibatasi', 'automatic checks today; manual is not capped')));
+
+  // Grafik: cek otomatis dan manual bertumpuk, urutan seri tetap.
+  const host = $('chartResi');
+  columnChart({ el: host, title: T('Cek resi per hari', 'Tracking checks per day'), stacked: true, format: int, error,
+    help: T('Jumlah cek resi, ' + n + ' hari terakhir.', 'Number of tracking checks, last ' + n + ' days.'),
+    days: loading ? null : days,
+    series: [{ key: 'auto', label: T('Otomatis', 'Automatic'), slot: 1 }, { key: 'manual', label: 'Manual', slot: 2 }] });
+  if (error) return;
+  // Satu baris keterangan tarif di bawah grafik (selama dimuat: kerangka sepanjang teks biasanya).
+  const note = (content) => host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note' }, content));
+  if (loading) { note(skelText(RESI_SAMPLE.note())); return; }
+  // Saldo dibaca hari ini: jam saja; hari lain: tanggal dan jam.
+  const readAt = (at) => (new Date(at).toLocaleDateString('en-CA') === today ? clock(at) : when(at));
+  note(acc
+    ? T('Tarif ', 'Rate ') + idr(price) + T(' per cek setelah kuota gratis · saldo dibaca ', ' per check after the free quota · balance read at ') + readAt(acc.at)
+    : T('Tarif bawaan ', 'Default rate ') + idr(price) + T(' per cek setelah kuota gratis', ' per check after the free quota'));
+
+  // Tampilan "Tabel": hari dengan cek, terbaru di atas, dengan biayanya.
+  const th = (t, num) => el('th', { textContent: t, className: num ? 'num' : '' });
+  const td = (t, num) => el('td', { textContent: t, className: num ? 'num' : '' });
+  const line = (label, d) => el('tr', {}, el('td', { textContent: label, style: 'white-space:nowrap' }), td(int(d.auto), 1), td(int(d.manual), 1), td(idr(checks(d) * price), 1));
+  const rows = days.filter((d) => checks(d) > 0).reverse().map((d) => line(dayLong(d.day), d));
+  host.querySelector(':scope > .cb > .scroll').replaceChildren(el('table', { className: 'list' },
+    el('thead', {}, el('tr', {}, th(T('Tanggal', 'Date')), th(T('Otomatis', 'Automatic'), 1), th('Manual', 1), th(T('Biaya (Rp)', 'Cost (Rp)'), 1))),
+    el('tbody', {}, ...(rows.length ? rows : [emptyRow(4, T('Belum ada data', 'No data yet'))])),
+    ...(rows.length ? [el('tfoot', {}, line(T('Jumlah ' + n + ' hari', 'Total, ' + n + ' days'), total))] : [])));
 }
 
 // ---------- WhatsApp & keadaan bot ----------
@@ -2929,8 +3021,12 @@ function renderStrip() {
   if (st && st.onlyNumbers) out.push(chip('warn', T('Mode uji', 'TEST MODE') + ' · ' + st.onlyNumbers + T(' nomor', ' numbers'), pathOf('lanjutan'), 'flask'));
   if (!state.testReady) out.push(chip('warn', T('LLM belum diatur', 'LLM not configured'), waHref, 'alert'));
   const month = state.month || { idr: 0 };
-  // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
-  out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#cost', 'coins'));
+  // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw. Tooltip: rincian LLM dan cek resi.
+  const cost = chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#cost', 'coins');
+  const llm = month.llm !== undefined ? month.llm : month.idr;
+  // Biaya cek resi = batas atas (kuota gratis belum dikurangi).
+  cost.title = 'LLM ' + idr(llm) + T(' · Cek resi maks. ', ' · Tracking up to ') + idr(month.resi || 0);
+  out.push(cost);
   // Lencana di wadahnya sendiri (di HP bergulung ke samping); tombol Coba chat di ujung kanan, di semua halaman
   // (node yang sama dipindahkan lagi).
   $('strip').replaceChildren(el('div', { className: 'strip-chips' }, ...out), $('tryBtn'));

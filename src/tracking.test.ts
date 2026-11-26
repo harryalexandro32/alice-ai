@@ -15,11 +15,12 @@ import { clearDb, db, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
 import {
-  advanceStage, createContact, fillOrder, getContact, setStageNote, TRACK_RETRY_MS, trackingCandidates, trackUsageToday, updateContact, type Contact,
+  advanceStage, createContact, fillOrder, getContact, recentAlerts, setStageNote, TRACK_RETRY_MS, trackingCandidates, trackUsageDays, trackUsageToday,
+  updateContact, type Contact,
 } from './store';
 import {
-  COURIERS, isCourier, parseOrderHints, phaseOf, runTracking, setTracker, trackContact, trackingEnabled, trackingLinks,
-  type Tracker,
+  COURIERS, isCourier, NetworkError, parseOrderHints, phaseOf, quotaError, quotaState, refreshQuota, runTracking, setQuotaFetcher, setTracker, trackContact,
+  trackingEnabled, trackingLinks, type Tracker,
 } from './tracking';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
@@ -28,7 +29,8 @@ setDefaultProject(seedCtx('gfan'));
 const A = '+6281234567890';
 const T0 = Date.UTC(2026, 10, 25, 3, 0);
 const MIN = 60_000;
-const DAY = 24 * 60 * MIN;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
 
 /** Panggilan ke pelacak tiruan, dan jawaban berikutnya. */
 let calls: { awb: string; courier: string; phoneLast5?: string }[] = [];
@@ -44,10 +46,34 @@ async function fresh(): Promise<void> {
   setDefaultProject((await loadProject('gfan'))!);
   cfg.binderbyteKey = '';
   cfg.trackDailyMax = 500;
+  cfg.trackPriceIdr = 15;
+  cfg.trackBalanceMinIdr = 3000;
   calls = [];
   answer = async () => ({ status: 'ON PROCESS', history: [] });
   setTracker(fake);
+  setQuotaFetcher(null);
 }
+
+/** Jawaban GET /v1/checkQuota tiruan: semua angka berupa teks, seperti aslinya. */
+const quotaBody = (over: Record<string, unknown> = {}) => ({
+  status: 200, product: 'cek-resi', count: '40', limit: '100', price: '15', balance: '10000.00', ...over,
+});
+
+/** Jalankan fn tanpa keluaran console.error (error yang memang diharapkan); baris yang ditahan dikembalikan. */
+async function quiet(fn: () => Promise<unknown>): Promise<string[]> {
+  const lines: string[] = [];
+  const real = console.error;
+  console.error = (...a: unknown[]) => { lines.push(a.join(' ')); };
+  try {
+    await fn();
+  } finally {
+    console.error = real;
+  }
+  return lines;
+}
+
+/** Warning cek resi yang tercatat, terbaru dulu. */
+const resiAlerts = async (key: string) => (await recentAlerts(50)).filter((a) => a.kind === 'resi' && a.key === key);
 
 /** Kontak dengan resi; sisanya diisi lewat `patch`. */
 async function withAwb(phone: string, patch: Partial<Contact> = {}): Promise<Contact> {
@@ -412,7 +438,7 @@ const tests: [string, () => Promise<void>][] = [
     const day = localStamp(at).slice(0, 10);
     assert.equal(await runTracking(at), 2);
     assert.equal(calls.length, 2);
-    assert.equal(await trackUsageToday(day), 2, 'hitungan ada di database');
+    assert.deepEqual(await trackUsageToday(day), { auto: 2, manual: 0 }, 'hitungan ada di database');
     // Bot dijalankan ulang: tidak ada hitungan di memori, batas tetap berlaku
     // dari database walau jeda 30 menit sudah lewat.
     assert.equal(await runTracking(at + 31 * MIN), 0);
@@ -421,18 +447,18 @@ const tests: [string, () => Promise<void>][] = [
     cfg.trackDailyMax = 3;
     answer = async () => { throw new Error('Credit tidak cukup'); };
     assert.equal(await runTracking(at + 31 * MIN), 1);
-    assert.equal(await trackUsageToday(day), 3);
+    assert.equal((await trackUsageToday(day)).auto, 3);
     assert.equal(await runTracking(at + 31 * MIN), 0);
     answer = async () => ({ status: 'ON PROCESS', history: [] });
     cfg.trackDailyMax = 2;
-    // Tombol "Cek resi" (trackContact langsung) tidak dibatasi dan tidak dihitung.
+    // Tombol "Cek resi" (trackContact langsung) tidak dibatasi; dihitung sebagai cek manual.
     assert.equal((await trackContact('+6281300000003', at + 32 * MIN))?.ship_checked_at, at + 32 * MIN);
     assert.equal(calls.length, 4);
-    assert.equal(await trackUsageToday(day), 3);
+    assert.deepEqual(await trackUsageToday(day), { auto: 3, manual: 1 });
     // Hari berikutnya: jalan lagi.
     assert.equal(await runTracking(at + DAY), 2);
     assert.equal(calls.length, 6);
-    assert.equal(await trackUsageToday(localStamp(at + DAY).slice(0, 10)), 2);
+    assert.deepEqual(await trackUsageToday(localStamp(at + DAY).slice(0, 10)), { auto: 2, manual: 0 });
   }],
 
   ['runTracking: error saat mencatat jatah harian tidak mengubah hasil pelacakan', async () => {
@@ -456,6 +482,301 @@ const tests: [string, () => Promise<void>][] = [
     assert.deepEqual([c?.ship_status, c?.ship_error, c?.ship_checked_at, c?.stage], ['ON PROCESS', null, at, 'dikirim']);
     assert.ok(errs.some((e) => e.startsWith('[resi] catatan jatah harian gagal:')), errs.join('\n'));
     assert.ok(!errs.some((e) => e.includes('cek gagal')), 'bukan error pengecekan');
+  }],
+
+  ['trackContact: cek manual dihitung di n_manual, otomatis di n, batas harian hanya untuk otomatis', async () => {
+    const at = T0 + 20 * DAY;
+    const day = localStamp(at).slice(0, 10);
+    await withAwb('+6281400000001', { awb: 'JP4000000001' });
+    await withAwb('+6281400000002', { awb: 'JP4000000002' });
+    // Tiga cek manual, satu di antaranya error: semuanya dihitung manual.
+    await trackContact('+6281400000001', at);
+    await trackContact('+6281400000001', at + MIN);
+    answer = async () => { throw new Error('Resi tidak ditemukan'); };
+    await trackContact('+6281400000001', at + 2 * MIN);
+    answer = async () => ({ status: 'ON PROCESS', history: [] });
+    assert.deepEqual(await trackUsageToday(day), { auto: 0, manual: 3 });
+    // Batas 1 cek otomatis: cek manual tadi tidak memakan jatahnya.
+    cfg.trackDailyMax = 1;
+    assert.equal(await runTracking(at + 3 * MIN), 1);
+    assert.deepEqual(calls.map((q) => q.awb), ['JP4000000001', 'JP4000000001', 'JP4000000001', 'JP4000000002']);
+    assert.deepEqual(await trackUsageToday(day), { auto: 1, manual: 3 });
+    // Cek manual sesudah batas tercapai tetap jalan.
+    assert.equal((await trackContact('+6281400000002', at + 4 * MIN))?.ship_checked_at, at + 4 * MIN);
+    assert.deepEqual(await trackUsageToday(day), { auto: 1, manual: 4 });
+    // Hari lain, lalu daftar per hari: terbaru dulu, dengan kedua hitungan.
+    const day2 = localStamp(at + DAY).slice(0, 10);
+    await trackContact('+6281400000002', at + DAY);
+    assert.deepEqual(await trackUsageDays(90), [{ day: day2, auto: 0, manual: 1 }, { day, auto: 1, manual: 4 }]);
+    assert.deepEqual(await trackUsageDays(1), [{ day: day2, auto: 0, manual: 1 }]);
+  }],
+
+  ['quotaState: angka dari Binderbyte, simpanan 1 jam, dibaca ulang sesudahnya', async () => {
+    let reads = 0;
+    let body: unknown = quotaBody();
+    setQuotaFetcher(async () => { reads += 1; return body; });
+    // Belum ada simpanan: null dulu, pembacaan dimulai di latar belakang.
+    assert.equal(await quotaState(T0), null);
+    assert.equal(reads, 1);
+    assert.deepEqual(await refreshQuota(T0), { used: 40, limit: 100, price: 15, balance: 10000, at: T0 }, 'menunggu pembacaan yang sedang jalan');
+    assert.equal(reads, 1, 'satu pembacaan saja');
+    assert.equal(quotaError(), null);
+    body = quotaBody({ count: '41', balance: '9985.00' });
+    assert.equal((await quotaState(T0 + 59 * MIN))?.used, 40, 'masih dalam 1 jam: dari simpanan');
+    assert.equal(reads, 1);
+    // Lewat 1 jam: nilai lama langsung dikembalikan, pembacaan ulang di latar belakang.
+    assert.equal((await quotaState(T0 + 61 * MIN))?.used, 40);
+    assert.equal(reads, 2);
+    assert.deepEqual(await refreshQuota(T0 + 61 * MIN), { used: 41, limit: 100, price: 15, balance: 9985, at: T0 + 61 * MIN });
+    assert.equal((await quotaState(T0 + 62 * MIN))?.balance, 9985);
+    assert.equal(reads, 2);
+  }],
+
+  ['quotaState: pembacaan gagal, nilai lama tetap dan pesannya di quotaError', async () => {
+    let next: () => Promise<unknown> = async () => quotaBody();
+    setQuotaFetcher(() => next());
+    await refreshQuota(T0);
+    next = async () => ({ status: 400, message: 'API Key not found' });
+    let kept: unknown;
+    const logged = await quiet(async () => { kept = await refreshQuota(T0 + 2 * 60 * MIN); });
+    assert.equal(quotaError(), 'API Key not found');
+    assert.deepEqual(kept, { used: 40, limit: 100, price: 15, balance: 10000, at: T0 }, 'nilai lama tetap');
+    assert.ok(logged.some((l) => l.includes('saldo Binderbyte tidak terbaca')), logged.join('\n'));
+    next = async () => { throw new Error('Binderbyte tidak menjawab dalam 8 detik.'); };
+    await quiet(() => refreshQuota(T0 + 3 * 60 * MIN));
+    assert.equal(quotaError(), 'Binderbyte tidak menjawab dalam 8 detik.');
+    next = async () => quotaBody({ balance: 'banyak' });
+    await quiet(() => refreshQuota(T0 + 4 * 60 * MIN));
+    assert.equal(quotaError(), 'Jawaban Binderbyte tidak bisa dibaca.');
+    // Berhasil lagi: pesan error hilang.
+    next = async () => quotaBody({ limit: '0', count: '100' });
+    assert.deepEqual(await refreshQuota(T0 + 5 * 60 * MIN), { used: 100, limit: 0, price: 15, balance: 10000, at: T0 + 5 * 60 * MIN });
+    assert.equal(quotaError(), null);
+  }],
+
+  ['quotaState: sesudah pembacaan gagal, pembacaan berikutnya paling cepat 10 menit lagi', async () => {
+    let reads = 0;
+    setQuotaFetcher(async () => { reads += 1; return { status: 400, message: 'API Key not found' }; });
+    // quotaState memulai pembacaan di latar belakang; refreshQuota menunggu pembacaan yang sama.
+    await quiet(async () => {
+      assert.equal(await quotaState(T0), null);
+      await refreshQuota(T0);
+    });
+    assert.equal(reads, 1);
+    assert.equal(quotaError(), 'API Key not found');
+    // 1 menit dan 9 menit kemudian: tidak ada permintaan baru.
+    assert.equal(await quotaState(T0 + MIN), null);
+    assert.equal(await quotaState(T0 + 9 * MIN), null);
+    assert.equal(reads, 1, 'dalam 10 menit sesudah pembacaan gagal: tanpa permintaan');
+    // Lewat 10 menit: dibaca lagi.
+    await quiet(async () => {
+      await quotaState(T0 + 10 * MIN);
+      await refreshQuota(T0 + 10 * MIN);
+    });
+    assert.equal(reads, 2);
+    // refreshQuota yang dipanggil langsung tetap membaca.
+    await quiet(() => refreshQuota(T0 + 11 * MIN));
+    assert.equal(reads, 3);
+
+    // Putaran bot juga: sesudah pembacaan gagal, putaran dalam 10 menit tidak membaca akun.
+    await withAwb(A, { awb_at: T0 + 30 * DAY - HOUR });
+    reads = 0;
+    const at = T0 + 30 * DAY;
+    await quiet(() => runTracking(at));
+    assert.equal(reads, 1);
+    await withAwb('+6281600000002', { awb: 'JP6000000002', awb_at: at - HOUR });
+    await quiet(() => runTracking(at + 5 * MIN));
+    assert.equal(reads, 1, 'putaran dalam 10 menit: akun tidak dibaca');
+    await withAwb('+6281600000003', { awb: 'JP6000000003', awb_at: at - HOUR });
+    await quiet(() => runTracking(at + 11 * MIN));
+    assert.equal(reads, 2);
+  }],
+
+  ['quotaState: pelacakan mati atau tanpa API key, tanpa jaringan', async () => {
+    let reads = 0;
+    setTracker(null);
+    setQuotaFetcher(async () => { reads += 1; return quotaBody(); });
+    assert.equal(trackingEnabled(), false);
+    assert.equal(await quotaState(T0), null);
+    assert.equal(await refreshQuota(T0), null);
+    assert.equal(reads, 0);
+    // Pelacak tiruan tanpa API key dan tanpa pembaca tiruan: Binderbyte tidak dihubungi.
+    setTracker(fake);
+    setQuotaFetcher(null);
+    const real = globalThis.fetch;
+    let fetched = 0;
+    globalThis.fetch = (async () => { fetched += 1; return new Response('{}'); }) as typeof fetch;
+    try {
+      assert.equal(await refreshQuota(T0), null);
+      await withAwb(A);
+      assert.equal(await runTracking(T0 + DAY), 1);
+      assert.equal(fetched, 0);
+    } finally {
+      globalThis.fetch = real;
+    }
+  }],
+
+  ['pembaca akun Binderbyte: alamat dan pesan error', async () => {
+    const real = globalThis.fetch;
+    const urls: string[] = [];
+    let reply: { code: number; raw: string } = { code: 200, raw: JSON.stringify(quotaBody()) };
+    globalThis.fetch = (async (url: string | URL) => {
+      urls.push(String(url));
+      return new Response(reply.raw, { status: reply.code, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      cfg.binderbyteKey = 'kunci-uji';
+      assert.deepEqual(await refreshQuota(T0), { used: 40, limit: 100, price: 15, balance: 10000, at: T0 });
+      const u = new URL(urls[0] as string);
+      assert.equal(u.origin + u.pathname, 'https://api.binderbyte.com/v1/checkQuota');
+      assert.deepEqual(Object.fromEntries(u.searchParams), { api_key: 'kunci-uji' });
+      reply = { code: 400, raw: JSON.stringify({ status: 400, message: 'API Key not found or not active' }) };
+      await quiet(() => refreshQuota(T0 + 2 * 60 * MIN));
+      assert.equal(quotaError(), 'API Key not found or not active');
+      reply = { code: 503, raw: '' };
+      await quiet(() => refreshQuota(T0 + 3 * 60 * MIN));
+      assert.equal(quotaError(), 'HTTP 503');
+      reply = { code: 200, raw: '<html>maintenance</html>' };
+      await quiet(() => refreshQuota(T0 + 4 * 60 * MIN));
+      assert.equal(quotaError(), 'Jawaban Binderbyte tidak bisa dibaca.');
+      // Pembacaan gagal tidak mengubah waktu simpanan: masih dari T0.
+      let kept: unknown;
+      await quiet(async () => { kept = await refreshQuota(T0 + 5 * 60 * MIN); });
+      assert.equal((kept as { at: number } | null)?.at, T0, 'nilai lama tetap');
+    } finally {
+      globalThis.fetch = real;
+    }
+  }],
+
+  ['runTracking: warning batas harian, sekali per hari (kunci per hari)', async () => {
+    cfg.trackDailyMax = 1;
+    const at = T0 + 30 * DAY;
+    const dayOf = (t: number) => localStamp(t).slice(0, 10);
+    for (let i = 1; i <= 4; i++) await withAwb(`+628150000000${i}`, { awb: `JP500000000${i}`, awb_at: at - HOUR });
+    await quiet(() => runTracking(at));
+    let rows = await resiAlerts(`batas:${dayOf(at)}`);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.text, 'Batas cek resi harian (1) tercapai. Cek otomatis berhenti sampai besok.');
+    // Putaran berikutnya di hari yang sama: tidak ada warning baru.
+    await quiet(() => runTracking(at + 31 * MIN));
+    assert.equal((await resiAlerts(`batas:${dayOf(at)}`)).length, 1);
+    // Hari berikutnya, belum 24 jam sejak warning terakhir: tetap ada warning untuk hari itu.
+    await quiet(() => runTracking(at + DAY));
+    rows = await resiAlerts(`batas:${dayOf(at + DAY)}`);
+    assert.equal(rows.length, 1, 'hari baru, kunci baru');
+    assert.equal((await resiAlerts(`batas:${dayOf(at)}`)).length, 1);
+  }],
+
+  ['runTracking: TRACK_DAILY_MAX=0 mematikan cek otomatis, tanpa log dan warning', async () => {
+    cfg.trackDailyMax = 0;
+    const at = T0 + 35 * DAY;
+    for (let i = 1; i <= 2; i++) await withAwb(`+628170000000${i}`, { awb: `JP700000000${i}`, awb_at: at - HOUR });
+    assert.ok((await trackingCandidates(at, 10)).length > 0, 'ada kandidat');
+    const logs: string[] = [];
+    const realLog = console.log;
+    console.log = (...a: unknown[]) => { logs.push(a.join(' ')); };
+    let n: number;
+    try {
+      n = await runTracking(at);
+    } finally {
+      console.log = realLog;
+    }
+    assert.equal(n, 0);
+    assert.equal(calls.length, 0, 'pelacak tidak dipanggil');
+    assert.equal((await recentAlerts(50)).filter((a) => a.kind === 'resi').length, 0, 'tanpa warning');
+    assert.equal(logs.filter((l) => l.includes('[resi]')).length, 0, 'tanpa log');
+    assert.equal((await trackUsageToday(localStamp(at).slice(0, 10))).auto, 0);
+  }],
+
+  ['runTracking: warning saldo menipis hanya kalau kuota gratis habis', async () => {
+    let reads = 0;
+    let body: unknown = quotaBody({ count: '100', limit: '100', balance: '2000.00' });
+    setQuotaFetcher(async () => { reads += 1; return body; });
+    const at = T0 + 40 * DAY;
+    // Tanpa cek resi: akun tidak dibaca.
+    assert.equal(await runTracking(at), 0);
+    assert.equal(reads, 0);
+    await withAwb(A, { awb_at: at - HOUR });
+    await quiet(() => runTracking(at));
+    assert.equal(reads, 1);
+    const rows = await resiAlerts('saldo');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.text, 'Saldo Binderbyte Rp2.000, cukup untuk sekitar 133 cek lagi. Isi ulang di hub.binderbyte.com.');
+    // Putaran berikutnya dalam 1 jam: akun tidak dibaca lagi, warning tidak diulang.
+    await quiet(() => runTracking(at + 31 * MIN));
+    assert.equal(reads, 1);
+    assert.equal((await resiAlerts('saldo')).length, 1);
+
+    // Saldo cukup, atau kuota gratis masih ada: tanpa warning.
+    await fresh();
+    setQuotaFetcher(async () => { reads += 1; return body; });
+    await withAwb(A, { awb_at: at - HOUR });
+    body = quotaBody({ count: '100', limit: '100', balance: '10000.00' });
+    await runTracking(at);
+    await withAwb('+6281600000001', { awb: 'JP6000000001', awb_at: at - HOUR });
+    body = quotaBody({ count: '10', limit: '100', balance: '100.00' });
+    await runTracking(at + 2 * HOUR);
+    assert.equal(reads, 3);
+    assert.equal((await resiAlerts('saldo')).length, 0);
+  }],
+
+  ['trackContact: warning saldo menipis juga sesudah cek manual, walau TRACK_DAILY_MAX=0', async () => {
+    cfg.trackDailyMax = 0;
+    let reads = 0;
+    setQuotaFetcher(async () => { reads += 1; return quotaBody({ count: '100', limit: '100', balance: '2000.00' }); });
+    const at = T0 + 45 * DAY;
+    await withAwb(A, { awb_at: at - HOUR });
+    // Cek otomatis mati: putaran bot tidak memanggil Binderbyte dan tidak membaca akun.
+    assert.equal(await runTracking(at), 0);
+    assert.equal(reads, 0);
+    // Satu cek manual: akun dibaca, warning saldo tercatat.
+    await quiet(() => trackContact(A, at));
+    assert.equal(calls.length, 1);
+    assert.equal(reads, 1);
+    const rows = await resiAlerts('saldo');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.text, 'Saldo Binderbyte Rp2.000, cukup untuk sekitar 133 cek lagi. Isi ulang di hub.binderbyte.com.');
+    // Cek manual kedua dalam 24 jam (sesudah simpanan 1 jam kedaluwarsa): tidak ada warning baru.
+    await quiet(() => trackContact(A, at + 2 * HOUR));
+    assert.equal(calls.length, 2);
+    assert.equal(reads, 2);
+    assert.equal((await resiAlerts('saldo')).length, 1);
+    // Kontak tanpa resi: pelacak tidak dipanggil, akun tidak dibaca.
+    await createContact('+6281800000001', '+6281800000001', at);
+    await trackContact('+6281800000001', at + 4 * HOUR);
+    assert.equal(calls.length, 2);
+    assert.equal(reads, 2);
+  }],
+
+  ['counting: NetworkError tidak dihitung, error dengan jawaban HTTP tetap dihitung', async () => {
+    const at = T0 + 50 * DAY;
+    const day = localStamp(at).slice(0, 10);
+    let reads = 0;
+    setQuotaFetcher(async () => { reads += 1; return quotaBody({ count: '100', limit: '100', balance: '2000.00' }); });
+    await withAwb(A, { awb_at: at - HOUR });
+    // Manual, belum sampai ke Binderbyte: tidak dihitung, akun tidak dibaca, ship_error tetap tercatat.
+    answer = async () => { throw new NetworkError('Binderbyte tidak bisa dihubungi: ECONNRESET'); };
+    assert.equal((await trackContact(A, at))?.ship_error, 'Binderbyte tidak bisa dihubungi: ECONNRESET');
+    assert.deepEqual(await trackUsageToday(day), { auto: 0, manual: 0 });
+    assert.equal(reads, 0);
+    // Objek error dengan `network: true` juga dianggap belum sampai.
+    answer = async () => { throw Object.assign(new Error('Binderbyte tidak menjawab dalam 15 detik.'), { network: true }); };
+    await trackContact(A, at + MIN);
+    assert.deepEqual(await trackUsageToday(day), { auto: 0, manual: 0 });
+    // Error biasa (jawaban HTTP dengan error): dihitung.
+    answer = async () => { throw new Error('Credit tidak cukup'); };
+    await quiet(() => trackContact(A, at + 2 * MIN));
+    assert.deepEqual(await trackUsageToday(day), { auto: 0, manual: 1 });
+    // Otomatis: NetworkError tidak memakai batas harian.
+    cfg.trackDailyMax = 1;
+    await withAwb('+6281900000001', { awb: 'JP9000000001', awb_at: at - HOUR });
+    await withAwb('+6281900000002', { awb: 'JP9000000002', awb_at: at - HOUR });
+    answer = async () => { throw new NetworkError('Binderbyte tidak bisa dihubungi: ENOTFOUND'); };
+    const before = calls.length;
+    assert.equal(await runTracking(at + 3 * MIN), 2, 'kedua resi dicek walau batasnya 1');
+    assert.equal(calls.length, before + 2);
+    assert.equal((await trackUsageToday(day)).auto, 0);
+    assert.equal((await resiAlerts(`batas:${day}`)).length, 0, 'batas belum tercapai');
   }],
 
   ['fillOrder: hanya kolom yang di database masih kosong', async () => {
@@ -491,6 +812,8 @@ const tests: [string, () => Promise<void>][] = [
     try {
       setTracker(null);
       cfg.binderbyteKey = 'kunci-uji';
+      // Akun dibaca lewat pembaca tiruan: fetch tiruan ini hanya untuk /v1/track.
+      setQuotaFetcher(async () => quotaBody());
       reply = {
         code: 200,
         body: {
@@ -525,6 +848,12 @@ const tests: [string, () => Promise<void>][] = [
       await updateContact(A, { courier: 'jnt' });
       await trackContact(A, T0);
       assert.equal(new URL(urls.at(-1) as string).searchParams.has('number'), false);
+      // Fetch melempar (koneksi putus): NetworkError, tidak dihitung sebagai cek.
+      const day = localStamp(T0).slice(0, 10);
+      const counted = (await trackUsageToday(day)).manual;
+      globalThis.fetch = (async () => { throw new TypeError('fetch failed'); }) as typeof fetch;
+      assert.equal((await trackContact(A, T0 + 5 * MIN))?.ship_error, 'Binderbyte tidak bisa dihubungi: fetch failed');
+      assert.equal((await trackUsageToday(day)).manual, counted, 'tidak dihitung');
     } finally {
       globalThis.fetch = real;
     }
@@ -545,6 +874,7 @@ const tests: [string, () => Promise<void>][] = [
     }
   }
   setTracker(null);
+  setQuotaFetcher(null);
   console.log(`\nresi: ${tests.length - failed}/${tests.length} lulus`);
   process.exit(failed ? 1 : 0);
 })();
