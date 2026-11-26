@@ -173,7 +173,7 @@ const tests: [string, () => Promise<void>][] = [
     await say('butuh exhaust buat gudang');
     assert.equal(sales.length, 1);
     assert.match(sales[0] ?? '', /Lead lengkap/);
-    assert.match(sales[0] ?? '', /Nama: Budi\nKota\/alamat: Surabaya\nKebutuhannya: exhaust fan gudang/);
+    assert.match(sales[0] ?? '', /Nama: Budi\nKota\/alamat: Surabaya\nKebutuhan: exhaust fan gudang/);
     assert.match(sales[0] ?? '', /wa\.me\/6281211110001/);
     next = () => R('Sama-sama.', { need: 'exhaust fan gudang 16 inci' });
     await say('yang 16 inci ya');
@@ -227,7 +227,7 @@ const tests: [string, () => Promise<void>][] = [
     await say('halo');
     next = () => null;
     await say('ada jet fan?');
-    assert.match(sent[1] ?? '', /nama, kota\/alamat dan kebutuhannya/);
+    assert.match(sent[1] ?? '', /nama, kota\/alamat dan kebutuhan/);
     next = () => R('ok', { name: 'Adi', city: 'Solo', need: 'jet fan' });
     await say('Adi Solo jet fan');
     next = () => null;
@@ -248,7 +248,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
     advance(1 * HOUR + MINUTE); // 09:01 besoknya
     assert.equal(await follow(), 1);
-    assert.match(sent.at(-1) ?? '', /Menyambung chat sebelumnya[\s\S]*nama, kota\/alamat dan kebutuhannya/);
+    assert.match(sent.at(-1) ?? '', /Menyambung chat sebelumnya[\s\S]*nama, kota\/alamat dan kebutuhan/);
     advance(HOUR);
     assert.equal(await follow(), 0, 'tidak dua kali untuk masa diam yang sama');
     advance(48 * HOUR);
@@ -269,7 +269,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
     advance(3 * HOUR + MINUTE); // 08:01
     assert.equal(await follow(), 1);
-    assert.match(sent.at(-1) ?? '', /Halo Budi[\s\S]*kota\/alamat dan kebutuhannya/);
+    assert.match(sent.at(-1) ?? '', /Halo Budi[\s\S]*kota\/alamat dan kebutuhan/);
   }],
 
   ['percakapan yang sudah selesai tidak dikejar', async () => {

@@ -33,7 +33,7 @@ export const generic: Business = {
   leadFields: [
     { key: 'name', label: 'nama', hint: 'nama orangnya; jangan dari sapaan, nama bisnis kami, atau tebakan', isName: true },
     { key: 'city', label: 'kota/alamat', hint: 'kota atau alamat pelanggan' },
-    { key: 'need', label: 'kebutuhannya', hint: 'ringkasan singkat kebutuhannya dengan kata-katamu' },
+    { key: 'need', label: 'kebutuhan', hint: 'ringkasan singkat kebutuhannya dengan kata-katamu' },
   ],
 
   products: [],
