@@ -210,36 +210,46 @@
       <!-- ================= Satu percakapan ================= -->
       <section data-page="chat">
         <div class="convgrid">
+        <!-- Panel data pelanggan: bagian-bagian bertumpuk, dipisah garis tipis. Nama pelanggan sudah jadi judul halaman. -->
         <div class="card convhead">
-          <div class="cb">
-            <div class="convtop">
-              <div class="convwho"><b id="convName"></b> <span class="help" id="convPhone"></span></div>
-              <span class="chip" id="convHold"></span>
+          <div class="cp-sec">
+            <!-- Hanya tampil saat bot meminta bantuan staf. -->
+            <div class="cp-alert" id="convNeeds" hidden>
+              <p class="cp-alert-t"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span data-en="Waiting for staff">Menunggu staf</span></p>
+              <p data-en="The bot asked your team for help in this chat. This clears when you reply. If you already handled it outside the chat, for example by phone, mark it here.">Bot meminta bantuan tim Anda di percakapan ini. Tanda ini hilang saat Anda membalas. Kalau sudah ditangani di luar chat, misalnya lewat telepon, tandai di sini.</p>
+              <button class="btn ghost sm" type="button" id="convHandled"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span data-en="Mark as handled">Tandai sudah ditangani</span></button>
             </div>
-            <div class="convctl">
-              <label class="inline"><span data-en="Stage">Tahap</span><select id="convStage"></select></label>
-              <button class="btn ghost" type="button" id="convBot"></button>
-              <button class="btn ghost" type="button" id="convHandled"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span data-en="Mark as handled">Tandai sudah ditangani</span></button>
-            </div>
-            <label class="f" style="margin:12px 0 0"><span data-en="Note">Catatan</span><textarea rows="2" id="convNote" placeholder="Catatan untuk tim, misalnya minta penawaran hari Senin" data-en-ph="Note for the team, e.g. wants a quote on Monday"></textarea><small id="convNoteState"></small></label>
-            <div class="order" id="convOrder">
-              <div class="order-row">
-                <label class="f"><span data-en="Order number">Nomor pesanan</span><input type="text" id="orderRef" maxlength="60" autocomplete="off" placeholder="Dari Tokopedia atau Shopee" data-en-ph="From Tokopedia or Shopee"></label>
-                <label class="f"><span data-en="Tracking number">Nomor resi</span><input type="text" id="orderAwb" maxlength="40" autocomplete="off"></label>
-                <label class="f"><span data-en="Courier">Kurir</span><select id="orderCourier"></select></label>
-              </div>
-              <small class="help" id="orderState"></small>
-              <div class="order-row">
-                <button class="btn ghost sm" type="button" id="orderTrack"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Check tracking">Cek resi</span></button>
-                <span class="chip" id="orderStatus"></span>
-                <span class="help" id="orderChecked"></span>
-                <span class="order-links" id="orderLinks"></span>
-              </div>
-              <p class="help" id="orderOff" hidden data-en="Automatic tracking is not set up yet (BINDERBYTE_API_KEY). The links beside it still work.">Pelacakan otomatis belum diatur (BINDERBYTE_API_KEY). Tautan di samping tetap bisa dipakai.</p>
-              <ul class="order-hist" id="orderHistory"></ul>
+            <label class="cp-row"><span class="cp-k" data-en="Stage">Tahap</span><select id="convStage"></select></label>
+            <div class="cp-row">
+              <span class="cp-k" id="convBotK" data-en="Bot replies">Bot menjawab</span>
+              <button class="switchbtn" type="button" role="switch" id="convBot" aria-labelledby="convBotK" aria-describedby="convHold"><span class="track" aria-hidden="true"></span><span id="convHold"></span></button>
             </div>
           </div>
-          <div class="cardfoot" id="convLead"></div>
+          <div class="cp-sec">
+            <h3 class="cp-h" data-en="Customer data">Data pelanggan</h3>
+            <dl class="cp-dl" id="convLead"></dl>
+            <div class="cp-sum" id="convSum" hidden><span class="cp-k" data-en="Conversation summary">Ringkasan percakapan</span><p id="convSumText"></p></div>
+          </div>
+          <div class="cp-sec">
+            <label class="f cp-f"><span class="cp-h" data-en="Note">Catatan</span><textarea rows="3" id="convNote" placeholder="Catatan untuk tim, misalnya minta penawaran hari Senin" data-en-ph="Note for the team, e.g. wants a quote on Monday"></textarea><small id="convNoteState"></small></label>
+          </div>
+          <div class="cp-sec order" id="convOrder">
+            <h3 class="cp-h" data-en="Order">Pesanan</h3>
+            <label class="f"><span data-en="Order number">Nomor pesanan</span><input type="text" id="orderRef" maxlength="60" autocomplete="off" placeholder="Dari Tokopedia atau Shopee" data-en-ph="From Tokopedia or Shopee"></label>
+            <div class="row">
+              <label class="f"><span data-en="Tracking number">Nomor resi</span><input type="text" id="orderAwb" maxlength="40" autocomplete="off"></label>
+              <label class="f"><span data-en="Courier">Kurir</span><select id="orderCourier"></select></label>
+            </div>
+            <small class="help" id="orderState"></small>
+            <div class="order-track">
+              <button class="btn ghost sm" type="button" id="orderTrack"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Check tracking">Cek resi</span></button>
+              <span class="chip" id="orderStatus"></span>
+              <span class="help" id="orderChecked"></span>
+            </div>
+            <ul class="order-hist" id="orderHistory"></ul>
+            <p class="order-links" id="orderLinks"></p>
+            <p class="help" id="orderOff" hidden data-en="Automatic tracking is not set up yet (BINDERBYTE_API_KEY). The links above still work.">Pelacakan otomatis belum diatur (BINDERBYTE_API_KEY). Tautan di atas tetap bisa dipakai.</p>
+          </div>
         </div>
         <div class="card">
           <div class="cb">
