@@ -1821,6 +1821,11 @@ function renderLeadsPending() {
   $('leads').replaceChildren(el('tbody', {}, ...(failed ? [emptyRow(1, loadError(leadError))] : skeleton('row', 3))));
 }
 
+/** Sel ringkasan: paling banyak 3 baris (CSS), teks lengkapnya di tooltip. */
+function sumCell(text) {
+  return el('td', { className: 'sum' }, el('div', { className: 'clamp', textContent: text || '-', title: text || '' }));
+}
+
 function renderLeads() {
   if (!profile) return;
   if (leadsPending || !leadData) return renderLeadsPending();
@@ -1867,7 +1872,7 @@ function renderLeads() {
       el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('Lengkap', 'Complete') : T('Belum lengkap', 'Incomplete') }),
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') }) : null));
     const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
-      el('td', { className: 'sum', textContent: c.summary || '-' }), status,
+      sumCell(c.summary), status,
       el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: cap(why) }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
     // Klik di mana saja pada baris (selain kontrolnya) membuka percakapannya.
@@ -2612,7 +2617,7 @@ function renderAttention() {
     const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka percakapan', 'Open chat'));
     rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
       el('td', {}, el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') })),
-      el('td', { className: 'sum', textContent: c.summary || '-' }),
+      sumCell(c.summary),
       el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
   }
   // Petunjuk satu baris di atas daftar, hanya kalau ada pelanggan yang menunggu staf.

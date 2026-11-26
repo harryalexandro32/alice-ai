@@ -525,7 +525,10 @@ select.stagesel option { background-color: var(--field); color: var(--ink); font
 #attention .acts-in { display: inline-flex; gap: 6px; }
 /* Tombol "Buka chat" adalah tautan di dalam tabel: tetap berteks putih, tidak ikut warna tautan tabel. */
 #attention a.btn, :root[data-theme=dark] #attention a.btn { color: var(--on-blue); text-decoration: none; }
-td.sum { max-width: 340px; min-width: 200px; color: var(--ink2); }
+/* Ringkasan di tabel: teks sekunder (lebih kecil dan pudar), paling banyak 3 baris. Teks lengkapnya ada di
+   tooltip dan di panel percakapan. */
+td.sum { max-width: 340px; min-width: 220px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+td.sum .clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 td.mono { font-family: var(--font-mono); font-size: 12px; word-break: break-word; }
 tr.stale td { background: var(--danger-soft); }
 .note-ico { cursor: help; }
