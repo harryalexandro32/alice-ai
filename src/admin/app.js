@@ -1960,9 +1960,8 @@ async function openConv(phone) {
     $('thread').replaceChildren(el('div', { className: 'daysep', textContent: T('memuat…', 'loading…') }));
     $('convNote').value = '';
     $('convNoteState').textContent = '';
-    $('convName').textContent = phone;
-    $('convPhone').textContent = '';
     $('convLead').replaceChildren();
+    $('convSum').hidden = true;
   }
   await pollConv();
 }
@@ -2016,21 +2015,20 @@ function confirmOptOutResume() {
 function renderConvHead() {
   const c = conv.contact;
   const name = nameOf(c);
-  $('convName').textContent = name || c.phone;
-  $('convPhone').textContent = [name ? c.phone : '', c.waName && c.waName !== name ? 'WA: ' + c.waName : ''].filter(Boolean).join(' · ');
   $('title').textContent = name || c.phone;
   document.title = (name || c.phone) + ' · Alice AI';
-  const [holdText, holdCls] = c.hold === 'berhenti' ? [T('Minta tidak dihubungi', 'Asked not to be contacted'), 'danger']
-    : c.hold === 'admin' ? [T('Bot diam: admin membalas', 'Bot quiet: an admin replied'), 'warn']
-    : c.hold === 'tombol' ? [T('Bot dijeda di percakapan ini', 'Bot paused in this chat'), 'warn']
-    : c.hold === 'tenang' ? [T('Bot aktif, menunggu jam tenang selesai', 'Bot active: waiting for quiet hours to end'), 'warn']
-    : [T('Bot aktif', 'Bot active'), 'ok'];
-  $('convHold').textContent = holdText + (c.needsSales ? T(' · perlu staf', ' · needs staff') : '');
-  $('convHold').className = 'chip ' + (c.needsSales ? 'danger' : holdCls);
+  // Sakelar "Bot menjawab": keadaannya ditulis di sampingnya. Klik = jeda atau nyalakan lagi.
+  const [holdText, holdCls] = c.hold === 'berhenti' ? [T('Pelanggan minta tidak dihubungi', 'The customer asked not to be contacted'), 'danger']
+    : c.hold === 'admin' ? [T('Diam, admin sedang membalas', 'Quiet, an admin is replying'), 'warn']
+    : c.hold === 'tombol' ? [T('Dijeda', 'Paused'), 'warn']
+    : c.hold === 'tenang' ? [T('Aktif, menunggu jam tenang selesai', 'Active, waiting for quiet hours to end'), 'warn']
+    : [T('Aktif', 'Active'), 'ok'];
   const off = botHeld(c.hold);
-  withIcon($('convBot'), off ? 'play' : 'pause', c.hold === 'berhenti' ? T('Nyalakan bot lagi (abaikan permintaan berhenti)', 'Turn the bot back on (ignore the stop request)')
-    : off ? T('Nyalakan bot lagi', 'Turn the bot back on') : T('Jeda bot di percakapan ini', 'Pause the bot in this chat'));
-  $('convHandled').hidden = !c.needsSales;
+  $('convBot').setAttribute('aria-checked', String(!off));
+  $('convBot').className = 'switchbtn ' + holdCls;
+  $('convHold').textContent = holdText;
+  $('convBot').title = off ? T('Nyalakan bot lagi di percakapan ini', 'Turn the bot back on in this chat') : T('Jeda bot di percakapan ini', 'Pause the bot in this chat');
+  $('convNeeds').hidden = !c.needsSales;
   if ($('convStage').options.length !== STAGES.length || $('convStage').dataset.lang !== lang) {
     $('convStage').replaceChildren(...STAGES.map((s) => el('option', { value: s, textContent: stageLabel(s) })));
     $('convStage').dataset.lang = lang;
@@ -2039,13 +2037,15 @@ function renderConvHead() {
   paintStage($('convStage'));
   // Catatan yang sedang diketik tidak ditimpa oleh pembaruan berkala.
   if (document.activeElement !== $('convNote') && !noteTimer) $('convNote').value = c.note || '';
-  const facts = conv.fields.map((f) => [sentenceCase(f.label), c.lead[f.key]]).filter(([, v]) => v);
-  $('convLead').replaceChildren(...[
-    ...facts.flatMap(([k, v], i) => [i ? ' · ' : '', el('b', { textContent: k + ': ' }), v]),
-    c.summary ? el('div', { style: 'flex-basis:100%', textContent: T('Ringkasan: ', 'Summary: ') + c.summary }) : null,
-    !facts.length && !c.summary ? T('Belum ada data pelanggan yang tercatat.', 'No customer data recorded yet.') : null,
-  ].filter((x) => x !== null));
-  $('convLead').hidden = false;
+  // Data pelanggan: nomor dan nama WhatsApp, lalu isian yang sudah terisi. Isian kosong ditulis "-" supaya terlihat apa yang belum diketahui.
+  const facts = [
+    [T('Nomor', 'Number'), c.phone],
+    ...(c.waName && c.waName !== name ? [[T('Nama WhatsApp', 'WhatsApp name'), c.waName]] : []),
+    ...conv.fields.map((f) => [sentenceCase(f.label), c.lead[f.key] || '']),
+  ];
+  $('convLead').replaceChildren(...facts.flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { className: v ? '' : 'empty', textContent: v || '-' })]));
+  $('convSum').hidden = !c.summary;
+  $('convSumText').textContent = c.summary || '';
   $('replyBlocked').hidden = c.canReply;
   $('replyText').disabled = $('replySend').disabled = !c.canReply;
   renderConvOrder();
@@ -2079,7 +2079,7 @@ function renderConvOrder() {
   $('orderStatus').className = 'chip' + (cls ? ' ' + cls : '');
   $('orderStatus').hidden = !o.awb;
   $('orderChecked').textContent = o.awb && o.checkedAt ? T('dicek ', 'checked ') + clock(o.checkedAt) : '';
-  $('orderLinks').replaceChildren(...(o.links || []).map((l) => el('a', { href: l.url, target: '_blank', rel: 'noopener', textContent: l.label })));
+  $('orderLinks').replaceChildren(...(o.links || []).map((l) => el('a', { className: 'link', href: l.url, target: '_blank', rel: 'noopener', textContent: l.label })));
   $('orderTrack').hidden = !o.trackingEnabled;
   $('orderOff').hidden = o.trackingEnabled;
   $('orderHistory').replaceChildren(...(o.history || []).slice(0, 3).map((h) =>
