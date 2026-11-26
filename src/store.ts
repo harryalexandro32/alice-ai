@@ -383,7 +383,8 @@ export async function followupCandidates(): Promise<Contact[]> {
   const rows = await db()
     .select()
     .from(contacts)
-    .where(and(eq(contacts.project, pid()), eq(contacts.followup_state, 'pending'), eq(contacts.last_dir, 'out')));
+    // 'human' = pengingat setelah admin manusia membalas (lihat followup.ts).
+    .where(and(eq(contacts.project, pid()), eq(contacts.followup_state, 'pending'), inArray(contacts.last_dir, ['out', 'human'])));
   return rows.map((r) => toContact(r) as Contact);
 }
 

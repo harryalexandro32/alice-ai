@@ -48,6 +48,7 @@ export const generic: Business = {
   forbidPrices: true,
   guardCodes: false,
   stopAfterHuman: true,
+  followupAfterHuman: true,
   knownAt: 0,
   knownCount: 0,
   recipients: [],

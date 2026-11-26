@@ -25,7 +25,7 @@ import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
   addHandoff, addMessage, contactByAddress, countInboundSince, createContact, dueDeferred, fillOrder, getContact, humanSeenAt, isBotOff,
   markHuman, outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact, type MessageKind,
-  type OrderFill,
+  type OrderFill, type Stage,
 } from './store';
 import { inQuiet, quietEndAfter } from './quiet';
 import { onOrderRefChanged } from './tiktok';
@@ -753,13 +753,22 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
 }
 
 /**
+ * Tahap prospek yang masih terbuka untuk pengingat setelah admin membalas:
+ * tim sudah menghubungi, tapi belum ada pembayaran, kiriman, atau penutupan.
+ */
+export function openForHumanFollowup(stage: Stage): boolean {
+  return stage === 'dihubungi' || stage === 'menunggu' || stage === 'link';
+}
+
+/**
  * Manusia mengambil alih chat ini: bot mundur (jeda + tanda "admin membalas"),
- * pesannya dicatat sebagai pesan manusia, follow-up yang menunggu batal, tanda
+ * pesannya dicatat sebagai pesan manusia, follow-up bot yang menunggu batal, tanda
  * "perlu staf" lepas (staf sudah menjawab), dan lead yang masih "baru" atau
- * "menunggu" (tim) pindah ke "dihubungi". Dipakai balasan dari HP
- * (handleHumanReply) dan dari dashboard, supaya keduanya selalu sama persis.
- * Mengembalikan kontak dan id pesan yang dicatat, atau null kalau alamat ini
- * belum dikenal.
+ * "menunggu" (tim) pindah ke "dihubungi". Kalau `followupAfterHuman` menyala dan
+ * tahapnya masih terbuka, pengingat setelah admin dijadwalkan (followup.ts).
+ * Dipakai balasan dari HP (handleHumanReply) dan dari dashboard, supaya
+ * keduanya selalu sama persis. Mengembalikan kontak dan id pesan yang dicatat,
+ * atau null kalau alamat ini belum dikenal.
  */
 export async function applyHumanReply(
   address: string, text: string, at: number, kind?: MessageKind
@@ -769,10 +778,13 @@ export async function applyHumanReply(
   const c = await contactByAddress(address);
   if (!c) return null;
   const messageId = await addMessage(c.phone, 'human', text || '[bukan teks]', at, null, kind);
-  // Balasan yang menunggu jam tenang batal: manusia sudah menjawabnya.
+  const stage: Stage = c.stage === 'baru' || c.stage === 'menunggu' ? 'dihubungi' : c.stage;
+  // Balasan yang menunggu jam tenang batal: manusia sudah menjawabnya. Setiap
+  // pesan admin menjadwalkan ulang pengingatnya dari pesan admin yang terbaru.
   const contact = await updateContact(c.phone, {
-    last_dir: 'human', followup_state: 'idle', deferred_until: null, needs_sales: 0,
-    ...(c.stage === 'baru' || c.stage === 'menunggu' ? { stage: 'dihubungi' as const } : {}),
+    last_dir: 'human', deferred_until: null, needs_sales: 0,
+    followup_state: biz.followupAfterHuman && openForHumanFollowup(stage) ? 'pending' : 'idle',
+    ...(stage !== c.stage ? { stage } : {}),
   });
   return { contact, messageId };
 }
