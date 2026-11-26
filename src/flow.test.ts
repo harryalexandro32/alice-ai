@@ -23,8 +23,8 @@ import { ALERT_TITLES, raiseAlert } from './alerts';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
-import { getContact, getOrder, listHandoffs, outboxAdd, outboxPending, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, setOrderContact, updateContact, updateProject, importContact, upsertOrderRow } from './store';
-import { handoffText, NON_TEXT, noDash, followupText, OPT_OUT_ACK } from './texts';
+import { getContact, getOrder, listHandoffs, outboxAdd, outboxPending, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, setBotOff, setOrderContact, updateContact, updateProject, importContact, upsertOrderRow } from './store';
+import { handoffText, NON_TEXT, noDash, followupText, humanFollowupText, OPT_OUT_ACK } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
 setDefaultProject(seedCtx('gfan'));
@@ -92,6 +92,7 @@ async function fresh(): Promise<void> {
   biz.files = [];
   biz.products = SEED_PRODUCTS;
   biz.stopAfterHuman = true;
+  biz.followupAfterHuman = true;
   biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }];
   biz.notifyRoutes = {};
   cfg.llmVision = true;
@@ -342,11 +343,119 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(brainCalls[0]?.history.some((h) => h.dir === 'human'), true);
   }],
 
-  ['manusia membalas setelah bot: follow-up yang menunggu batal', async () => {
+  ['manusia membalas setelah bot: follow-up bot batal, diganti pengingat setelah admin', async () => {
     await say('halo');
     await handleHumanReply({ address: A, text: 'saya bantu ya' });
     advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), humanFollowupText(null), 'bukan follow-up bot yang menanyakan data');
     assert.equal(await follow(), 0);
+  }],
+
+  ['admin membalas lalu pelanggan diam: satu pengingat setelah 23 jam, bot tetap tidak ikut campur', async () => {
+    await say('halo');
+    await updateContact(A, { lead: { name: 'Budi' } });
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    assert.equal((await getContact(A))?.followup_state, 'pending');
+    advance(22 * HOUR);
+    assert.equal(await follow(), 0, 'belum waktunya');
+    advance(HOUR + MINUTE); // 09:01 besoknya
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), humanFollowupText('Budi'));
+    assert.equal(sent.at(-1), noDash(sent.at(-1) ?? ''));
+    const c = await getContact(A);
+    assert.deepEqual([c?.followup_total, c?.followup_state, c?.last_dir], [1, 'idle', 'out']);
+    assert.equal((await recentMessages(A, 1))[0]?.dir, 'out', 'dicatat sebagai pesan bot');
+    advance(HOUR);
+    assert.equal(await follow(), 0, 'hanya sekali');
+    // Sesudah pengingat, bot tetap keluar dari chat ini.
+    const before = sent.length;
+    await say('masih ada?');
+    assert.equal(sent.length, before);
+    assert.equal(brainCalls.length, 0);
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'balasan pelanggan tidak memicu follow-up bot');
+  }],
+
+  ['admin membalas, pelanggan menjawab sebelum 23 jam: pengingat batal', async () => {
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    advance(5 * HOUR);
+    await say('oke bu, saya pikir dulu');
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+  }],
+
+  ['pengingat setelah admin: tahap yang sudah lewat dilewati', async () => {
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    await updateContact(A, { stage: 'selesai' });
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    // Balasan admin di tahap yang sudah lewat tidak menjadwalkan pengingat.
+    await updateContact(A, { stage: 'payment' });
+    await handleHumanReply({ address: A, text: 'pembayarannya sudah kami terima' });
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+  }],
+
+  ['pengingat setelah admin dimatikan: tidak dijadwalkan, dan yang menunggu dilewati', async () => {
+    biz.followupAfterHuman = false;
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    // Sudah dijadwalkan, lalu setelannya dimatikan sebelum waktunya.
+    biz.followupAfterHuman = true;
+    await handleHumanReply({ address: A, text: 'ada yang bisa dibantu lagi pak?' });
+    biz.followupAfterHuman = false;
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+  }],
+
+  ['pengingat setelah admin: bot dimatikan atau dinyalakan lagi di chat itu = dilewati', async () => {
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    await setBotOff(A, now());
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'bot dimatikan');
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    // Dinyalakan lagi: tanda "admin membalas" dilepas, pengingatnya ikut batal.
+    await releaseToBot(A);
+    await handleHumanReply({ address: A, text: 'ada yang bisa dibantu lagi pak?' });
+    await releaseToBot(A);
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'bot dinyalakan lagi');
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+  }],
+
+  ['pengingat setelah admin: pesan admin berikutnya menjadwalkan ulang, tetap sekali', async () => {
+    await say('halo'); // 10:00
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    advance(10 * HOUR); // 20:00
+    await handleHumanReply({ address: A, text: 'kalau ada pertanyaan kabari ya pak' });
+    advance(13 * HOUR + MINUTE); // 09:01 besoknya: 23 jam dari pesan pertama
+    assert.equal(await follow(), 0, 'dihitung dari pesan admin terakhir');
+    advance(10 * HOUR); // 19:01 = 23 jam dari pesan kedua
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), humanFollowupText(null));
+    advance(HOUR);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_total, 1);
+  }],
+
+  ['pengingat setelah admin ikut batas follow-up per nomor', async () => {
+    cfg.followupMaxTotal = 1;
+    await say('halo');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 1, 'follow-up bot');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_state, 'idle');
   }],
 
   ['ringkasan percakapan: disimpan tiap giliran dan diberikan lagi ke LLM', async () => {
@@ -1190,7 +1299,8 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(A))?.stage, 'baru');
     await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
     const c = await getContact(A);
-    assert.deepEqual([c?.stage, c?.last_dir, c?.followup_state], ['dihubungi', 'human', 'idle']);
+    // 'pending' = pengingat setelah admin dijadwalkan (followupAfterHuman).
+    assert.deepEqual([c?.stage, c?.last_dir, c?.followup_state], ['dihubungi', 'human', 'pending']);
     assert.equal((await recentMessages(A, 1))[0]?.dir, 'human');
     await updateContact(A, { stage: 'payment' });
     await handleHumanReply({ address: A, text: 'sudah saya kirim penawarannya' });

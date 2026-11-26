@@ -5,11 +5,15 @@ Mesin asisten penjualan WhatsApp yang bisa dipakai ulang untuk bisnis apa pun:
 1. **Salam** untuk chat pertama.
 2. **Mengumpulkan data lead** (field-nya ditentukan profil bisnis), lalu mengirimnya ke nomor WA
    sales. Semua lead juga tampil di dashboard (Percakapan) dan bisa diunduh sebagai CSV.
-3. **Follow-up** kalau pelanggan diam (bawaan: jam ke-23, sekali, hanya jam 08–20).
+3. **Follow-up** kalau pelanggan diam (bawaan: jam ke-23, sekali, hanya jam 08–20), juga satu
+   pengingat kalau pelanggan tidak membalas admin manusia (`followupAfterHuman`).
 4. **Tanya-jawab** lewat LLM (bawaan DeepSeek) dari pengetahuan milik bisnis itu saja.
 
 Hal yang tidak diketahui bot (mis. harga) dioper ke manusia. Kalau pemilik membalas sendiri dari
-aplikasi WhatsApp, bot diam untuk kontak itu selama `HUMAN_PAUSE_HOURS`.
+aplikasi WhatsApp, bot diam untuk kontak itu selama `HUMAN_PAUSE_HOURS` (atau seterusnya dengan
+`stopAfterHuman`). Kalau pelanggan tidak membalas admin itu, bot mengirim satu pengingat dengan
+kalimat tetap sekitar 23 jam setelah pesan admin terakhir, selama tahapnya masih dihubungi, menunggu,
+atau link; sesudahnya bot tetap diam di chat itu.
 
 **Proyek.** Satu proyek = satu bisnis = satu nomor WhatsApp, dengan lead, profil, berkas,
 pengaturan, dan penerima notifikasi sendiri. Semua proyek ada di satu database PostgreSQL (`DATABASE_URL`);

@@ -294,6 +294,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('followupClosing' in input) set('followupClosing', text(input.followupClosing, 300, 'Kalimat follow-up', true));
   if ('forbidPrices' in input) set('forbidPrices', Boolean(input.forbidPrices));
   if ('stopAfterHuman' in input) set('stopAfterHuman', Boolean(input.stopAfterHuman));
+  if ('followupAfterHuman' in input) set('followupAfterHuman', Boolean(input.followupAfterHuman));
   if ('recipients' in input) {
     if (!Array.isArray(input.recipients) || input.recipients.length > 20) throw new Error('Penerima notifikasi: maksimal 20 baris');
     const rows = input.recipients

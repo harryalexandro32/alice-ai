@@ -61,3 +61,9 @@ export function followupText(name: string | null, missing: LeadField[]): string 
     ? `${open}supaya tim kami bisa bantu dengan tepat, boleh diinfokan ${listFields(missing)}?`
     : `${open}${biz.followupClosing}`;
 }
+
+/** Pengingat setelah admin manusia membalas dan pelanggan diam: kalimat tetap, suara tim sales. */
+export function humanFollowupText(name: string | null): string {
+  const hi = name ? `Halo ${name}` : 'Halo';
+  return `${hi}, menyambung chat sebelumnya dengan tim kami, apakah masih ada yang bisa kami bantu? 🙏`;
+}

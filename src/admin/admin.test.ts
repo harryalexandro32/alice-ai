@@ -923,7 +923,8 @@ const PNG = Buffer.from(
       assert.equal(r.status, 200);
       assert.deepEqual([r.body.message.dir, r.body.message.text, r.body.message.kind, r.body.stage], ['human', 'Halo Pak, saya Rina dari GFAN.\nAda yang bisa dibantu?', 'dashboard', 'dihubungi']);
       const c = await getContact(P);
-      assert.deepEqual([c?.last_dir, c?.followup_state, c?.stage], ['human', 'idle', 'dihubungi'], 'tahap "baru" pindah ke "dihubungi"');
+      // 'pending' = pengingat setelah admin dijadwalkan, sama seperti balasan dari HP.
+      assert.deepEqual([c?.last_dir, c?.followup_state, c?.stage], ['human', 'pending', 'dihubungi'], 'tahap "baru" pindah ke "dihubungi"');
       assert.equal(c?.needs_sales, 0, 'dibalas dari web: tanda perlu staf lepas');
       assert.ok(((await humanSeenAt(c?.address as string)) ?? 0) >= sentAt, 'tanda "admin membalas" dipasang');
       assert.equal((await recentMessages(P, 1))[0]?.dir, 'human');
