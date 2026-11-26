@@ -1782,7 +1782,7 @@ function renderLeads() {
   const fields = r.fields.filter((f) => f.key !== nameKey);
   const head = el('tr', {}, el('th', { textContent: T('Pelanggan', 'Customer') }), el('th', { textContent: T('Tahap', 'Stage') }),
     ...fields.map((f) => el('th', { textContent: sentenceCase(f.label) })),
-    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
+    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: T('Bot menjawab', 'Bot replies') }),
     el('th', { textContent: T('Chat terakhir', 'Last message') }));
   const list = visibleLeads();
   const rows = list.map((c) => {
@@ -1841,7 +1841,7 @@ $('leadExport').addEventListener('click', () => {
   const r = leadData;
   const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const lines = [[T('Nomor', 'Number'), ...r.fields.map((f) => sentenceCase(f.label)), T('Tahap', 'Stage'), T('Catatan', 'Note'), T('Ringkasan', 'Summary'), T('Lengkap', 'Complete'),
-    T('Perlu staf', 'Needs staff'), 'Bot', T('Chat terakhir', 'Last message')]];
+    T('Perlu staf', 'Needs staff'), T('Bot menjawab', 'Bot replies'), T('Chat terakhir', 'Last message')]];
   for (const c of visibleLeads()) {
     lines.push([c.phone, ...r.fields.map((f) => c.lead[f.key] || ''), stageLabel(c.stage || 'baru'), c.note || '', c.summary || '', c.complete ? T('ya', 'yes') : T('tidak', 'no'),
       c.needsSales ? T('ya', 'yes') : '', botHeld(c.hold) ? T('diam', 'off') : T('aktif', 'on'), c.lastAt ? new Date(c.lastAt).toLocaleString(locale()) : '']);
