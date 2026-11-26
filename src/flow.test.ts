@@ -398,6 +398,10 @@ const tests: [string, () => Promise<void>][] = [
     await updateContact(A, { stage: 'payment' });
     await handleHumanReply({ address: A, text: 'pembayarannya sudah kami terima' });
     assert.equal((await getContact(A))?.followup_state, 'idle');
+    // Link terkirim juga tidak: pelanggan mungkin sudah membeli lewat link itu.
+    await updateContact(A, { stage: 'link' });
+    await handleHumanReply({ address: A, text: 'silakan lanjut lewat link ya' });
+    assert.equal((await getContact(A))?.followup_state, 'idle');
   }],
 
   ['pengingat setelah admin dimatikan: tidak dijadwalkan, dan yang menunggu dilewati', async () => {

@@ -755,9 +755,12 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
 /**
  * Tahap prospek yang masih terbuka untuk pengingat setelah admin membalas:
  * tim sudah menghubungi, tapi belum ada pembayaran, kiriman, atau penutupan.
+ * "Link terkirim" sengaja tidak termasuk: tanpa data pesanan dari toko, kita
+ * tidak tahu apakah pelanggan sudah membeli lewat link itu, dan pengingat ke
+ * orang yang sudah membayar terasa mengganggu.
  */
 export function openForHumanFollowup(stage: Stage): boolean {
-  return stage === 'dihubungi' || stage === 'menunggu' || stage === 'link';
+  return stage === 'dihubungi' || stage === 'menunggu';
 }
 
 /**
