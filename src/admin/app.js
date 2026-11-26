@@ -1738,13 +1738,62 @@ const FILTER_HELP = () => ({
 });
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);
 
+// Urutan tabel Percakapan: kolom ('nama', 'tahap', 'f:<kunci isian>', 'status', 'bot', 'chat') dan arahnya.
+// Diingat di peramban ini. Bawaan: chat terakhir, yang terbaru di atas.
+let leadSort = { key: 'chat', dir: 'desc' };
+try {
+  const [key, dir] = (localStorage.getItem('leadSort') || '').split('|');
+  if (key && (dir === 'asc' || dir === 'desc')) leadSort = { key, dir };
+} catch { /* penyimpanan diblokir: urutan bawaan */ }
+
+/** Nilai urut satu baris untuk satu kolom. null = kosong, selalu di bawah apa pun arahnya. */
+function sortValue(c, key) {
+  if (key === 'nama') return nameOf(c) || c.phone;
+  if (key === 'tahap') return STAGES.indexOf(c.stage || 'baru');
+  // Perlu staf paling penting, lalu data lengkap.
+  if (key === 'status') return (c.needsSales ? 2 : 0) + (c.complete ? 1 : 0);
+  if (key === 'bot') return botHeld(c.hold) ? 1 : 0;
+  if (key === 'chat') return c.lastAt ? new Date(c.lastAt).getTime() : null;
+  if (key.startsWith('f:')) return (c.lead && c.lead[key.slice(2)]) || null;
+  return null;
+}
+
+function sortLeads(list) {
+  const { key, dir } = leadSort;
+  const sign = dir === 'asc' ? 1 : -1;
+  const coll = new Intl.Collator(locale(), { numeric: true, sensitivity: 'base' });
+  // sort() stabil: baris dengan nilai sama tetap dalam urutan dari server (chat terakhir).
+  return list.map((c) => [c, sortValue(c, key)]).sort(([, a], [, b]) => {
+    if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+    return sign * (typeof a === 'string' ? coll.compare(a, b) : a - b);
+  }).map(([c]) => c);
+}
+
 function visibleLeads() {
   const q = $('leadSearch').value.trim().toLowerCase();
-  return leadData.rows.filter((c) => {
+  return sortLeads(leadData.rows.filter((c) => {
     if (!matchFilter(c, leadFilter)) return false;
     if (!q) return true;
     return [c.phone, c.summary || '', c.note || '', c.waName || '', ...Object.values(c.lead)].join(' ').toLowerCase().includes(q);
+  }));
+}
+
+/**
+ * Judul kolom yang bisa diurutkan: tombol di dalam th. Klik pertama memakai arah awal kolomnya
+ * (first: 'desc' untuk waktu dan status, supaya yang terbaru atau terpenting di atas); klik berikutnya membalik arah.
+ */
+function sortHead(label, key, first = 'asc') {
+  const on = leadSort.key === key;
+  const b = el('button', { type: 'button', className: 'sorthd' + (on ? ' on' : '') }, label);
+  if (on) b.append(ico(leadSort.dir === 'asc' ? 'arrow-up' : 'arrow-down'));
+  b.addEventListener('click', () => {
+    leadSort = { key, dir: on ? (leadSort.dir === 'asc' ? 'desc' : 'asc') : first };
+    try { localStorage.setItem('leadSort', key + '|' + leadSort.dir); } catch { /* berlaku untuk kunjungan ini saja */ }
+    renderLeads();
   });
+  const th = el('th', {}, b);
+  if (on) th.setAttribute('aria-sort', leadSort.dir === 'asc' ? 'ascending' : 'descending');
+  return th;
 }
 
 /** Saringan; loading = jumlahnya belum diketahui (kerangka). Saringan tahap memakai warna tahapnya. */
@@ -1780,10 +1829,13 @@ function renderLeads() {
   renderFilters();
   const nameKey = (profile.leadFields.find((f) => f.isName) || {}).key;
   const fields = r.fields.filter((f) => f.key !== nameKey);
-  const head = el('tr', {}, el('th', { textContent: T('Pelanggan', 'Customer') }), el('th', { textContent: T('Tahap', 'Stage') }),
-    ...fields.map((f) => el('th', { textContent: sentenceCase(f.label) })),
-    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: T('Bot menjawab', 'Bot replies') }),
-    el('th', { textContent: T('Chat terakhir', 'Last message') }));
+  // Kolom yang dulu diurutkan bisa hilang (isian dihapus, proyek lain): kembali ke urutan bawaan.
+  const keys = ['nama', 'tahap', ...fields.map((f) => 'f:' + f.key), 'status', 'bot', 'chat'];
+  if (!keys.includes(leadSort.key)) leadSort = { key: 'chat', dir: 'desc' };
+  const head = el('tr', {}, sortHead(T('Pelanggan', 'Customer'), 'nama'), sortHead(T('Tahap', 'Stage'), 'tahap'),
+    ...fields.map((f) => sortHead(sentenceCase(f.label), 'f:' + f.key)),
+    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), sortHead('Status', 'status', 'desc'), sortHead(T('Bot menjawab', 'Bot replies'), 'bot'),
+    sortHead(T('Chat terakhir', 'Last message'), 'chat', 'desc'));
   const list = visibleLeads();
   const rows = list.map((c) => {
     // Menunggu jam tenang = bot tetap aktif di chat ini, hanya balasannya tertunda.
