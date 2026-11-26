@@ -12,8 +12,8 @@ Mesin asisten penjualan WhatsApp yang bisa dipakai ulang untuk bisnis apa pun:
 Hal yang tidak diketahui bot (mis. harga) dioper ke manusia. Kalau pemilik membalas sendiri dari
 aplikasi WhatsApp, bot diam untuk kontak itu selama `HUMAN_PAUSE_HOURS` (atau seterusnya dengan
 `stopAfterHuman`). Kalau pelanggan tidak membalas admin itu, bot mengirim satu pengingat dengan
-kalimat tetap sekitar 23 jam setelah pesan admin terakhir, selama tahapnya masih dihubungi, menunggu,
-atau link; sesudahnya bot tetap diam di chat itu.
+kalimat tetap sekitar 23 jam setelah pesan admin terakhir, selama tahapnya masih dihubungi atau
+menunggu (bukan link terkirim: pelanggan mungkin sudah membeli); sesudahnya bot tetap diam di chat itu.
 
 **Proyek.** Satu proyek = satu bisnis = satu nomor WhatsApp, dengan lead, profil, berkas,
 pengaturan, dan penerima notifikasi sendiri. Semua proyek ada di satu database PostgreSQL (`DATABASE_URL`);
