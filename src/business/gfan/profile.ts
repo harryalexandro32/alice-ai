@@ -37,7 +37,7 @@ export const gfan: Business = {
     { key: 'city', label: 'kota/alamat', hint: 'kota atau alamat pelanggan' },
     {
       key: 'need',
-      label: 'kebutuhannya',
+      label: 'kebutuhan',
       hint: 'ringkasan singkat kebutuhannya dengan kata-katamu, mis. "exhaust fan 16 inci untuk gudang"',
     },
   ],

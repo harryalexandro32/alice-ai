@@ -1871,7 +1871,8 @@ function renderLeads() {
     const status = el('td', {}, el('div', { className: 'chiprow' },
       el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('Lengkap', 'Complete') : T('Belum lengkap', 'Incomplete') }),
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') }) : null));
-    const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
+    // Kebutuhan berisi kalimat bebas: tampil seperti ringkasan (kecil, pudar, paling banyak 3 baris).
+    const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => (f.key === 'need' ? sumCell(c.lead[f.key]) : el('td', { textContent: c.lead[f.key] || '-' }))),
       sumCell(c.summary), status,
       el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: cap(why) }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
