@@ -39,6 +39,7 @@ import { ensureProject } from '../db/seed';
 import { localDay } from '../clock';
 import { applyHumanReply, holdReason, markHandled, switchBot } from '../flow';
 import { llmEnabled } from '../llm/provider';
+import { helpText, llmHelper, logUnanswered, type Helper } from './help';
 import { recipientsFor } from '../notify';
 import { currentProject, withProject } from '../project';
 import { MAX_REPLY_ATTEMPTS, type ReplyPayload } from '../sinks/outbox';
@@ -70,6 +71,12 @@ let explainer: Explainer = explainHandoff;
 /** Tes: ganti penjelas yang dipakai "Bantu jelaskan" di Pertanyaan yang belum terjawab. */
 export function setAdminExplainer(fn: Explainer): void {
   explainer = fn;
+}
+
+let helper: Helper = llmHelper;
+/** Tes: ganti penjawab panel Bantuan. */
+export function setAdminHelper(fn: Helper): void {
+  helper = fn;
 }
 
 const sha = (s: string): Buffer => createHash('sha256').update(s).digest();
@@ -920,6 +927,28 @@ export function createAdminHandler(store: AdminStore) {
 
     if (path === '/usage' && method === 'GET') {
       return json(200, { usage: await store.usage({ waitAccount: true }) });
+    }
+
+    // Panel Bantuan: panduan dashboard apa adanya (tab "Panduan") dan tanya jawab dari panduan itu (tab "Tanya").
+    if (path === '/help' && method === 'GET') {
+      return json(200, { text: helpText(), ready: llmEnabled() || helper !== llmHelper });
+    }
+    if (path === '/help/ask' && method === 'POST') {
+      const body = JSON.parse((await readBody(req, 20_000)).toString('utf8') || '{}') as {
+        question?: unknown;
+        history?: { dir?: unknown; text?: unknown }[];
+        lang?: unknown;
+      };
+      const question = label(body.question, 600);
+      if (!question) return json(400, { error: 'Pertanyaan masih kosong. Tulis pertanyaannya dulu.' });
+      if (!llmEnabled() && helper === llmHelper) return json(400, { error: 'LLM belum diatur: LLM_API_KEY di .env masih kosong. Buka tab Panduan untuk membaca panduannya.' });
+      const history = (Array.isArray(body.history) ? body.history : []).slice(-8).map((h) => ({
+        dir: h.dir === 'out' ? ('out' as const) : ('in' as const), text: label(h.text, 1500),
+      }));
+      const r = await helper({ question, history, project: project.id, lang: body.lang === 'en' ? 'en' : 'id' });
+      if (!r) return json(502, { error: 'LLM tidak menjawab. Coba lagi, atau buka tab Panduan.' });
+      if (!r.found) logUnanswered(project.id, question);
+      return json(200, r);
     }
 
     if (path === '/test' && method === 'POST') {

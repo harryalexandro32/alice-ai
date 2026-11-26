@@ -29,7 +29,8 @@ import {
   recentMessages, saveProfile, trackUsageToday, updateContact, updateProject,
 } from '../store';
 import type { Transport, TransportState } from '../transport/types';
-import { setAdminBrain, setAdminExplainer, startAdmin, stopAdmin } from './server';
+import { HELP_PAGES, parseHelp, unansweredPath, type Helper } from './help';
+import { setAdminBrain, setAdminExplainer, setAdminHelper, startAdmin, stopAdmin } from './server';
 import { localStore } from './store-local';
 import { OLD_ROUTES, renamedPath, ROUTES } from './routes';
 
@@ -743,6 +744,58 @@ const PNG = Buffer.from(
       for (const id of ['login', 'assets', 'health', 'webhook', 'admin', 'logout']) {
         assert.equal((await post('/api/projects', { id, name: 'X', template: 'generic' })).status, 400, `id "${id}" dipakai alamat dashboard`);
       }
+    }
+
+    // --- panel Bantuan: panduan dashboard (bantuan.md) dan tanya jawab darinya ---
+    {
+      const guide = readFileSync(join(__dirname, 'bantuan.md'), 'utf8');
+      const html = readFileSync(join(__dirname, 'page.html'), 'utf8');
+      const plain = (t: string) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+      // Judul kartu, judul lipatan, dan nama menu di page.html: semuanya harus dibahas panduan,
+      // supaya fitur baru tidak lolos tanpa teks bantuannya.
+      const titles = new Set<string>();
+      for (const m of html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)) titles.add(plain(m[1] as string));
+      for (const m of html.matchAll(/<summary><span[^>]*>([\s\S]*?)<\/span>/g)) titles.add(plain(m[1] as string));
+      for (const m of html.matchAll(/<a data-nav="[^"]+">[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>/g)) titles.add(plain(m[1] as string));
+      titles.delete('');
+      assert.ok(titles.size >= 30, `judul yang ditemukan di page.html terlalu sedikit: ${titles.size}`);
+      const low = guide.toLowerCase();
+      for (const t of titles) assert.ok(low.includes(t.toLowerCase()), `bantuan.md belum membahas "${t}" (judul di page.html)`);
+      assert.equal(guide.indexOf('\u2014'), -1, 'bantuan.md masih memuat tanda pisah panjang');
+      assert.deepEqual([...HELP_PAGES].sort(), Object.keys(ROUTES).sort(), 'kunci halaman yang boleh disebut jawaban = halaman dashboard');
+
+      // Pembacaan jawaban model: tanda pisah panjang dirapikan, halaman yang tidak dikenal dibuang.
+      assert.deepEqual(parseHelp('{"answer":"Buka Pengaturan › WhatsApp — lalu pindai QR.","found":true,"page":"whatsapp"}'),
+        { answer: 'Buka Pengaturan › WhatsApp, lalu pindai QR.', found: true, page: 'whatsapp' });
+      assert.deepEqual(parseHelp('{"answer":"Belum ada.","found":false,"page":"tidak-ada"}'), { answer: 'Belum ada.', found: false, page: '' });
+      assert.equal(parseHelp('{"found":true}'), null);
+      assert.equal(parseHelp('bukan json'), null);
+
+      const help = await call('/api/gfan/help');
+      assert.equal(help.status, 200);
+      assert.match(help.body.text, /^# Panduan dashboard Alice AI/);
+      assert.equal(help.body.ready, false, 'tanpa LLM_API_KEY tanya jawab belum siap');
+      assert.match((await post('/api/gfan/help/ask', { question: 'cara tautkan wa?' })).body.error, /LLM belum diatur/);
+      assert.match((await post('/api/gfan/help/ask', { question: '' })).body.error, /masih kosong/);
+
+      let seen: Parameters<Helper>[0] | null = null;
+      setAdminHelper(async (i) => {
+        seen = i;
+        return i.question.includes('siaran')
+          ? { answer: 'Belum bisa dari dashboard.', found: false, page: '' }
+          : { answer: 'Buka Pengaturan › WhatsApp.', found: true, page: 'whatsapp' };
+      });
+      assert.equal((await call('/api/gfan/help')).body.ready, true);
+      const ok1 = await post('/api/gfan/help/ask', { question: 'cara tautkan wa?', history: [{ dir: 'in', text: 'halo' }, { dir: 'out', text: 'hai' }], lang: 'en' });
+      assert.equal(ok1.status, 200);
+      assert.deepEqual(ok1.body, { answer: 'Buka Pengaturan › WhatsApp.', found: true, page: 'whatsapp' });
+      assert.deepEqual(seen, { question: 'cara tautkan wa?', history: [{ dir: 'in', text: 'halo' }, { dir: 'out', text: 'hai' }], project: 'gfan', lang: 'en' });
+      assert.ok(!existsSync(unansweredPath()), 'pertanyaan yang terjawab tidak dicatat');
+      const ok2 = await post('/api/gfan/help/ask', { question: 'bisa kirim siaran ke semua pelanggan?' });
+      assert.equal(ok2.body.found, false);
+      const logged = readFileSync(unansweredPath(), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { project: string; question: string });
+      assert.equal(logged.length, 1);
+      assert.deepEqual([logged[0]?.project, logged[0]?.question], ['gfan', 'bisa kirim siaran ke semua pelanggan?']);
     }
 
     // --- satu percakapan: riwayat, tahap + catatan, balasan dari web ---
