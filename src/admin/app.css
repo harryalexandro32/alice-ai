@@ -293,19 +293,24 @@ div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
    bergulung di dalam kotaknya dan kepalanya tetap terlihat; tabel pendek tidak berubah. */
 .scroll { overflow: auto; max-height: calc(100vh - var(--chrome-h) - 32px); max-height: calc(100dvh - var(--chrome-h) - 32px); }
 table { width: 100%; border-collapse: collapse; }
-table.list th, table.list td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-table.list th { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--line); white-space: nowrap; }
-/* Kepala tabel menempel di atas kotak .scroll; z-index di atas isian dan tombol di sel. Dengan border-collapse: collapse
-   garis bawah th tidak ikut menempel, jadi garisnya digambar dengan box-shadow (padding +1px menggantikan garis yang dihapus). */
-table.list thead th { position: sticky; top: 0; z-index: 2; border-bottom: 0; padding-bottom: 11px; box-shadow: inset 0 -1px 0 var(--line); }
-table.list tr:last-child td { border-bottom: 0; }
+/* Semua tabel memakai gaya yang sama dengan tabel isian (table.grid, di bawah): bingkai bersudut bulat di wadah .scroll,
+   kepala abu-abu, dan garis tipis di antara baris dan kolom. Bingkainya di wadah, bukan di tabel: wadah memotong isinya
+   di sudut bulat, dan tabel yang lebih lebar dari wadahnya tidak memotong garis bingkai kanan dan bawah. */
+.scroll:has(> table.list, > table.grid) { border: 1px solid var(--line); border-radius: var(--radius); }
+table.list { border-collapse: separate; border-spacing: 0; }
+table.list th, table.list td { text-align: left; padding: 10px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+table.list tr > :last-child { border-right: 0; }
+table.list th { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--muted); white-space: nowrap; }
+/* Kepala tabel menempel di atas kotak .scroll; z-index di atas isian dan tombol di sel. */
+table.list thead th { position: sticky; top: 0; z-index: 2; padding: 7px 10px; background: var(--surface3); border-bottom-color: var(--line); }
+table.list tbody tr:last-child td { border-bottom: 0; }
 /* Judul kolom yang bisa diurutkan (tabel Percakapan): tombol polos seukuran teks judul; panah hanya di kolom yang aktif. */
-table.list th .sorthd { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; border-radius: 3px; }
+table.list th .sorthd { display: inline-flex; align-items: center; gap: 4px; height: auto; line-height: inherit; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; border-radius: 3px; }
 table.list th .sorthd:hover, table.list th .sorthd.on { color: var(--ink); }
 table.list th .sorthd .i { width: 12px; height: 12px; vertical-align: 0; }
 table.list th .sorthd:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--focus); }
 table.list td.num, table.list th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-table.list tfoot td { font-weight: 600; background: var(--surface2); border-top: 1px solid var(--line); }
+table.list tfoot td { font-weight: 600; background: var(--surface2); border-top: 1px solid var(--line); border-bottom: 0; }
 table.list td.acts { white-space: nowrap; text-align: right; width: 1%; }
 table.list a { color: var(--blue); text-decoration: none; }
 table.list a:hover { text-decoration: underline; }
@@ -318,7 +323,7 @@ td.who small { display: block; color: var(--muted); }
 /* tabel isian: tiap sel adalah kotak isian, seperti lembar kerja */
 /* table-layout: fixed: lebar kolom dari CSS, bukan dari isi, jadi tabel tidak melebar melewati kartunya.
    Wadah .scroll baru bergulung ke samping di layar sempit (lihat min-width di bagian HP). */
-table.grid { border: 1px solid var(--line); border-radius: var(--radius); border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+table.grid { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 table.grid th, table.grid td { border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); padding: 0; vertical-align: middle; }
 table.grid tr > :last-child { border-right: 0; }
 table.grid tbody tr:last-child td { border-bottom: 0; }
@@ -463,7 +468,7 @@ span.skel { display: block; height: 14px; border-radius: var(--radius); }
   .skel, .meter.skel, .skel-text { animation: none; background: var(--skel); }
 }
 /* Baris tabel kerangka: tepat 40 px. Baris pertanyaan kerangka: tepat 48 px. */
-table.list tr.skel-row td { height: 40px; padding: 0 12px; vertical-align: middle; border-bottom: 0; }
+table.list tr.skel-row td { height: 40px; padding: 0 10px; vertical-align: middle; border-bottom: 0; }
 .skel-qrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 48px; border-bottom: 1px solid var(--line-soft); }
 .skel-qrow:last-child { border-bottom: 0; }
 /* Isi kartu yang berisi kerangka tidak menyusut di bawah ukuran kerangkanya, juga setelah datanya datang,
@@ -726,7 +731,7 @@ div.sub.sub-first { margin-top: 0; }
   .qs-foot { display: none; }
   .bubble { max-width: 90%; }
   /* "Perlu perhatian" di HP: tiap baris membungkus, tombolnya tidak tersembunyi di kanan. */
-  #attention tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+  #attention tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
   #attention tbody tr:last-child { border-bottom: 0; }
   #attention td { border: 0; padding: 0; }
   #attention td.sum { flex-basis: 100%; min-width: 0; max-width: none; }
