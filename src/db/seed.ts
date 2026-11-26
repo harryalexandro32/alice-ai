@@ -19,8 +19,22 @@ import { withProject } from '../project';
 import { createProject, type NewProject } from '../store';
 import { closeDb, openDb } from './index';
 
-/** Brosur PDF GFAN di repo; dipasang ke proyek gfan sekali, saat profilnya belum punya berkas. */
+/**
+ * Brosur PDF GFAN di repo; dipasang ke proyek gfan sekali, saat profilnya belum
+ * punya berkas. Hanya berkas .pdf langsung di folder ini (subfolder harga/
+ * berisi price list sumber harga, bukan brosur untuk pelanggan). PDF hasil
+ * pindai tidak punya teks: taruh transkripsinya di <nama>.txt di sampingnya,
+ * dan teks itu yang dipakai untuk mencocokkan produk dan "bot membaca PDF".
+ */
 export const CATALOG_PDF_DIR = join(__dirname, '..', '..', 'catalog-pdf');
+
+/** Teks sebuah PDF katalog: dari PDF-nya, atau dari <nama>.txt kalau PDF-nya hasil pindai. */
+export async function catalogPdfText(dir: string, name: string, data: Buffer): Promise<string> {
+  const text = await pdfPlain(data);
+  if (text) return text;
+  const sidecar = join(dir, `${basename(name, '.pdf')}.txt`);
+  return existsSync(sidecar) ? readFileSync(sidecar, 'utf8').trim() : '';
+}
 
 /** Pastikan proyek ini ada. True kalau baru dibuat. */
 export function ensureProject(
@@ -57,7 +71,7 @@ export async function seedCatalogPdfs(projectId: string, dir = CATALOG_PDF_DIR):
       const id = `d${createHash('sha1').update(name).digest('hex').slice(0, 8)}`;
       const file: MediaFile = { id, file: `${id}.pdf`, name: basename(name, '.pdf') };
       writeFileSync(join(mediaDir(), file.file), data);
-      const text = await pdfPlain(data);
+      const text = await catalogPdfText(dir, name, data);
       if (text) writeFileSync(join(mediaDir(), `${id}.txt`), text.slice(0, 200_000));
       files.push(file);
       for (const product of matchProducts(squash(text), names)) if (!pdfOf.has(product)) pdfOf.set(product, id);

@@ -290,7 +290,7 @@ src/
   project.ts            proyek yang sedang dilayani (bawaan proses bot / per permintaan dashboard)
   heartbeat.ts          laporan bot ke dashboard (WhatsApp, QR, kode pairing) + permintaan dashboard
   business/types.ts     bentuk profil bisnis
-  business/gfan/        profil + katalog GFAN (ditranskripsi tangan dari catalog-pdf/)
+  business/gfan/        profil + katalog GFAN (ditranskripsi tangan dari catalog-pdf/; harga dari catalog-pdf/harga/)
   business/generic/     bibit netral untuk proyek baru
   brain.ts              prompt dirakit dari profil + pagar balasan
   flow.ts               pesan masuk -> balasan; salam, data lead, serah-terima
