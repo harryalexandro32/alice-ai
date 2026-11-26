@@ -78,6 +78,13 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
 - **Cari** (QuickSwitch) di bilah atas, atau Ctrl+K / ⌘K / `/`: satu kotak cari untuk halaman dan
   bagiannya, percakapan (nama, nomor 08… atau +62…, isian lead), produk, proyek lain, dan aksi
   (tema, bahasa, Coba chat). ↑↓ memilih, Enter membuka, Esc menutup.
+- **Bantuan** (tombol tanda tanya di kanan bawah, atau lewat Cari): panel untuk staf. Tab *Tanya*
+  menjawab pertanyaan tentang dashboard ("bisa tidak?", "caranya?", "menunya di mana?") lewat LLM, hanya
+  dari `src/admin/bantuan.md`; tab *Panduan* menampilkan berkas itu apa adanya. Pertanyaan yang tidak
+  terjawab dari panduan dicatat ke `<DATA_DIR>/bantuan-belum-terjawab.jsonl` dan di log dashboard
+  (`journalctl -u alice-admin`). **Aturan:** setiap perubahan fitur dashboard juga memperbarui
+  `bantuan.md`; `admin.test.ts` gagal kalau ada judul kartu, lipatan, atau menu di `page.html` yang tidak
+  disebut di sana.
 - **Bilah keadaan** di atas tiap halaman: WhatsApp tersambung atau belum, **Bot dijeda**,
   **MODE UJI**, dan perkiraan biaya LLM bulan ini. Tiap tanda adalah tautan ke pengaturannya.
 - **Percakapan**: tiap pelanggan punya **tahap** (baru, menunggu tim, dihubungi, link terkirim,

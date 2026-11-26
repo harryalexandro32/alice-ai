@@ -1074,6 +1074,7 @@ $('resetChat').addEventListener('click', () => {
 
 // Panel samping "Coba chat": tersedia di semua halaman Pengetahuan.
 function openTry() {
+  closeHelp();
   $('uji').classList.add('on');
   $('ujiBg').classList.add('on');
   $('uji').setAttribute('aria-hidden', 'false');
@@ -1090,8 +1091,174 @@ $('ujiBg').addEventListener('click', closeTry);
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if ($('uji').classList.contains('on')) closeTry();
+  else if ($('help').classList.contains('on')) closeHelp();
   else if ($('importDlg').classList.contains('on')) $('importDlg').classList.remove('on');
   else if ($('linkDlg').classList.contains('on')) $('linkDlg').classList.remove('on');
+});
+
+// ---------- bantuan ----------
+// Panel Bantuan (tombol tanda tanya di kanan bawah). Tab "Tanya": pertanyaan staf tentang dashboard dijawab LLM
+// dari src/admin/bantuan.md lewat POST help/ask; tab "Panduan": berkas itu digambar apa adanya (renderMd).
+// Riwayat tanya jawab hanya di memori halaman. Pertanyaan yang tidak terjawab dicatat server untuk pengembang.
+let helpHistory = [];
+let helpData = null;
+const HELP_SUGGEST = () => [
+  T('Bagaimana cara menautkan WhatsApp?', 'How do I link WhatsApp?'),
+  T('Di mana mengubah salam pembuka?', 'Where do I change the greeting?'),
+  T('Bagaimana membalas pelanggan dari dashboard?', 'How do I reply to a customer from here?'),
+  T('Kenapa bot tidak membalas?', 'Why is the bot not replying?'),
+];
+
+function helpMsg(cls, text) {
+  const m = el('div', { className: 'msg ' + cls, textContent: text });
+  $('helpChat').append(m);
+  $('helpChat').scrollTop = $('helpChat').scrollHeight;
+  return m;
+}
+
+/** Awal percakapan bantuan: keterangan singkat dan beberapa pertanyaan contoh. */
+function helpIntro() {
+  $('helpChat').replaceChildren(
+    el('div', { className: 'msg note', textContent: T('Tanya apa saja tentang dashboard ini. Jawabannya diambil dari panduan.', 'Ask anything about this dashboard. Answers come from the guide.') }),
+    el('div', { className: 'help-sug' }, ...HELP_SUGGEST().map((q) => el('button', { className: 'btn ghost', type: 'button', textContent: q, onclick: () => askHelp(q) })))
+  );
+}
+
+async function askHelp(question) {
+  const q = String(question || '').trim();
+  if (!q || $('helpSend').disabled) return;
+  $('helpText').value = '';
+  const sug = $('helpChat').querySelector('.help-sug');
+  if (sug) sug.remove();
+  helpMsg('in', q);
+  const wait = helpMsg('note', T('sedang mencari jawaban…', 'looking it up…'));
+  $('helpSend').disabled = true;
+  try {
+    const r = await api('help/ask', { method: 'POST', body: JSON.stringify({ question: q, history: helpHistory, lang }) });
+    wait.remove();
+    const m = helpMsg('out', r.answer);
+    if (r.page && PAGES[r.page]) {
+      // Tautan sungguhan: router menanganinya; panelnya ditutup supaya halamannya terlihat.
+      m.append(el('a', { className: 'btn ghost sm goto', href: pathOf(r.page), onclick: () => closeHelp() }, ico('arrow-right'), el('span', { textContent: T('Buka ', 'Open ') + PAGES[r.page]()[1] })));
+    }
+    if (!r.found) helpMsg('note', T('Pertanyaan ini dicatat untuk developer.', 'This question was noted for the developer.'));
+    helpHistory = [...helpHistory, { dir: 'in', text: q }, { dir: 'out', text: r.answer }].slice(-8);
+  } catch (err) {
+    wait.remove();
+    helpMsg('bad', err.message);
+  }
+  $('helpSend').disabled = false;
+  $('helpText').focus();
+}
+
+/**
+ * Markdown sederhana jadi DOM tanpa innerHTML: judul (#, ##, ###), daftar "- " dengan sub-daftar (indentasi
+ * 2 spasi), paragraf, **tebal**, dan `kode`. Cukup untuk bantuan.md; tautan dan tabel tidak dipakai di sana.
+ */
+function renderMd(text) {
+  const inline = (str) => {
+    const frag = document.createDocumentFragment();
+    const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+    let last = 0;
+    let m;
+    while ((m = re.exec(str))) {
+      if (m.index > last) frag.append(str.slice(last, m.index));
+      const t = m[0];
+      frag.append(t[0] === '`' ? el('code', { textContent: t.slice(1, -1) }) : el('b', { textContent: t.slice(2, -2) }));
+      last = m.index + t.length;
+    }
+    if (last < str.length) frag.append(str.slice(last));
+    return frag;
+  };
+  const out = [];
+  const stack = []; // daftar yang sedang terbuka: { ul, indent }
+  let para = [];
+  const flushPara = () => {
+    if (!para.length) return;
+    const p = el('p');
+    p.append(inline(para.join(' ')));
+    out.push(p);
+    para = [];
+  };
+  for (const raw of text.split('\n')) {
+    const h = raw.match(/^(#{1,3}) (.*)/);
+    if (h) {
+      flushPara();
+      stack.length = 0;
+      const n = el('h' + h[1].length);
+      n.append(inline(h[2]));
+      out.push(n);
+      continue;
+    }
+    const li = raw.match(/^( *)- (.*)/);
+    if (li) {
+      flushPara();
+      const indent = li[1].length;
+      while (stack.length && stack[stack.length - 1].indent > indent) stack.pop();
+      if (!stack.length || stack[stack.length - 1].indent < indent) {
+        const ul = el('ul');
+        if (stack.length) stack[stack.length - 1].ul.lastElementChild.append(ul); else out.push(ul);
+        stack.push({ ul, indent });
+      }
+      const item = el('li');
+      item.append(inline(li[2]));
+      stack[stack.length - 1].ul.append(item);
+      continue;
+    }
+    if (!raw.trim()) { flushPara(); stack.length = 0; continue; }
+    if (stack.length && /^\s/.test(raw)) { stack[stack.length - 1].ul.lastElementChild.append(' ', inline(raw.trim())); continue; }
+    stack.length = 0;
+    para.push(raw.trim());
+  }
+  flushPara();
+  return out;
+}
+
+async function loadGuide() {
+  if (helpData) return;
+  $('helpGuide').replaceChildren(el('p', { className: 'help', textContent: T('Memuat panduan…', 'Loading the guide…') }));
+  try {
+    helpData = await api('help');
+    $('helpGuide').replaceChildren(...renderMd(helpData.text));
+  } catch (e) {
+    helpData = null;
+    $('helpGuide').replaceChildren(el('p', { className: 'load-err', textContent: e.message }));
+  }
+}
+
+function helpTab(which) {
+  for (const b of document.querySelectorAll('.help-tabs [role=tab]')) {
+    const on = b.dataset.tab === which;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  }
+  $('helpChat').hidden = which !== 'ask';
+  $('helpForm').hidden = which !== 'ask';
+  $('helpGuide').hidden = which !== 'guide';
+  if (which === 'guide') void loadGuide();
+  else $('helpText').focus();
+}
+
+function openHelp() {
+  closeTry();
+  $('help').classList.add('on');
+  $('helpBg').classList.add('on');
+  $('help').setAttribute('aria-hidden', 'false');
+  if (!$('helpChat').childElementCount) helpIntro();
+  setTimeout(() => { if (!$('helpForm').hidden) $('helpText').focus(); }, 50);
+}
+function closeHelp() {
+  $('help').classList.remove('on');
+  $('helpBg').classList.remove('on');
+  $('help').setAttribute('aria-hidden', 'true');
+}
+$('helpFab').addEventListener('click', openHelp);
+$('helpClose').addEventListener('click', closeHelp);
+$('helpBg').addEventListener('click', closeHelp);
+$('helpForm').addEventListener('submit', (e) => { e.preventDefault(); void askHelp($('helpText').value); });
+document.querySelector('.help-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[role=tab]');
+  if (b) helpTab(b.dataset.tab);
 });
 
 // ---------- pencarian cepat (QuickSwitch) ----------
@@ -1164,6 +1331,7 @@ function qsItems() {
     run: () => $('lang').querySelector('[data-lang="' + (lang === 'en' ? 'id' : 'en') + '"]').click() });
   add({ group: 'action', icon: 'message-square', label: T('Coba chat', 'Try chat'), sub: T('Uji jawaban bot', 'Test the bot\'s answers'),
     run: () => (KNOWLEDGE.includes(page) ? Promise.resolve() : go(pathOf('behavior'))).then(openTry) });
+  add({ group: 'action', icon: 'help-circle', label: T('Bantuan', 'Help'), sub: T('Tanya cara pakai dashboard', 'Ask how the dashboard works'), keys: 'help bantuan panduan tanya cara', run: openHelp });
   add({ group: 'action', icon: 'log-out', label: T('Keluar', 'Sign out'), keys: 'logout', run: () => $('logout').click() });
   return items;
 }
@@ -3903,6 +4071,7 @@ async function openProject(id) {
   projectDirty = false;
   $('app').hidden = false;
   $('strip').hidden = false;
+  $('helpFab').hidden = false;
   renderAll();
   // Tinggi kepala (kini dengan bilah keadaan) langsung ditulis, tidak menunggu ResizeObserver:
   // kalau menunggu, isi halaman sempat tergambar setinggi kepala lama lalu melompat turun.
@@ -3943,6 +4112,8 @@ async function route() {
 
 function showLogin() {
   $('login').classList.add('on');
+  $('helpFab').hidden = true;
+  closeHelp();
   setTimeout(() => $('pw').focus(), 0);
 }
 
@@ -3967,6 +4138,7 @@ function renderAll() {
   renderStrip();
   setBadge();
   if (!chat.length) $('chat').replaceChildren(chatHint());
+  if (!helpHistory.length && $('helpChat').childElementCount) helpIntro();
   // Data halaman yang sudah dimuat cukup digambar ulang (mis. setelah ganti bahasa).
   if (leadData || page === 'percakapan') renderLeads();
   if (homeData || page === 'beranda') renderHome();
