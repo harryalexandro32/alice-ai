@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 import { checkReply, systemPrompt } from '../brain';
 import { biz, initBiz, knowledgeText, loadProject, mediaDir, refreshBiz } from '../business';
+import { localDay } from '../clock';
 import { cfg } from '../config';
 import { closeDb, openDb } from '../db';
 import { ensureProject } from '../db/seed';
@@ -21,11 +22,11 @@ import { humanHolds } from '../flow';
 import { handlePairingRequest, reportState, resetWaNumberCheck, startHeartbeat } from '../heartbeat';
 import { pickDelayMs, typingMs } from '../pace';
 import { withProject } from '../project';
-import { setTracker } from '../tracking';
+import { setQuotaFetcher, setTracker } from '../tracking';
 import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setTestSender } from '../sinks/outbox';
 import {
-  addHandoff, addMessage, addUsage, createContact, getContact, getProfile, getProject, humanSeenAt, pendingReplies, readStatus, recentAlerts,
-  recentMessages, saveProfile, updateContact, updateProject,
+  addHandoff, addMessage, addUsage, bumpTrackUsage, createContact, getContact, getProfile, getProject, humanSeenAt, pendingReplies, readStatus, recentAlerts,
+  recentMessages, saveProfile, trackUsageToday, updateContact, updateProject,
 } from '../store';
 import type { Transport, TransportState } from '../transport/types';
 import { setAdminBrain, setAdminExplainer, startAdmin, stopAdmin } from './server';
@@ -140,6 +141,47 @@ const PNG = Buffer.from(
     assert.equal(usage.days[0].day, '2026-11-11');
     assert.equal(usage.price.out, cfg.llmPriceOut);
     assert.equal((await call('/api/gfan/usage', {}, false)).status, 401);
+
+    // --- pemakaian cek resi + akun Binderbyte (pembaca akun tiruan) ---
+    {
+      const today = localDay(Date.now());
+      await bumpTrackUsage(today, 'auto');
+      await bumpTrackUsage(today, 'auto');
+      await bumpTrackUsage(today, 'manual');
+      cfg.binderbyteKey = '';
+      setTracker(async () => ({ status: 'ON PROCESS', history: [] }));
+      setQuotaFetcher(async () => ({ status: 200, product: 'cek-resi', count: '40', limit: '100', price: '20', balance: '5000.00' }));
+      const resi = (await call('/api/gfan/usage')).body.usage.resi;
+      assert.deepEqual([resi.enabled, resi.price, resi.dailyMax, resi.accountError], [true, 20, cfg.trackDailyMax, null], 'tarif dari akun');
+      assert.deepEqual(resi.days, [{ day: today, auto: 2, manual: 1 }]);
+      assert.deepEqual({ ...resi.account, at: 0 }, { used: 40, limit: 100, freeLeft: 60, balance: 5000, at: 0 });
+      assert.ok(resi.account.at > 0);
+      // Biaya bulan ini di bilah keadaan: LLM + cek resi (3 cek × Rp20).
+      const month = (await call('/api/gfan/state')).body.month;
+      assert.equal(month.resi, 60);
+      assert.equal(month.idr, month.llm + month.resi);
+      assert.equal(month.llm, Math.round(month.usd * cfg.usdIdr));
+      // Akun tidak terbaca (API key salah): /usage menunggu pembacaan pertama, lalu tanpa akun, dengan pesan error, tarif bawaan.
+      setQuotaFetcher(async () => ({ status: 400, message: 'API Key not found' }));
+      const realError = console.error;
+      console.error = () => {};
+      let failed;
+      try {
+        failed = (await call('/api/gfan/usage')).body.usage.resi;
+      } finally {
+        console.error = realError;
+      }
+      assert.deepEqual([failed.account, failed.accountError, failed.price], [null, 'API Key not found', cfg.trackPriceIdr]);
+      // /state tidak menunggu Binderbyte: pembaca yang tidak pernah menjawab tidak menahan jawabannya.
+      setQuotaFetcher(() => new Promise(() => {}));
+      const slow = (await call('/api/gfan/state')).body.month;
+      assert.equal(slow.resi, 3 * cfg.trackPriceIdr, 'tarif bawaan selama akun belum terbaca');
+      // Tanpa pelacakan: tidak ada akun, tarif bawaan.
+      setTracker(null);
+      setQuotaFetcher(null);
+      const off = (await call('/api/gfan/usage')).body.usage.resi;
+      assert.deepEqual([off.enabled, off.price, off.account, off.accountError], [false, cfg.trackPriceIdr, null, null]);
+    }
     assert.equal((await getProfile('gfan')).alias, 'Rina', 'tersimpan di database');
 
     // --- masukan yang salah ditolak dengan pesan yang bisa dibaca ---
@@ -381,14 +423,14 @@ const PNG = Buffer.from(
           { name: 'Rina', role: 'apa saja', phone: 'self' },
           { name: '', role: 'staff', phone: '' },
         ],
-        notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner' },
+        notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner', resi: 'staff' },
       });
       assert.equal(rec.status, 200);
       assert.deepEqual(biz.recipients, [
         { name: 'Pak Harry', role: 'owner', phone: '+6281100000001' },
         { name: 'Rina', role: 'staff', phone: 'self' },
       ]);
-      assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none' });
+      assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none', resi: 'staff' }, 'jenis "resi" diterima');
 
       // "Kirim tes": satu pesan per nomor penerima, isinya kabar apa saja yang diterima nomor itu.
       const tq = await post('/api/gfan/notify/test', {});
@@ -399,7 +441,7 @@ const PNG = Buffer.from(
       assert.deepEqual(sentTests.map(([p]) => p), ['+6281100000001', 'self']);
       assert.match(sentTests[0]![1], /^🔔 \*Tes notifikasi\* \| GFAN Indonesia\nIni pesan tes dari dashboard\. Kalau pesan ini sampai, nomor ini akan menerima kabar: lead baru\.$/,
         'pemilik: hanya lead (rutenya keduanya); butuh staf ke staf');
-      assert.match(sentTests[1]![1], /menerima kabar: lead baru, pelanggan butuh staf\.$/, 'staf; LLM "tidak dikirim" tidak disebut');
+      assert.match(sentTests[1]![1], /menerima kabar: lead baru, pelanggan butuh staf, saldo atau batas cek resi\.$/, 'staf; LLM "tidak dikirim" tidak disebut');
       const st = await call(`/api/gfan/notify/test?ids=${tq.body.ids.join(',')}`);
       assert.deepEqual(st.body.items.map((x: { done: boolean }) => x.done), [true, true]);
       setTestSender(null);
@@ -769,8 +811,11 @@ const PNG = Buffer.from(
       const hist = [{ date: '2026-11-25 09:00:00', desc: 'PAKET DIBAWA KURIR', location: 'JAKARTA' }];
       setTracker(async () => ({ status: 'ON PROCESS', history: hist }));
       await updateContact(P, { stage: 'payment' });
+      const before = await trackUsageToday(localDay(Date.now()));
       const t1 = await track();
       assert.equal(t1.status, 200);
+      const counted = await trackUsageToday(localDay(Date.now()));
+      assert.deepEqual(counted, { auto: before.auto, manual: before.manual + 1 }, '"Cek resi" dihitung sebagai cek manual');
       assert.deepEqual([t1.body.stage, t1.body.order.status, t1.body.order.phase, t1.body.order.history, t1.body.order.error, t1.body.order.trackingEnabled],
         ['dikirim', 'ON PROCESS', 'transit', hist, null, true]);
       assert.ok(t1.body.order.checkedAt > 0);

@@ -58,7 +58,27 @@ export interface BotStatus {
   reportedAt: number | null;
 }
 
-/** Pemakaian LLM per hari + tarif yang dipakai menghitung biayanya. */
+/**
+ * Cek resi per hari + keadaan akun Binderbyte. Biaya = (otomatis + manual) ×
+ * tarif: batas atas, karena kuota gratis berlaku untuk seluruh akun (semua
+ * proyek), jadi ditampilkan terpisah, tidak dikurangkan.
+ */
+export interface ResiUsage {
+  /** BINDERBYTE_API_KEY diisi. */
+  enabled: boolean;
+  /** Rp per cek sesudah kuota gratis: dari akun, atau TRACK_PRICE_IDR kalau akun belum terbaca. */
+  price: number;
+  /** TRACK_DAILY_MAX: batas cek otomatis per hari. */
+  dailyMax: number;
+  /** 90 hari, terbaru dulu. */
+  days: { day: string; auto: number; manual: number }[];
+  /** Null = akun belum terbaca. `freeLeft` = sisa kuota gratis (0 = habis). */
+  account: { used: number; limit: number; freeLeft: number; balance: number; at: number } | null;
+  /** Pesan error pembacaan akun yang terakhir; null kalau berhasil. */
+  accountError: string | null;
+}
+
+/** Pemakaian LLM per hari + tarif yang dipakai menghitung biayanya, dan pemakaian cek resi. */
 export interface UsageReport {
   model: string;
   /** USD per 1 juta token. */
@@ -66,6 +86,7 @@ export interface UsageReport {
   usdIdr: number;
   /** Terbaru dulu. `promptTokens` sudah termasuk `cachedTokens`. */
   days: { day: string; calls: number; promptTokens: number; cachedTokens: number; completionTokens: number }[];
+  resi: ResiUsage;
 }
 
 export interface AdminStore {
@@ -75,7 +96,11 @@ export interface AdminStore {
   delPhoto(file: string): Promise<void>;
   leads(): Promise<LeadRow[]>;
   status(): Promise<BotStatus | null>;
-  usage(): Promise<UsageReport | null>;
+  /**
+   * `waitAccount`: tunggu pembacaan pertama akun Binderbyte kalau belum ada
+   * (hanya /usage). Tanpa itu (/state) jaringan tidak ditunggu.
+   */
+  usage(opts?: { waitAccount?: boolean }): Promise<UsageReport | null>;
   alerts(): Promise<AlertItem[]>;
   /** Catatan error bot, terbaru dulu. */
   errors(): Promise<ErrorItem[]>;

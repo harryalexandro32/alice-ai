@@ -8,16 +8,20 @@
  *   tahap lead ke "dikirim" atau "selesai". Tahap tidak pernah turun, dan
  *   "batal" tidak pernah disentuh.
  *
+ * - `quotaState`: tarif, kuota gratis, dan saldo akun Binderbyte, untuk kartu
+ *   biaya cek resi di dashboard dan warning saldo menipis.
+ *
  * Tanpa BINDERBYTE_API_KEY, kolom pesanan tetap bisa dipakai; yang mati hanya
  * pengecekan status otomatis.
  */
 
-import { cfg } from './config';
+import { raiseAlert } from './alerts';
+import { cfg, HOUR } from './config';
 import { localStamp, now } from './clock';
 import { currentProject } from './project';
 import {
   advanceStage, bumpTrackUsage, getContact, saveTracking, STAGES, trackingCandidates, trackUsageToday,
-  type Contact, type ShipEvent, type Stage,
+  type Contact, type ShipEvent, type Stage, type TrackCounts,
 } from './store';
 
 /** Kurir yang dikenal Binderbyte: kode untuk API, nama untuk dashboard. */
@@ -222,6 +226,20 @@ export type Tracker = (q: { awb: string; courier: string; phoneLast5?: string })
 const MAX_HISTORY = 20;
 const TIMEOUT_MS = 15_000;
 
+/**
+ * Error sebelum ada jawaban HTTP dari Binderbyte (waktu habis, DNS, atau
+ * koneksi putus). Permintaan seperti ini tidak dihitung sebagai cek berbayar
+ * dan tidak memakai batas harian. Jawaban HTTP dengan error (400, 403, 503)
+ * tetap dihitung, karena Binderbyte bisa menagihnya.
+ */
+export class NetworkError extends Error {
+  readonly network = true;
+}
+
+/** Error dari pelacak yang belum sampai ke Binderbyte (NetworkError atau objek dengan `network: true`). */
+const isNetworkError = (e: unknown): boolean =>
+  e instanceof NetworkError || (typeof e === 'object' && e !== null && (e as { network?: unknown }).network === true);
+
 /** Pelacak bawaan: API Binderbyte. */
 const binderbyte: Tracker = async ({ awb, courier, phoneLast5 }) => {
   const q = new URLSearchParams({ api_key: cfg.binderbyteKey, courier, awb });
@@ -238,8 +256,8 @@ const binderbyte: Tracker = async ({ awb, courier, phoneLast5 }) => {
       return {};
     })) as typeof body;
   } catch (e) {
-    if (ctl.signal.aborted) throw new Error(`Binderbyte tidak menjawab dalam ${TIMEOUT_MS / 1000} detik.`);
-    throw new Error(`Binderbyte tidak bisa dihubungi: ${e instanceof Error ? e.message : e}`);
+    if (ctl.signal.aborted) throw new NetworkError(`Binderbyte tidak menjawab dalam ${TIMEOUT_MS / 1000} detik.`);
+    throw new NetworkError(`Binderbyte tidak bisa dihubungi: ${e instanceof Error ? e.message : e}`);
   } finally {
     clearTimeout(timer);
   }
@@ -269,6 +287,177 @@ export function setTracker(fn: Tracker | null): void {
 export function trackingEnabled(): boolean {
   return Boolean(cfg.binderbyteKey) || injected;
 }
+
+/**
+ * Bungkus pelacak supaya tiap panggilan dihitung di track_usage (otomatis atau
+ * manual), berhasil maupun error. NetworkError (belum sampai ke Binderbyte)
+ * tidak dihitung, dan `after` tidak dipanggil. Error saat mencatat hitungan
+ * hanya masuk log: hasil pelacak dan ship_error tidak boleh berubah karenanya.
+ * `after` menerima jumlah sesudahnya, atau null kalau pencatatan gagal.
+ */
+function counting(use: Tracker, day: string, kind: 'auto' | 'manual', after?: (n: TrackCounts | null) => void): Tracker {
+  return async (q) => {
+    let reached = true;
+    try {
+      return await use(q);
+    } catch (e) {
+      if (isNetworkError(e)) reached = false;
+      throw e;
+    } finally {
+      if (reached) {
+        try {
+          // Dihitung dulu, terpisah: `after?.(…)` tidak menjalankan argumennya kalau `after` kosong.
+          const counts = await bumpTrackUsage(day, kind);
+          after?.(counts);
+        } catch (e) {
+          after?.(null);
+          console.error(`[resi] catatan jatah harian gagal: ${e instanceof Error ? e.message : e}`);
+        }
+      }
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Akun Binderbyte: tarif, kuota gratis, dan saldo
+// ---------------------------------------------------------------------------
+
+/**
+ * Keadaan akun Binderbyte (produk cek resi). `used` dan `limit` = kuota gratis
+ * yang terpakai dan besarnya (limit 0 = kuota sudah habis), `price` = Rp per
+ * cek sesudah kuota gratis, `balance` = saldo Rp, `at` = kapan dibaca.
+ */
+export type QuotaState = { used: number; limit: number; price: number; balance: number; at: number };
+
+/** Membaca jawaban mentah GET /v1/checkQuota. Gagal = melempar Error dengan pesan yang bisa dibaca staf. */
+export type QuotaFetcher = () => Promise<unknown>;
+
+/** Keadaan akun dibaca ulang paling cepat sekali per jam. */
+const QUOTA_TTL = HOUR;
+/**
+ * Sesudah satu pembacaan (berhasil maupun gagal), pembacaan otomatis berikutnya
+ * paling cepat 10 menit lagi: API key salah atau Binderbyte mati tidak membuat
+ * permintaan baru di tiap /state, /usage, atau putaran bot.
+ */
+const QUOTA_RETRY = 10 * 60_000;
+const QUOTA_TIMEOUT_MS = 8_000;
+
+/** Pembaca bawaan: API Binderbyte. */
+const checkQuota: QuotaFetcher = async () => {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), QUOTA_TIMEOUT_MS);
+  let res: Response;
+  let body: { message?: unknown } | null;
+  try {
+    res = await fetch(`https://api.binderbyte.com/v1/checkQuota?${new URLSearchParams({ api_key: cfg.binderbyteKey })}`, { signal: ctl.signal });
+    body = (await res.json().catch(() => null)) as typeof body;
+  } catch (e) {
+    if (ctl.signal.aborted) throw new Error(`Binderbyte tidak menjawab dalam ${QUOTA_TIMEOUT_MS / 1000} detik.`);
+    throw new Error(`Binderbyte tidak bisa dihubungi: ${e instanceof Error ? e.message : e}`);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!body) throw new Error(res.status === 200 ? 'Jawaban Binderbyte tidak bisa dibaca.' : `HTTP ${res.status}`);
+  // Error dengan pesan dari Binderbyte: pesannya dipakai parseQuota.
+  if (res.status !== 200 && !(typeof body.message === 'string' && body.message)) throw new Error(`HTTP ${res.status}`);
+  return body;
+};
+
+/** Jawaban checkQuota -> angka. Semua angka dari Binderbyte berupa teks ("15", "10000.00"). */
+function parseQuota(raw: unknown, at: number): QuotaState {
+  const body = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (Number(body.status) !== 200) {
+    throw new Error(typeof body.message === 'string' && body.message ? body.message : 'Jawaban Binderbyte tidak bisa dibaca.');
+  }
+  const out = { used: Number(body.count), limit: Number(body.limit), price: Number(body.price), balance: Number(body.balance), at };
+  if (![out.used, out.limit, out.price, out.balance].every(Number.isFinite)) throw new Error('Jawaban Binderbyte tidak bisa dibaca.');
+  return out;
+}
+
+let quotaFetcher: QuotaFetcher = checkQuota;
+let quotaInjected = false;
+/** Keadaan terakhir yang berhasil dibaca (di memori proses; akunnya satu untuk semua proyek). */
+let quota: QuotaState | null = null;
+let quotaErr: string | null = null;
+let quotaLoading: Promise<QuotaState | null> | null = null;
+/** Waktu pembacaan terakhir dimulai (berhasil maupun gagal). */
+let quotaTriedAt = -Infinity;
+
+/** Tes: ganti pembaca akun; null = kembali ke Binderbyte. Keadaan yang tersimpan ikut dibuang. */
+export function setQuotaFetcher(fn: QuotaFetcher | null): void {
+  quotaFetcher = fn ?? checkQuota;
+  quotaInjected = Boolean(fn);
+  quota = null;
+  quotaErr = null;
+  quotaLoading = null;
+  quotaTriedAt = -Infinity;
+}
+
+/** Akun bisa dibaca: pelacakan menyala dan ada API key (atau tes memasang pembaca). */
+const quotaReady = (): boolean => trackingEnabled() && (Boolean(cfg.binderbyteKey) || quotaInjected);
+
+/** Pesan error pembacaan akun yang terakhir; null kalau pembacaan terakhir berhasil. */
+export function quotaError(): string | null {
+  return quotaErr;
+}
+
+/**
+ * Baca ulang keadaan akun sekarang dan tunggu hasilnya. Hanya satu pembacaan
+ * berjalan pada satu waktu. Gagal: keadaan lama tetap dipakai dan pesannya
+ * ada di quotaError(). Null kalau akun tidak bisa dibaca dan belum ada keadaan lama.
+ */
+export function refreshQuota(at = now()): Promise<QuotaState | null> {
+  if (!quotaReady()) return Promise.resolve(null);
+  if (quotaLoading) return quotaLoading;
+  quotaTriedAt = at;
+  const run = loadQuota(quotaFetcher, at);
+  quotaLoading = run;
+  void run.finally(() => {
+    if (quotaLoading === run) quotaLoading = null;
+  });
+  return run;
+}
+
+/** Isi refreshQuota: tidak pernah melempar. */
+async function loadQuota(use: QuotaFetcher, at: number): Promise<QuotaState | null> {
+  try {
+    const next = parseQuota(await use(), at);
+    // Pembaca diganti selama menunggu (tes): hasilnya dibuang.
+    if (use === quotaFetcher) {
+      quota = next;
+      quotaErr = null;
+    }
+  } catch (e) {
+    if (use === quotaFetcher) quotaErr = (e instanceof Error ? e.message : String(e)).slice(0, 300);
+    console.error(`[resi] saldo Binderbyte tidak terbaca: ${e instanceof Error ? e.message : e}`);
+  }
+  return quota;
+}
+
+/**
+ * Perlu dibaca ulang: belum ada keadaan atau sudah lebih dari 1 jam, dan
+ * pembacaan terakhir (juga yang gagal) sudah lebih dari 10 menit lalu.
+ */
+const quotaDue = (at: number): boolean => (!quota || at - quota.at >= QUOTA_TTL) && at - quotaTriedAt >= QUOTA_RETRY;
+
+/**
+ * Keadaan akun yang tersimpan, langsung (null kalau belum pernah terbaca).
+ * Kalau sudah lebih dari 1 jam atau belum ada, satu pembacaan ulang dimulai
+ * di latar belakang (paling cepat 10 menit sesudah pembacaan terakhir);
+ * hasilnya dipakai pada panggilan berikutnya.
+ */
+export function quotaState(at = now()): Promise<QuotaState | null> {
+  if (!quotaReady()) return Promise.resolve(null);
+  if (quotaDue(at)) void refreshQuota(at);
+  return Promise.resolve(quota);
+}
+
+/** Sisa kuota gratis; 0 kalau sudah habis. */
+export const freeLeft = (q: QuotaState): number => Math.max(0, q.limit - q.used);
+
+/** Tarif Rp per cek: dari akun kalau sudah terbaca dan lebih dari 0, selain itu TRACK_PRICE_IDR. */
+export const trackPrice = (q: QuotaState | null): number =>
+  q && Number.isFinite(q.price) && q.price > 0 ? q.price : cfg.trackPriceIdr;
 
 /** Tahap yang masih boleh naik ke "dikirim". */
 const BEFORE_SHIPPED: readonly Stage[] = ['baru', 'menunggu', 'dihubungi', 'link', 'payment'];
@@ -301,10 +490,17 @@ function last5(phone: string): string | undefined {
  * kurir berganti selama pengecekan, hasilnya dibuang.
  */
 export async function trackContact(phone: string, at = now()): Promise<Contact | undefined> {
-  return trackWith(tracker, phone, at);
+  // Cek manual (tombol "Cek resi"): dihitung di n_manual, tidak ikut batas harian.
+  let counted = false;
+  const out = await trackWith(counting(tracker, localStamp(at).slice(0, 10), 'manual', () => { counted = true; }), phone, at);
+  // Cek manual yang sampai ke Binderbyte juga memeriksa saldo: dengan TRACK_DAILY_MAX=0,
+  // atau tanpa resi untuk cek otomatis, pemilik tetap mendapat warning saldo menipis.
+  // Di proses admin warning-nya hanya tercatat di dashboard; WhatsApp dikirim oleh proses bot.
+  if (counted) await warnLowBalance(at);
+  return out;
 }
 
-/** Isi trackContact dengan pelacak tertentu (runTracking membungkusnya untuk menghitung pemakaian harian). */
+/** Isi trackContact dengan pelacak tertentu (pelacaknya sudah dibungkus untuk menghitung pemakaian harian). */
 async function trackWith(use: Tracker, phone: string, at: number): Promise<Contact | undefined> {
   const c = await getContact(phone);
   if (!c || !c.awb || !isCourier(c.courier)) return c;
@@ -354,35 +550,34 @@ let warnedKey = '';
  * proyek ini, satu per satu. Tiap resi paling sering sekali per 30 menit
  * (6 jam kalau pengecekan terakhir error atau statusnya bermasalah), selama
  * 30 hari sejak diisi, dan paling banyak cfg.trackDailyMax resi per hari.
- * Mengembalikan jumlah resi yang dicek.
+ * Batas harian tercapai, atau saldo Binderbyte menipis sesudah kuota gratis
+ * habis: warning "resi" ke pemilik. Mengembalikan jumlah resi yang dicek.
  */
 export async function runTracking(at = now()): Promise<number> {
   if (!trackingEnabled()) return 0;
+  // TRACK_DAILY_MAX=0: cek otomatis dimatikan. Tombol "Cek resi" tetap bisa dipakai,
+  // dan tidak ada log atau warning batas harian.
+  if (cfg.trackDailyMax <= 0) return 0;
   const day = localStamp(at).slice(0, 10);
   const key = `${currentProject().id}:${day}`;
   // Hitungan harian ada di tabel track_usage, jadi tetap berlaku sesudah bot
   // dijalankan ulang. Dibaca sekali per putaran, lalu diikuti dari hasil bump.
-  let used = await trackUsageToday(day);
-  // Tiap panggilan ke pelacak dihitung, berhasil maupun error. Error saat
-  // mencatat hitungan hanya masuk log: hasil pelacak dan ship_error tidak
-  // boleh berubah karenanya.
-  const counted: Tracker = async (q) => {
-    try {
-      return await tracker(q);
-    } finally {
-      try {
-        used = await bumpTrackUsage(day);
-      } catch (e) {
-        // Hitungan di memori tetap naik, supaya batas harian putaran ini tetap berlaku.
-        used += 1;
-        console.error(`[resi] catatan jatah harian gagal: ${e instanceof Error ? e.message : e}`);
-      }
-    }
-  };
+  // Hanya cek otomatis yang dibatasi; cek manual tidak dihitung di sini.
+  let used = (await trackUsageToday(day)).auto;
+  let made = 0;
+  const counted = counting(tracker, day, 'auto', (n) => {
+    made += 1;
+    // Pencatatan gagal: hitungan di memori tetap naik, supaya batas harian putaran ini tetap berlaku.
+    used = n ? n.auto : used + 1;
+  });
   let n = 0;
   for (const c of await trackingCandidates(at, PER_RUN)) {
     if (used >= cfg.trackDailyMax) {
-      if (warnedKey !== key) console.log(`[resi] batas cek resi harian tercapai (${used})`);
+      if (warnedKey !== key) {
+        // Kunci per hari: masa tenang "resi" (24 jam) tidak menelan warning hari berikutnya.
+        console.log(`[resi] batas cek resi harian tercapai (${used})`);
+        await raiseAlert('resi', `Batas cek resi harian (${cfg.trackDailyMax}) tercapai. Cek otomatis berhenti sampai besok.`, { key: `batas:${day}` });
+      }
       warnedKey = key;
       break;
     }
@@ -393,5 +588,25 @@ export async function runTracking(at = now()): Promise<number> {
       console.error(`[resi] ${c.phone}: cek gagal: ${e instanceof Error ? e.message : e}`);
     }
   }
+  if (made > 0) await warnLowBalance(at);
   return n;
+}
+
+/**
+ * Sesudah putaran atau cek manual yang memanggil Binderbyte: baca ulang akun kalau keadaannya
+ * sudah lebih dari 1 jam (paling cepat 10 menit sesudah pembacaan terakhir,
+ * juga yang gagal), lalu beri warning kalau kuota gratis habis dan
+ * saldonya di bawah TRACK_BALANCE_MIN_IDR (paling sering sekali per 24 jam).
+ */
+async function warnLowBalance(at: number): Promise<void> {
+  try {
+    const q = quotaDue(at) ? await refreshQuota(at) : quota;
+    if (!q || freeLeft(q) > 0 || q.balance >= cfg.trackBalanceMinIdr) return;
+    const price = trackPrice(q);
+    const left = price > 0 ? Math.floor(q.balance / price) : 0;
+    const rp = (v: number): string => 'Rp' + Math.round(v).toLocaleString('id-ID');
+    await raiseAlert('resi', `Saldo Binderbyte ${rp(q.balance)}, cukup untuk sekitar ${left.toLocaleString('id-ID')} cek lagi. Isi ulang di hub.binderbyte.com.`, { key: 'saldo' });
+  } catch (e) {
+    console.error(`[resi] pemeriksaan saldo Binderbyte gagal: ${e instanceof Error ? e.message : e}`);
+  }
 }

@@ -112,6 +112,10 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   dan butuh `BINDERBYTE_API_KEY` di `.env`. Tanpa key itu, kolomnya tetap bisa diisi dan tautan cek
   resi tetap ada, tapi tanpa status otomatis. Pengecekan otomatis paling banyak `TRACK_DAILY_MAX` resi
   per proyek per hari (bawaan 500); tombol **Cek resi** tidak dibatasi.
+  Kartu **Pemakaian dan biaya cek resi** di Pengaturan > Lanjutan menampilkan jumlah cek per hari
+  (otomatis dan manual), perkiraan biayanya, serta saldo dan sisa kuota gratis akun Binderbyte, dan bot
+  mengirim warning "Cek resi" ke pemilik kalau batas harian tercapai atau kuota gratis habis dan saldo di
+  bawah `TRACK_BALANCE_MIN_IDR` (bawaan Rp3.000).
 - **Tautan marketplace**: tiap produk punya kolom Tokopedia dan Shopee (https, di situs
   marketplace itu). Kalau pelanggan ingin membeli produk yang punya tautan, LLM hanya memilih
   produknya (`buy`); kode mengirim tautannya sebagai pesan sendiri dan mencatatnya di riwayat

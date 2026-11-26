@@ -818,23 +818,40 @@ export async function usageDays(n: number): Promise<UsageDay[]> {
     .limit(n);
 }
 
-/** Jumlah cek resi otomatis proyek ini pada `day` (YYYY-MM-DD, tanggal lokal); 0 kalau belum ada. */
-export async function trackUsageToday(day: string): Promise<number> {
-  const [r] = await db()
-    .select({ n: trackUsage.n })
-    .from(trackUsage)
-    .where(and(eq(trackUsage.project, pid()), eq(trackUsage.day, day)));
-  return r?.n ?? 0;
+/** Jumlah cek resi satu hari: otomatis (ikut batas harian) dan manual (tombol "Cek resi"). */
+export interface TrackCounts {
+  auto: number;
+  manual: number;
 }
 
-/** Tambah satu cek resi otomatis pada `day`; mengembalikan jumlah sesudahnya. */
-export async function bumpTrackUsage(day: string): Promise<number> {
+/** Jumlah cek resi proyek ini pada `day` (YYYY-MM-DD, tanggal lokal); 0 kalau belum ada. */
+export async function trackUsageToday(day: string): Promise<TrackCounts> {
+  const [r] = await db()
+    .select({ auto: trackUsage.n, manual: trackUsage.n_manual })
+    .from(trackUsage)
+    .where(and(eq(trackUsage.project, pid()), eq(trackUsage.day, day)));
+  return { auto: r?.auto ?? 0, manual: r?.manual ?? 0 };
+}
+
+/** Tambah satu cek resi otomatis atau manual pada `day`; mengembalikan jumlah sesudahnya. */
+export async function bumpTrackUsage(day: string, kind: 'auto' | 'manual'): Promise<TrackCounts> {
+  const col = kind === 'auto' ? trackUsage.n : trackUsage.n_manual;
   const [r] = await db()
     .insert(trackUsage)
-    .values({ project: pid(), day, n: 1 })
-    .onConflictDoUpdate({ target: [trackUsage.project, trackUsage.day], set: { n: sql`${trackUsage.n} + 1` } })
-    .returning({ n: trackUsage.n });
-  return r?.n ?? 0;
+    .values({ project: pid(), day, n: kind === 'auto' ? 1 : 0, n_manual: kind === 'manual' ? 1 : 0 })
+    .onConflictDoUpdate({ target: [trackUsage.project, trackUsage.day], set: { [kind === 'auto' ? 'n' : 'n_manual']: sql`${col} + 1` } })
+    .returning({ auto: trackUsage.n, manual: trackUsage.n_manual });
+  return { auto: r?.auto ?? 0, manual: r?.manual ?? 0 };
+}
+
+/** Jumlah cek resi per hari, terbaru dulu (seperti usageDays). */
+export async function trackUsageDays(n: number): Promise<({ day: string } & TrackCounts)[]> {
+  return db()
+    .select({ day: trackUsage.day, auto: trackUsage.n, manual: trackUsage.n_manual })
+    .from(trackUsage)
+    .where(eq(trackUsage.project, pid()))
+    .orderBy(desc(trackUsage.day))
+    .limit(n);
 }
 
 // ---------------------------------------------------------------------------

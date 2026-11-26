@@ -1,0 +1,1 @@
+ALTER TABLE "track_usage" ADD COLUMN "n_manual" integer DEFAULT 0 NOT NULL;

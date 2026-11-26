@@ -538,6 +538,16 @@
           </div>
           <div class="cardfoot"><span class="note" data-en="The cost here is an <b>estimate</b>: tokens × the rates above. The official bill is in your LLM provider account.">Biaya di sini hanya <b>perkiraan</b>: jumlah token dikali tarif di atas. Tagihan resminya ada di akun penyedia LLM Anda.</span></div>
         </div>
+        <div class="card" id="costResi">
+          <div class="ch"><h2 data-en="Tracking usage &amp; cost">Pemakaian dan biaya cek resi</h2><p class="help" data-en="Tracking checks to Binderbyte per day and their estimated cost. The time range follows the choice in the LLM card above.">Jumlah cek resi ke Binderbyte per hari dan perkiraan biayanya. Rentang waktunya mengikuti pilihan di kartu LLM di atas.</p></div>
+          <div class="cb">
+            <p class="help" id="resiOff" hidden data-en="Tracking is not set up yet (BINDERBYTE_API_KEY in the server .env).">Pelacakan resi belum diatur (BINDERBYTE_API_KEY di .env server).</p>
+            <div class="tiles four" id="resiTiles"></div>
+            <!-- Grafik digambar app.js (columnChart); tampilan "Tabel"-nya berisi jumlah cek dan biaya per hari. -->
+            <div id="chartResi"></div>
+          </div>
+          <div class="cardfoot"><span class="note" data-en="The cost here is an <b>estimate</b>: checks × the rate, before the free quota is subtracted. The balance and the official bill are in your <a href='https://hub.binderbyte.com' target='_blank' rel='noopener'>Binderbyte account</a>.">Biaya di sini hanya <b>perkiraan</b>: jumlah cek dikali tarif, belum dikurangi kuota gratis. Saldo dan tagihan resminya ada di <a href="https://hub.binderbyte.com" target="_blank" rel="noopener">akun Binderbyte Anda</a>.</span></div>
+        </div>
         <details class="fold" id="alertFold" data-toc>
           <summary><span data-en="Alert history">Riwayat warning</span></summary>
           <div class="fold-body"><div class="scroll"><table class="list" id="alerts"></table></div></div>

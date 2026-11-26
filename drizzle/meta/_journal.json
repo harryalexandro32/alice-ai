@@ -36,6 +36,13 @@
       "when": 1795626880216,
       "tag": "0004_resi_pesanan",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795664466697,
+      "tag": "0005_biaya_cek_resi",
+      "breakpoints": true
     }
   ]
 }
