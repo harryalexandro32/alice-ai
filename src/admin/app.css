@@ -808,3 +808,19 @@ div.sub.sub-first { margin-top: 0; }
   .savebar-in .btn { flex: 1; }
   .tile { padding: 14px; }
 }
+
+/* ---------- Tokopedia & Shop: tautan toko, halaman Pesanan, baris pesanan di percakapan ---------- */
+.mk-url { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.mk-url .cp-k { min-width: 112px; }
+.mk-url code { overflow-wrap: anywhere; }
+.mk-facts { margin: 12px 0; }
+.mk-code { margin: 8px 0 12px; }
+.mk-code .help { margin: 0 0 6px; }
+.mk-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mk-code-row input { flex: 1 1 220px; min-width: 0; max-width: 360px; }
+.shop-id { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.shop-item { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.shop-link { display: flex; gap: 6px; align-items: center; }
+.shop-link input { width: 150px; }
+.shop-orders td.who .btn { margin-top: 4px; }
+.cp-shop { margin: 0 0 10px; font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }

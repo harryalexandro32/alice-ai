@@ -314,7 +314,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('notifyRoutes' in input) {
     const raw = (input.notifyRoutes && typeof input.notifyRoutes === 'object' ? input.notifyRoutes : {}) as Record<string, unknown>;
     const routes: Partial<Record<NotifyKind, Route>> = {};
-    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati', 'resi'] as const) {
+    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati', 'resi', 'marketplace'] as const) {
       const v = raw[k];
       if (v === 'owner' || v === 'staff' || v === 'both' || v === 'none') routes[k] = v;
     }

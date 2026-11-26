@@ -154,9 +154,10 @@ let known = {};
 // memakai yang sama untuk memeriksa dan mengalihkan alamat): ubah keduanya bersama.
 /** Halaman -> alamat di bawah /<proyek>/. */
 const ROUTES = {
-  beranda: '', percakapan: 'conversations',
+  beranda: '', percakapan: 'conversations', pesanan: 'orders',
   behavior: 'knowledge/behavior', produk: 'knowledge/products', brosur: 'knowledge/brochures',
   pengaturan: 'settings', whatsapp: 'settings/whatsapp', notifikasi: 'settings/notifications', lanjutan: 'settings/advanced',
+  marketplace: 'settings/marketplace',
 };
 /** Alamat lama (bahasa Indonesia) -> alamat baru. */
 const OLD_ROUTES = {
@@ -199,6 +200,7 @@ function parseRoute(pathname) {
 const PAGES = {
   beranda: () => ['', T('Beranda', 'Home'), T('Ringkasan 7 hari terakhir, pelanggan yang menunggu staf, dan pertanyaan yang belum bisa dijawab bot.', 'The last 7 days at a glance, customers waiting for a person, and questions the bot could not answer.')],
   percakapan: () => ['', T('Percakapan', 'Conversations'), T('Semua calon pelanggan yang chat dengan bot. Klik satu baris untuk membuka percakapannya dan membalas dari sini.', 'Every prospective customer who chatted with the bot. Click a row to open the conversation and reply from here.')],
+  pesanan: () => ['', T('Pesanan', 'Orders'), T('Pesanan dari toko Tokopedia & Shop yang ditautkan. Pesanan dicocokkan ke percakapan lewat nomor pesanan, atau ditautkan di sini.', 'Orders from the linked Tokopedia & Shop store. An order is matched to a conversation by its order number, or linked here.')],
   chat: () => [T('Percakapan', 'Conversations'), T('Percakapan', 'Conversation'), ''],
   behavior: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Cara bot bicara', 'How the bot talks'), T('Siapa yang menjawab, pembukaan, pertanyaan dan rekomendasi, gaya, dan yang harus dijawab manusia. Perubahan berlaku mulai pesan berikutnya setelah Anda menyimpan.', 'Who answers, the opening, questions and recommendations, the style, and what a human must answer. Changes apply to the next message after you save.')],
   produk: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Produk', 'Products'), T('Daftar produk, pengetahuan lain, dan pertanyaan yang belum terjawab. Bot tidak menjawab hal yang tidak tertulis di sini.', 'The product list, other knowledge, and unanswered questions. Anything not written here, the bot will not answer.')],
@@ -206,6 +208,7 @@ const PAGES = {
   pengaturan: () => [T('Pengaturan', 'Settings'), T('Umum', 'General'), T('Proyek, saat admin ikut membalas, dan follow-up.', 'Project, when a human admin steps in, and follow-up.')],
   whatsapp: () => [T('Pengaturan', 'Settings'), 'WhatsApp', T('Tautkan nomor bot, lihat keadaan bot, dan pengaman nomornya.', 'Link the bot\'s number, see the bot\'s status and the number safeguard.')],
   notifikasi: () => [T('Pengaturan', 'Settings'), T('Notifikasi', 'Notifications'), T('Siapa yang dikabari bot, dan notifikasi mana untuk siapa.', 'Who the bot notifies, and which news goes to whom.')],
+  marketplace: () => [T('Pengaturan', 'Settings'), 'Tokopedia & Shop', T('Tautkan toko Tokopedia & Shop agar status pembayaran dan resi pesanan masuk sendiri ke percakapan.', 'Link your Tokopedia & Shop store so payment status and tracking numbers reach the conversations by themselves.')],
   lanjutan: () => [T('Pengaturan', 'Settings'), T('Lanjutan', 'Advanced'), T('Mode uji, batas dan pengaman, irama balasan, biaya LLM, riwayat warning, dan catatan error.', 'Test mode, limits and safeguards, reply rhythm, LLM cost, alert history and the error log.')],
   notfound: () => ['', T('Halaman tidak ditemukan', 'Page not found'), ''],
 };
@@ -335,6 +338,7 @@ const NOTIFY = [
   ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, pelanggan minta bicara dengan orang, atau mengirim suara atau dokumen)', 'Customer needs staff (bot cannot answer, asks for a person, sends voice/document)'), 'staff'],
   ['llm', () => T('LLM bermasalah atau jatah hariannya habis', 'LLM failing / daily limit reached'), 'owner'],
   ['resi', () => T('Cek resi: saldo Binderbyte menipis atau batas harian tercapai', 'Tracking: Binderbyte balance low or daily cap reached'), 'owner'],
+  ['marketplace', () => T('Tokopedia & Shop: tautan toko putus atau akan berakhir', 'Tokopedia & Shop: shop link lost or expiring'), 'owner'],
 ];
 function renderRecipients() {
   const list = profile.recipients;
@@ -1095,10 +1099,10 @@ document.addEventListener('keydown', (e) => {
 // aksi. Dibuka dengan tombol Cari di bilah atas, Ctrl+K / ⌘K, atau "/" selama tidak sedang mengetik.
 // Semua dicari di peramban dari data yang sudah dimuat; daftar percakapan dimuat saat kotak dibuka kalau belum ada.
 
-const QS_PAGES = ['beranda', 'percakapan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'lanjutan'];
+const QS_PAGES = ['beranda', 'percakapan', 'pesanan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'marketplace', 'lanjutan'];
 /** Urutan kelompok hasil, dan berapa hasil paling banyak per kelompok. */
 const QS_GROUPS = [
-  ['page', () => T('Halaman', 'Pages'), 9], ['chat', () => T('Percakapan', 'Conversations'), 8],
+  ['page', () => T('Halaman', 'Pages'), 11], ['chat', () => T('Percakapan', 'Conversations'), 8],
   ['product', () => T('Produk', 'Products'), 6], ['project', () => T('Proyek', 'Projects'), 5], ['action', () => T('Aksi', 'Actions'), 5],
 ];
 $('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
@@ -1108,6 +1112,7 @@ const QS_KEYS = {
   beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt pelajaran ajari',
   produk: 'katalog harga stok marketplace tokopedia shopee', brosur: 'pdf katalog', pengaturan: 'proyek follow-up',
   whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'penerima sales wa kabar', lanjutan: 'biaya llm error warning mode uji resi binderbyte saldo',
+  marketplace: 'tokopedia tiktok shop toko tautkan pesanan', pesanan: 'order pesanan resi bayar tokopedia',
 };
 /** Huruf kecil tanpa aksen, untuk dicocokkan. */
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -1732,11 +1737,11 @@ const FILTER_HELP = () => ({
   menunggu: T('Bot sudah meneruskan percakapan ini ke tim, dan belum ada staf yang membalas. Tahapnya pindah ke Dihubungi saat staf membalas atau menandainya sudah ditangani.',
     'The bot passed this chat to the team, and no staff member has replied yet. It moves to Contacted when staff reply or mark it as handled.'),
   dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari dashboard.', 'A staff member has replied to this customer, from the phone or the web.'),
-  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, karena bot tidak bisa melihat pesanan di marketplace.',
-    'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, because the bot cannot see marketplace orders.'),
-  payment: T('Pelanggan sedang membayar atau sudah membayar. Hanya staf yang mengubah tahap ini.', 'The customer is paying or has paid. Only staff set this.'),
-  dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya staf yang mengubah tahap ini.', 'The goods are on the way to the customer. Only staff set this.'),
-  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Hanya staf yang mengubah tahap ini.', 'The order is complete: the customer received the goods. Only staff set this.'),
+  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, atau pesanan dari toko Tokopedia & Shop yang ditautkan.',
+    'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, or an order from the linked Tokopedia & Shop store does.'),
+  payment: T('Pelanggan sedang membayar atau sudah membayar. Staf yang mengubah tahap ini, atau pesanan dari toko Tokopedia & Shop yang ditautkan.', 'The customer is paying or has paid. Staff set this, or an order from the linked Tokopedia & Shop store does.'),
+  dikirim: T('Barangnya sudah dikirim ke pelanggan. Staf yang mengubah tahap ini, atau pelacakan resi dan pesanan dari toko Tokopedia & Shop yang ditautkan.', 'The goods are on the way to the customer. Staff set this, or tracking and orders from the linked Tokopedia & Shop store do.'),
+  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Staf yang mengubah tahap ini, atau pelacakan resi dan pesanan dari toko Tokopedia & Shop yang ditautkan.', 'The order is complete: the customer received the goods. Staff set this, or tracking and orders from the linked Tokopedia & Shop store do.'),
   batal: T('Pelanggan tidak jadi membeli. Hanya staf yang mengubah tahap ini.', 'The customer did not buy. Only staff set this.'),
   staf: T('Ini bukan tahap. Bot meminta bantuan staf dan belum ada staf yang membalas, di tahap apa pun. Tanda ini hilang saat staf membalas, atau saat ditandai sudah ditangani (misalnya setelah pelanggan ditelepon).',
     'Not a stage. The bot asked staff for help and no staff member has replied yet, at any stage. It clears when staff reply, or when someone marks it as handled (for example after a phone call).'),
@@ -1938,6 +1943,344 @@ $('importForm').addEventListener('submit', async (e) => {
   $('knownImport').disabled = false;
 });
 
+// ---------- Tokopedia & Shop: tautan toko dan halaman Pesanan ----------
+/** Jawaban GET marketplace terakhir (tautan toko, alamat untuk Partner Center, jumlah pesanan); null = belum dimuat. */
+let shopInfo = null;
+let shopInfoError = '';
+/** Pesanan di saringan dan pencarian sekarang; null = belum dimuat. */
+let shopRows = null;
+let shopRowsError = '';
+let shopFilter = 'semua';
+/** Nomor urut muat daftar: jawaban yang terlambat (saringan sudah berganti) dibuang. */
+let shopSeq = 0;
+let shopSearchTimer = null;
+
+/** Saringan halaman Pesanan (id sama dengan server). */
+const SHOP_FILTERS = () => [
+  ['semua', T('Semua', 'All')], ['belum-bayar', T('Belum bayar', 'Unpaid')], ['perlu-kirim', T('Perlu dikirim', 'To ship')],
+  ['dikirim', T('Dikirim', 'Shipped')], ['selesai', T('Selesai', 'Completed')], ['batal', T('Batal', 'Cancelled')],
+  ['belum-tertaut', T('Belum tertaut', 'Not linked')],
+];
+/** Status pesanan (ejaan API) -> [label, warna chip], menurut kelompok saringannya. */
+function shopStatus(s) {
+  if (s === 'UNPAID' || s === 'ON_HOLD') return [T('Belum bayar', 'Unpaid'), 'warn'];
+  if (s === 'AWAITING_SHIPMENT' || s === 'PARTIALLY_SHIPPING') return [T('Perlu dikirim', 'To ship'), 'info'];
+  if (s === 'AWAITING_COLLECTION' || s === 'IN_TRANSIT') return [T('Dikirim', 'Shipped'), 'info'];
+  if (s === 'DELIVERED' || s === 'COMPLETED') return [T('Selesai', 'Completed'), 'ok'];
+  if (s === 'CANCELLED') return [T('Batal', 'Cancelled'), 'danger'];
+  return [s || '-', ''];
+}
+const PLATFORMS = { TOKOPEDIA: 'Tokopedia', TIKTOK_SHOP: 'TikTok Shop', TIKTOK_SHOP_APP: 'TikTok Shop App' };
+/** Total pesanan: Rupiah lewat idr, mata uang lain apa adanya. */
+function shopMoney(total, currency) {
+  if (total === null || total === undefined || total === '') return '-';
+  const n = Number(total);
+  return (!currency || currency === 'IDR') && Number.isFinite(n) ? idr(n) : total + ' ' + (currency || '');
+}
+
+/** Angka di menu Pesanan: semua pesanan yang sudah dibayar tapi belum tertaut ke percakapan (sama dengan saringan "Belum tertaut"). */
+function setShopBadge() {
+  const n = shopInfo && shopInfo.orders ? shopInfo.orders.unmatched : 0;
+  const b = $('shopBadge');
+  b.textContent = n > 99 ? '99+' : String(n);
+  b.classList.toggle('on', n > 0);
+  const tip = n + T(' pesanan dibayar belum tertaut ke percakapan', n === 1 ? ' paid order not linked to a conversation' : ' paid orders not linked to a conversation');
+  b.title = n > 0 ? tip : '';
+  if (n > 0) b.setAttribute('aria-label', tip); else b.removeAttribute('aria-label');
+}
+
+async function loadShopInfo() {
+  const pid = project;
+  try {
+    const r = await api('marketplace');
+    if (pid !== project) return;
+    shopInfo = r;
+    shopInfoError = '';
+  } catch (e) {
+    if (pid !== project) return;
+    shopInfoError = e.message;
+  }
+  setShopBadge();
+  if (page === 'marketplace') renderMarketplace();
+  if (page === 'pesanan' && shopRows) renderShopOrders();
+}
+
+/** Kembali dari halaman izin (?linked=1|0&error=…): kabari sekali, lalu bersihkan alamatnya. */
+function readLinked() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('linked')) return;
+  if (q.get('linked') === '1') toast(T('Toko berhasil ditautkan. Pesanan 30 hari terakhir sedang disinkronkan.', 'Shop linked. Orders from the last 30 days are syncing.'));
+  else if (q.get('error')) toast(T('Toko tidak tertaut. Error: ', 'Shop not linked. Error: ') + q.get('error'), true);
+  else toast(T('Toko tidak tertaut. Pemilik toko tidak menyetujui akses, atau prosesnya dibatalkan.', 'Shop not linked. The shop owner did not approve access, or the process was cancelled.'), true);
+  history.replaceState(null, '', location.pathname + location.hash);
+}
+
+/** Satu alamat untuk Partner Center, dengan tombol salin. */
+function urlRow(label, url) {
+  const copy = el('button', { type: 'button', className: 'btn ghost sm', textContent: T('Salin', 'Copy') });
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(T('Alamat disalin.', 'Address copied.'));
+    } catch { toast(T('Tidak bisa menyalin. Pilih alamatnya, lalu salin sendiri.', 'Could not copy. Select the address and copy it yourself.'), true); }
+  });
+  return el('div', { className: 'mk-url' }, el('span', { className: 'cp-k', textContent: label }), el('code', { textContent: url }), copy);
+}
+
+/**
+ * Tombol ke halaman izin Tokopedia & Shop (tab baru); tanpa TIKTOK_SERVICE_ID
+ * hanya keterangan. Alamatnya dibuat server saat diklik (state sekali pakai).
+ * Tab baru dibuka langsung saat klik (supaya tidak dicegat pemblokir popup),
+ * lalu diarahkan sesudah alamatnya ada. Kalau tab tidak bisa dibuka,
+ * tautannya ditampilkan untuk diklik sendiri.
+ */
+function authButton(m, again = false) {
+  if (!m.canAuth) return el('p', { className: 'help', textContent: T('TIKTOK_SERVICE_ID di .env server masih kosong, jadi halaman izin belum bisa dibuka.', 'TIKTOK_SERVICE_ID in the server .env is empty, so the authorization page cannot open yet.') });
+  const btn = el('button', { type: 'button', className: 'btn' });
+  withIcon(btn, 'package', again ? T('Tautkan lagi', 'Link again') : T('Tautkan toko', 'Link shop'));
+  const fallback = el('span', { className: 'help' });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    fallback.replaceChildren();
+    const tab = window.open('', '_blank');
+    try {
+      const r = await api('marketplace/auth-url', { method: 'POST' });
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = r.url;
+      } else {
+        const a = el('a', { href: r.url, target: '_blank', rel: 'noopener', textContent: T('Buka halaman izin Tokopedia & Shop', 'Open the Tokopedia & Shop authorization page') });
+        fallback.replaceChildren(T('Tab baru tidak bisa dibuka. ', 'A new tab could not open. '), a);
+      }
+    } catch (e) {
+      if (tab) tab.close();
+      toast(e.message, true);
+    }
+    btn.disabled = false;
+  });
+  return el('span', {}, btn, ' ', fallback);
+}
+
+/**
+ * Kode izin yang ditempel sendiri: aplikasi "seller developer" (aplikasi
+ * pribadi untuk toko sendiri di Partner Center) bisa menampilkan kodenya
+ * langsung, tanpa kembali ke dashboard. Server menukarnya seperti callback izin.
+ */
+function codeForm() {
+  const input = el('input', { type: 'text', className: 'phone', maxLength: 200, autocomplete: 'off', spellcheck: false });
+  input.setAttribute('aria-label', T('Kode izin dari Partner Center', 'Authorization code from Partner Center'));
+  const btn = el('button', { type: 'button', className: 'btn ghost', textContent: T('Tautkan dengan kode', 'Link with code') });
+  const send = async () => {
+    const code = input.value.trim();
+    if (code.length < 8) {
+      toast(T('Isi kode izin dari Partner Center.', 'Enter the authorization code from Partner Center.'), true);
+      input.focus();
+      return;
+    }
+    btn.disabled = true;
+    try {
+      shopInfo = await api('marketplace/code', { method: 'POST', body: JSON.stringify({ code }) });
+      toast(T('Toko berhasil ditautkan. Pesanan 30 hari terakhir sedang disinkronkan.', 'Shop linked. Orders from the last 30 days are syncing.'));
+    } catch (e) {
+      toast(T('Toko tidak tertaut. Error: ', 'Shop not linked. Error: ') + e.message, true);
+      btn.disabled = false;
+      return;
+    }
+    setShopBadge();
+    renderMarketplace();
+  };
+  btn.addEventListener('click', () => void send());
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') void send(); });
+  return el('div', { className: 'mk-code' },
+    el('p', { className: 'help', textContent: T('Atau tempel kode izin dari Partner Center:', 'Or paste the authorization code from Partner Center:') }),
+    el('div', { className: 'mk-code-row' }, input, btn));
+}
+
+/** Alamat webhook harus ke server ini, bukan ke dashboard di Vercel. */
+const webhookNote = () => el('p', { className: 'help', textContent: T(
+  'Alamat webhook harus memakai alamat server ini (PUBLIC_BASE_URL), bukan alamat dashboard di Vercel. Tanda tangan webhook dihitung dari isi kiriman apa adanya, jadi kiriman itu harus langsung sampai ke server ini.',
+  'The webhook address must use this server address (PUBLIC_BASE_URL), not the dashboard address on Vercel. The webhook signature is computed over the exact request body, so the request must reach this server directly.') });
+
+function renderMarketplace() {
+  const box = $('mkBody');
+  if (!shopInfo) {
+    busy(['mkBody'], !shopInfoError);
+    box.replaceChildren(shopInfoError ? errorNote(shopInfoError) : el('p', {}, skelText(T('Memuat keadaan tautan toko Tokopedia & Shop di sini', 'Loading the Tokopedia & Shop link state here'))));
+    return;
+  }
+  busy(['mkBody'], false);
+  const m = shopInfo;
+  const webhook = urlRow('Webhook URL', m.webhookUrl);
+  if (!m.enabled) {
+    box.replaceChildren(
+      el('p', { className: 'help', textContent: T('Fitur ini belum menyala. Isi TIKTOK_APP_KEY, TIKTOK_APP_SECRET, dan TIKTOK_SERVICE_ID di .env server, lalu jalankan ulang dashboard. Ketiga nilai ini ada di halaman aplikasi Anda di Partner Center (partner.tiktokshop.com).',
+        'This feature is off. Fill in TIKTOK_APP_KEY, TIKTOK_APP_SECRET and TIKTOK_SERVICE_ID in the server .env, then restart the dashboard. All three values are on your app page in Partner Center (partner.tiktokshop.com).') }),
+      el('p', { className: 'help', textContent: T('Di halaman aplikasi itu, isi juga dua alamat ini:', 'On that app page, also enter these two addresses:') }),
+      urlRow(T('Redirect URL (callback izin)', 'Redirect URL (authorization callback)'), m.redirectUrl), webhook, webhookNote());
+    return;
+  }
+  const l = m.link;
+  if (!l) {
+    box.replaceChildren(
+      el('div', { className: 'tblfoot' }, authButton(m)),
+      codeForm(),
+      el('p', { className: 'help', textContent: T('Pemilik toko masuk dengan akun Seller Center, lalu menyetujui akses pesanan. Setelah itu halaman ini menampilkan tokonya.',
+        'The shop owner signs in with the Seller Center account and approves order access. This page then shows the shop.') }),
+      el('div', { className: 'sub', textContent: T('Alamat webhook', 'Webhook address') }),
+      el('p', { className: 'help', textContent: T('Isi alamat ini sekali di Partner Center, supaya perubahan pesanan langsung masuk:', 'Enter this address once in Partner Center, so order changes arrive at once:') }),
+      webhook, webhookNote());
+    return;
+  }
+  const [stText, stCls] = l.status === 'active' ? [T('Aktif', 'Active'), 'ok'] : l.status === 'expired' ? [T('Kedaluwarsa', 'Expired'), 'warn'] : [T('Dicabut', 'Revoked'), 'danger'];
+  const facts = [
+    [T('Toko', 'Shop'), (l.shopName || l.shopId) + (l.region ? ' (' + l.region + ')' : '')],
+    [T('Penjual', 'Seller'), l.sellerName || '-'],
+    [T('Token berlaku sampai', 'Token valid until'), l.accessExpiresAt ? when(l.accessExpiresAt) : '-'],
+    [T('Izin berakhir', 'Authorization ends'), l.refreshExpiresAt ? when(l.refreshExpiresAt) : '-'],
+    [T('Sinkron terakhir', 'Last sync'), l.lastSyncAt ? when(l.lastSyncAt) : T('belum pernah', 'never')],
+  ];
+  const sync = el('button', { type: 'button', className: 'btn ghost' });
+  withIcon(sync, 'refresh', T('Sinkron sekarang', 'Sync now'));
+  sync.disabled = l.status !== 'active';
+  sync.addEventListener('click', async () => {
+    sync.disabled = true;
+    const pid = project;
+    try {
+      shopInfo = await api('marketplace/sync', { method: 'POST' });
+      toast(shopInfo.started
+        ? T('Sinkron dimulai. Halaman ini diperbarui dalam beberapa detik.', 'Sync started. This page updates in a few seconds.')
+        : T('Sinkron masih berjalan. Halaman ini diperbarui dalam beberapa detik.', 'A sync is still running. This page updates in a few seconds.'));
+      // Sinkron berjalan di server (latar belakang): data halaman ini dibaca lagi sesudah 5 detik.
+      setTimeout(() => { if (pid === project) void loadShopInfo(); }, 5000);
+    } catch (e) { toast(e.message, true); }
+    setShopBadge();
+    renderMarketplace();
+  });
+  const cut = el('button', { type: 'button', className: 'btn danger' });
+  withIcon(cut, 'x', T('Putuskan tautan', 'Unlink'));
+  cut.addEventListener('click', async () => {
+    if (!confirm(T('Putuskan tautan toko ini? Pesanan baru tidak masuk lagi. Pesanan yang sudah masuk tetap disimpan.', 'Unlink this shop? New orders stop arriving. Orders already here are kept.'))) return;
+    cut.disabled = true;
+    try {
+      shopInfo = await api('marketplace/unlink', { method: 'POST' });
+      toast(T('Tautan toko diputus.', 'Shop unlinked.'));
+    } catch (e) { toast(e.message, true); }
+    setShopBadge();
+    renderMarketplace();
+  });
+  const counts = el('a', { href: pathOf('pesanan'),
+    textContent: m.orders.total + T(' pesanan 30 hari, ', ' orders in 30 days, ') + m.orders.unmatched + T(' belum tertaut ke percakapan', ' not linked to a conversation') });
+  box.replaceChildren(
+    el('div', {}, el('span', { className: 'chip ' + stCls, textContent: stText }), l.error ? el('span', { className: 'help', textContent: ' ' + T('Error: ', 'Error: ') + l.error }) : null),
+    el('dl', { className: 'cp-dl mk-facts' }, ...facts.flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { textContent: v })])),
+    el('p', {}, counts),
+    el('div', { className: 'tblfoot' }, sync, l.status !== 'active' ? authButton(m, true) : null, cut),
+    el('div', { className: 'sub', textContent: T('Alamat webhook', 'Webhook address') }),
+    webhook, webhookNote());
+}
+
+async function loadShopOrders() {
+  const pid = project;
+  const seq = ++shopSeq;
+  const q = new URLSearchParams({ status: shopFilter, q: $('shopSearch').value.trim(), limit: '200' });
+  try {
+    const r = await api('orders?' + q);
+    if (pid !== project || seq !== shopSeq) return;
+    shopRows = r.rows;
+    shopRowsError = '';
+  } catch (e) {
+    if (pid !== project || seq !== shopSeq) return;
+    shopRowsError = e.message;
+    toast(e.message, true);
+  }
+  renderShopOrders();
+}
+
+function renderShopFilters() {
+  $('shopFilters').replaceChildren(...SHOP_FILTERS().map(([k, label]) => {
+    const b = el('button', { type: 'button', className: k === shopFilter ? 'on' : '' }, label);
+    b.setAttribute('aria-pressed', String(k === shopFilter));
+    b.addEventListener('click', () => {
+      shopFilter = k;
+      shopRows = null;
+      renderShopOrders();
+      void loadShopOrders();
+    });
+    return b;
+  }));
+}
+
+/** Tautkan (atau lepas, phone '') satu pesanan ke percakapan, lalu muat ulang daftar dan angkanya. */
+async function linkShopOrder(orderId, phone, btn) {
+  btn.disabled = true;
+  try {
+    await api('orders/' + encodeURIComponent(orderId), { method: 'PUT', body: JSON.stringify({ phone }) });
+    toast(phone ? T('Pesanan ditautkan ke percakapan.', 'Order linked to the conversation.') : T('Pesanan dilepas dari percakapan.', 'Order unlinked from the conversation.'));
+  } catch (e) {
+    toast(e.message, true);
+    btn.disabled = false;
+    return;
+  }
+  void loadShopInfo();
+  await loadShopOrders();
+}
+
+function shopOrderRow(o) {
+  const items = o.items || [];
+  const first = items[0];
+  const what = first ? first.name + (first.qty > 1 ? ' ×' + first.qty : '') + (items.length > 1 ? ' ' + T('+' + (items.length - 1) + ' lainnya', '+' + (items.length - 1) + ' more') : '') : '';
+  const [stText, stCls] = shopStatus(o.status);
+  const status = el('span', { className: 'chip' + (stCls ? ' ' + stCls : ''), textContent: stText });
+  if (o.cancelReason) status.title = o.cancelReason;
+  let link;
+  if (o.contactPhone) {
+    const off = el('button', { type: 'button', className: 'btn ghost sm', textContent: T('Lepas', 'Unlink') });
+    off.addEventListener('click', () => void linkShopOrder(o.orderId, '', off));
+    link = el('td', { className: 'who' }, el('a', { href: convPath(o.contactPhone), className: o.contactName ? '' : 'phone', textContent: o.contactName || o.contactPhone }),
+      o.contactName ? el('small', { className: 'phone', textContent: o.contactPhone }) : null, off);
+  } else {
+    const input = el('input', { type: 'text', className: 'phone', placeholder: '+62…' });
+    input.setAttribute('aria-label', T('Nomor percakapan untuk pesanan ini', 'Conversation number for this order'));
+    const on = el('button', { type: 'button', className: 'btn ghost sm', textContent: T('Tautkan', 'Link') });
+    const send = () => (input.value.trim() ? void linkShopOrder(o.orderId, input.value.trim(), on) : input.focus());
+    on.addEventListener('click', send);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    link = el('td', {}, el('div', { className: 'shop-link' }, input, on));
+  }
+  return el('tr', {},
+    el('td', {}, el('div', { className: 'shop-id' }, el('small', { className: 'phone', textContent: o.orderId }), o.platform ? el('span', { className: 'chip', textContent: PLATFORMS[o.platform] || o.platform }) : null),
+      what ? el('small', { className: 'shop-item', textContent: what }) : null),
+    el('td', {}, status),
+    el('td', { textContent: o.paidTime ? when(o.paidTime) : '-', style: 'white-space:nowrap' }),
+    el('td', { textContent: shopMoney(o.total, o.currency), style: 'white-space:nowrap' }),
+    el('td', {}, o.trackingNumber ? el('span', { className: 'phone', textContent: o.trackingNumber }) : '-', o.trackingNumber && o.shippingProvider ? el('small', { className: 'shop-item', textContent: o.shippingProvider }) : null),
+    link);
+}
+
+function renderShopOrders() {
+  renderShopFilters();
+  if (!shopRows) {
+    const failed = Boolean(shopRowsError);
+    busy(['shopOrders'], !failed);
+    $('shopCount').replaceChildren(failed ? '' : skelText(T('00 pesanan', '00 orders')));
+    $('shopOrders').replaceChildren(el('tbody', {}, ...(failed ? [emptyRow(1, loadError(shopRowsError))] : skeleton('row', 3))));
+    return;
+  }
+  busy(['shopOrders'], false);
+  const head = el('tr', {}, ...[T('Pesanan', 'Order'), 'Status', T('Dibayar', 'Paid'), 'Total', T('Resi', 'Tracking'), T('Percakapan', 'Conversation')].map((t) => el('th', { textContent: t })));
+  const linked = shopInfo && shopInfo.link;
+  const empty = !linked && shopFilter === 'semua' && !$('shopSearch').value.trim()
+    ? T('Belum ada pesanan. Tautkan toko di Pengaturan > Tokopedia & Shop.', 'No orders yet. Link the shop in Settings > Tokopedia & Shop.')
+    : T('Tidak ada pesanan di saringan ini.', 'No orders in this filter.');
+  $('shopOrders').replaceChildren(el('thead', {}, head), el('tbody', {}, ...(shopRows.length ? shopRows.map(shopOrderRow) : [emptyRow(6, empty)])));
+  $('shopCount').textContent = shopRows.length + T(' pesanan', shopRows.length === 1 ? ' order' : ' orders') + (shopRows.length >= 200 ? T(' (200 terbaru)', ' (latest 200)') : '');
+}
+
+$('shopSearch').addEventListener('input', () => {
+  clearTimeout(shopSearchTimer);
+  shopSearchTimer = setTimeout(() => void loadShopOrders(), 250);
+});
+
 // ---------- satu percakapan ----------
 /** Percakapan yang sedang dibuka: data terakhir dari server + pesan lama yang dimuat. */
 let conv = null;
@@ -2067,6 +2410,15 @@ function renderConvOrder() {
   const o = conv.order;
   $('convOrder').hidden = !o;
   if (!o) return;
+  // Pesanan Tokopedia & Shop yang tertaut: status, waktu bayar, dan total, di atas kolom pesanan.
+  const shop = conv.marketplace;
+  $('convShop').hidden = !shop;
+  if (shop) {
+    const [stText, stCls] = shopStatus(shop.status);
+    $('convShop').replaceChildren('Tokopedia & Shop: ', el('span', { className: 'chip' + (stCls ? ' ' + stCls : ''), textContent: stText }),
+      shop.paidTime ? ' · ' + T('dibayar ', 'paid ') + when(shop.paidTime) : '', ' · ' + shopMoney(shop.total, shop.currency));
+    $('convShop').title = shop.orderId;
+  }
   const couriers = conv.couriers || [];
   const sel = $('orderCourier');
   if (sel.options.length !== couriers.length + 1 || sel.dataset.lang !== lang) {
@@ -2654,6 +3006,7 @@ const ALERT_KINDS = {
   llm: () => T('LLM bermasalah', 'LLM problem'),
   'bot-mati': () => T('Bot berhenti', 'Bot stopped'),
   resi: () => T('Cek resi: saldo atau batas', 'Tracking: balance or cap'),
+  marketplace: () => T('Tokopedia & Shop: tautan toko', 'Tokopedia & Shop: shop link'),
 };
 
 /** Level baris catatan error; nilai lama di baris yang sudah tersimpan juga dikenali. */
@@ -3425,6 +3778,20 @@ function show(next, r = {}) {
     void loadLeads();
   }
   if (page === 'chat') void openConv(r.phone);
+  if (page === 'pesanan') {
+    shopRows = null;
+    shopRowsError = '';
+    renderShopOrders();
+    void loadShopOrders();
+    void loadShopInfo();
+  }
+  if (page === 'marketplace') {
+    readLinked();
+    shopInfo = null;
+    shopInfoError = '';
+    renderMarketplace();
+    void loadShopInfo();
+  }
   if (page === 'produk') {
     // Daftar yang sudah dimuat Beranda langsung digambar: kartu ini dekat bawah halaman, jadi tanpa isinya
     // halaman terlalu pendek dan guliran ke #questions (dari "Lihat semua") berhenti di tempat yang salah.
@@ -3519,6 +3886,13 @@ async function openProject(id) {
   waError = '';
   leadError = '';
   usageData = null;
+  shopInfo = null;
+  shopInfoError = '';
+  shopRows = null;
+  shopRowsError = '';
+  shopFilter = 'semua';
+  $('shopSearch').value = '';
+  setShopBadge();
   $('waNumber').value = '';
   clearQr();
   $('chat').replaceChildren(chatHint());
@@ -3558,6 +3932,8 @@ async function route() {
     await openProject(want);
     // Angka di menu Percakapan butuh daftar pelanggan; dua halaman ini memuatnya sendiri.
     if (r.page !== 'beranda' && r.page !== 'percakapan') void loadLeads();
+    // Angka di menu Pesanan; dua halaman Tokopedia & Shop memuatnya sendiri.
+    if (r.page !== 'pesanan' && r.page !== 'marketplace') void loadShopInfo();
   }
   renderProjects();
   if (!exists) show('notfound', { text: T('Proyek “', 'Project "') + r.project + T('” tidak ditemukan. Pilih proyek lain di menu samping.', '" does not exist. Choose a project above.') });
@@ -3597,6 +3973,8 @@ function renderAll() {
   if (handoffData) renderHandoffs();
   if (wa || page === 'whatsapp') renderWa();
   if (usageData || page === 'lanjutan') renderUsage();
+  if (shopInfo || page === 'marketplace') renderMarketplace();
+  if (shopRows || page === 'pesanan') renderShopOrders();
   if (conv) { conv.key = ''; renderConv(); }
   if (page) { renderMeta(); renderToc(); }
 }

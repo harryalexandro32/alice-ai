@@ -91,6 +91,13 @@ const base = {
   trackPriceIdr: num('TRACK_PRICE_IDR', 15),
   // Warning ke pemilik kalau kuota gratis habis dan saldo Binderbyte di bawah sekian Rupiah.
   trackBalanceMinIdr: num('TRACK_BALANCE_MIN_IDR', 3000),
+  // Tokopedia & Shop (aplikasi di TikTok Shop Partner Center, lihat src/tiktok.ts).
+  // Kosong = fitur mati; halaman Pengaturan > Tokopedia & Shop menjelaskan cara menyalakannya.
+  tiktokAppKey: str('TIKTOK_APP_KEY'),
+  tiktokAppSecret: str('TIKTOK_APP_SECRET'),
+  tiktokServiceId: str('TIKTOK_SERVICE_ID'),
+  // Alamat publik server ini: dasar alamat callback izin (/tiktok/auth) dan webhook (/tiktok/webhook).
+  publicBaseUrl: str('PUBLIC_BASE_URL', 'https://alice-api.lukicenturi.com').replace(/\/+$/, ''),
 
   // Follow-up dikirim setelah pelanggan diam selama waktu yang diacak di antara
   // dua angka ini (seperti jeda balasan), supaya tidak selalu tepat di jam yang sama.

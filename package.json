@@ -9,7 +9,7 @@
     "bot": "tsx src/index.ts",
     "chat": "tsx src/cli.ts",
     "admin": "tsx src/admin/standalone.ts",
-    "test": "tsx src/business/gfan/catalog.test.ts && tsx src/provider.test.ts && tsx src/transport/cloud.test.ts && tsx src/transport/wamessage.test.ts && tsx src/transport/sendguard.test.ts && tsx src/pace.test.ts && tsx src/tracking.test.ts && tsx src/admin/admin.test.ts && tsx src/db/seed.test.ts && tsx src/flow.test.ts",
+    "test": "tsx src/business/gfan/catalog.test.ts && tsx src/provider.test.ts && tsx src/transport/cloud.test.ts && tsx src/transport/wamessage.test.ts && tsx src/transport/sendguard.test.ts && tsx src/pace.test.ts && tsx src/tracking.test.ts && tsx src/tiktok.test.ts && tsx src/admin/admin.test.ts && tsx src/db/seed.test.ts && tsx src/flow.test.ts",
     "eval": "tsx src/eval.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
