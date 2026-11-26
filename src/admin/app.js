@@ -2682,7 +2682,7 @@ function renderAlerts(r) {
   $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
     el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada warning.', 'No alerts yet.'))])));
   const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
-    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? 'Error' : 'Warning' })),
+    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'danger' : 'warn'), textContent: isError(e.level) ? 'Error' : 'Warning' })),
     el('td', { className: 'mono', textContent: e.text })));
   $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Pesan', 'Message')),
     el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
