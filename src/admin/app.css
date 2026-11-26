@@ -527,7 +527,7 @@ select.stagesel option { background-color: var(--field); color: var(--ink); font
 #attention a.btn, :root[data-theme=dark] #attention a.btn { color: var(--on-blue); text-decoration: none; }
 /* Ringkasan di tabel: teks sekunder (lebih kecil dan pudar), paling banyak 3 baris. Teks lengkapnya ada di
    tooltip dan di panel percakapan. */
-td.sum { max-width: 340px; min-width: 220px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+td.sum { max-width: 340px; min-width: 220px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 td.sum .clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 td.mono { font-family: var(--font-mono); font-size: 12px; word-break: break-word; }
 tr.stale td { background: var(--danger-soft); }
