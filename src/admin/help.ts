@@ -17,7 +17,9 @@ import { askJson } from '../llm/provider';
 import { noDash } from '../texts';
 
 /** Kunci halaman yang boleh disebut jawaban (sama dengan ROUTES di routes.ts). */
-export const HELP_PAGES: readonly string[] = ['beranda', 'percakapan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'lanjutan'];
+export const HELP_PAGES: readonly string[] = [
+  'beranda', 'percakapan', 'pesanan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'marketplace', 'lanjutan',
+];
 
 export interface HelpInput {
   question: string;
@@ -66,7 +68,8 @@ export function helpSystemPrompt(): string {
     '- "answer": jawabanmu untuk staf.\n' +
     '- "found": true kalau jawabannya ada di PANDUAN; false kalau tidak ada (fitur tidak ada, atau PANDUAN tidak membahasnya).\n' +
     `- "page": kunci halaman yang paling tepat dibuka staf untuk melakukan jawabanmu, salah satu dari: ${HELP_PAGES.join(', ')} ` +
-    '(behavior = Cara bot bicara, pengaturan = Pengaturan › Umum). Kosongkan ("") kalau tidak ada halaman yang relevan.\n\n' +
+    '(behavior = Cara bot bicara, pengaturan = Pengaturan › Umum, marketplace = Pengaturan › Tokopedia & Shop, pesanan = Pesanan). ' +
+    'Kosongkan ("") kalau tidak ada halaman yang relevan.\n\n' +
     `PANDUAN\n${helpText()}`
   );
 }

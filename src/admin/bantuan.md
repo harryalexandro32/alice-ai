@@ -19,9 +19,9 @@ Panduan ini untuk staf yang memakai dashboard. Judul bagiannya mengikuti nama me
 
 Menu dibagi tiga kelompok:
 
-- **Ringkasan**: Beranda, Percakapan.
+- **Ringkasan**: Beranda, Percakapan, Pesanan.
 - **Pengetahuan bot**: Cara bot bicara, Produk, Brosur.
-- **Pengaturan**: Umum, WhatsApp, Notifikasi, Lanjutan.
+- **Pengaturan**: Umum, WhatsApp, Notifikasi, Tokopedia & Shop, Lanjutan.
 
 Di bawah menu ada tombol bahasa (ID / EN) dan **Keluar**.
 
@@ -53,10 +53,10 @@ Tiap pelanggan punya satu tahap. Tahap tidak pernah turun sendiri.
 - **Menunggu tim**: bot sudah meneruskan percakapan ke tim, dan belum ada staf yang membalas. Berubah sendiri saat bot menyerahkan chat.
 - **Dihubungi**: staf sudah membalas pelanggan ini, dari HP atau dari dashboard, atau menandai "Sudah ditangani". Berubah sendiri.
 - **Link terkirim**: bot sudah mengirim link Tokopedia atau Shopee. Berubah sendiri.
-- **Pembayaran**: pelanggan sedang membayar atau sudah membayar. Hanya staf yang memasangnya, dari kotak Tahap di halaman percakapan.
-- **Barang terkirim**: barang sudah dikirim. Dipasang staf, atau otomatis oleh cek resi saat paket sudah di jalan.
-- **Pesanan selesai**: pelanggan sudah menerima barang. Dipasang staf, atau otomatis oleh cek resi saat paket diterima.
-- **Batal**: pelanggan tidak jadi membeli. Hanya staf yang memasangnya. Cek resi tidak menyentuh tahap ini.
+- **Pembayaran**: pelanggan sedang membayar atau sudah membayar. Dipasang staf dari kotak Tahap di halaman percakapan, atau otomatis oleh pesanan dari toko Tokopedia & Shop yang ditautkan saat pesanannya dibayar.
+- **Barang terkirim**: barang sudah dikirim. Dipasang staf, atau otomatis oleh cek resi atau pesanan toko saat paket sudah di jalan.
+- **Pesanan selesai**: pelanggan sudah menerima barang. Dipasang staf, atau otomatis oleh cek resi atau pesanan toko saat paket diterima.
+- **Batal**: pelanggan tidak jadi membeli. Hanya staf yang memasangnya. Cek resi dan pesanan toko tidak menyentuh tahap ini.
 
 Tanda **Perlu staf** bukan tahap. Tanda ini muncul saat bot meminta bantuan staf, di tahap apa pun, dan hilang saat staf membalas atau menandai "Sudah ditangani".
 
@@ -69,10 +69,23 @@ Alamat: `/gfan/conversations/+62…`. Dibuka dengan klik satu baris di Percakapa
 - **Bot menjawab** (tombol saklar): mati = staf yang menangani chat ini, bot diam. Nyala = bot kembali membalas, semua penahan dilepas. Berlaku seketika. Di sebelahnya tertulis alasan bot diam, kalau ada (admin membalas dari HP, pelanggan minta berhenti, jam tenang).
 - **Data pelanggan**: isian lead yang dikumpulkan bot (nama, kota, kebutuhan, dan lainnya sesuai "Data yang dikumpulkan"), dan **Ringkasan percakapan** yang ditulis LLM.
 - **Catatan**: catatan bebas untuk tim, misalnya "minta penawaran hari Senin". Tersimpan otomatis beberapa detik setelah selesai mengetik.
-- **Pesanan**: kolom **Nomor pesanan**, **Nomor resi**, dan **Kurir**. Bot mengisi sendiri nomor pesanan (id 18 digit Tokopedia atau TikTok Shop, atau nomor invoice `INV/…`) dan nomor resi yang ditempel pelanggan di chat, hanya ke kolom yang masih kosong. Staf bisa mengubahnya. Tombol **Cek resi** menanyakan status kurir sekarang. Bot juga mengecek sendiri tiap 5 menit, paling sering sekali per 30 menit per resi, selama 30 hari sejak resi diisi. Status "paket di jalan" menaikkan tahap ke Barang terkirim, "paket diterima" ke Pesanan selesai. Status retur, batal, hilang, atau rusak tampil sebagai "Bermasalah" dan tidak mengubah tahap. Status sebelum paket diambil kurir tampil sebagai "Menunggu kurir". Di bawahnya ada riwayat status dan tautan ke situs kurir. Kalau cek resi otomatis belum diatur di server, kolomnya tetap bisa diisi dan tautannya tetap ada.
+- **Pesanan**: kolom **Nomor pesanan**, **Nomor resi**, dan **Kurir**. Bot mengisi sendiri nomor pesanan (id 18 digit Tokopedia atau TikTok Shop, atau nomor invoice `INV/…`) dan nomor resi yang ditempel pelanggan di chat, hanya ke kolom yang masih kosong. Staf bisa mengubahnya. Tombol **Cek resi** menanyakan status kurir sekarang. Bot juga mengecek sendiri tiap 5 menit, paling sering sekali per 30 menit per resi, selama 30 hari sejak resi diisi. Status "paket di jalan" menaikkan tahap ke Barang terkirim, "paket diterima" ke Pesanan selesai. Status retur, batal, hilang, atau rusak tampil sebagai "Bermasalah" dan tidak mengubah tahap. Status sebelum paket diambil kurir tampil sebagai "Menunggu kurir". Di bawahnya ada riwayat status dan tautan ke situs kurir. Kalau cek resi otomatis belum diatur di server, kolomnya tetap bisa diisi dan tautannya tetap ada. Kalau nomor pesanan cocok dengan pesanan dari toko Tokopedia & Shop yang ditautkan, status, waktu bayar, dan total pesanannya tampil di atas kolom pesanan, dan resi serta kurir terisi sendiri.
 - **Riwayat chat**: semua pesan, pelanggan di kiri, bot dan admin di kanan. Pesan yang dikutip pelanggan tampil di atas pesannya. Gulung ke atas untuk memuat pesan lama.
 - **Balas dari web**: tulis balasan di kotak bawah, lalu klik **Kirim** atau tekan Ctrl+Enter (Enter = baris baru). Balasan dikirim dari nomor bot dalam sekitar 3 detik selama WhatsApp tersambung. Setelah Anda membalas, bot berhenti membalas di percakapan ini, sama seperti saat Anda membalas dari HP. Balasan yang gagal 5 kali tampil "gagal terkirim" dan masuk Perlu perhatian.
 - Pelanggan hasil impor yang belum pernah chat ke nomor bot belum bisa dibalas dari sini. Balas dari aplikasi WhatsApp.
+
+## Pesanan
+
+Alamat: `/gfan/orders`. Menu Ringkasan › Pesanan. Pesanan dari toko Tokopedia & Shop yang ditautkan di Pengaturan › Tokopedia & Shop. Tanpa toko yang ditautkan, halaman ini kosong.
+
+- **Cari**: nomor pesanan, nama penerima, atau nama barang.
+- **Saringan**: Semua, Belum bayar, Perlu dikirim, Dikirim, Selesai, Batal, Belum tertaut.
+- Tiap baris: nomor pesanan dan platform, barang, status, waktu bayar, total, nomor resi dan kurir, dan percakapan yang tertaut.
+- Pesanan dicocokkan ke percakapan **hanya lewat nomor pesanan**, karena marketplace menyamarkan nama dan nomor pembeli. Nomor pesanan yang ditempel pelanggan di chat, atau yang diisi staf di kolom Nomor pesanan percakapan, langsung menautkan pesanannya.
+- **Tautkan**: ketik nomor WhatsApp pelanggan (+62…) di baris pesanan, lalu klik Tautkan. **Lepas** melepas tautannya.
+- Pesanan yang tertaut dan sudah dibayar mengisi resi dan kurir percakapannya dan menaikkan tahap: dibayar = Pembayaran, di jalan = Barang terkirim, sampai = Pesanan selesai. Pesanan batal tidak mengubah tahap.
+- Angka merah di menu Pesanan = pesanan yang sudah dibayar tapi belum tertaut ke percakapan.
+- Pesanan masuk lewat webhook dan sinkron tiap 15 menit. Tombol **Sinkron sekarang** ada di Pengaturan › Tokopedia & Shop.
 
 ## Cara bot bicara
 
@@ -144,6 +157,15 @@ Alamat: `/gfan/settings/notifications`.
 - **Notifikasi mana untuk siapa**: tiap jenis notifikasi (Lead baru, Pelanggan butuh staf, LLM bermasalah, Cek resi) bisa diarahkan ke pemilik, staf, keduanya, atau tidak dikirim. Bawaan: lead baru dan pelanggan butuh staf ke staf, LLM dan cek resi ke pemilik. Kalau tidak ada penerima dengan peran itu, semua penerima mendapatkannya.
 - Notifikasi soal WhatsApp itu sendiri (terputus, kiriman dijeda, balasan dashboard gagal) dan bot berhenti tidak bisa lewat WhatsApp. Itu hanya tampil di Beranda (Perlu perhatian) dan di Pengaturan › Lanjutan › Riwayat warning.
 
+## Pengaturan › Tokopedia & Shop
+
+Alamat: `/gfan/settings/marketplace`. Menautkan toko Tokopedia (dijalankan TikTok Shop) supaya status pembayaran, nomor resi, dan kurir tiap pesanan masuk sendiri ke dashboard. Shopee belum didukung.
+
+- **Tautan toko**: kalau fitur belum menyala, halaman ini menjelaskan bahwa developer harus mengisi kunci aplikasi TikTok Shop di server. Kalau sudah menyala, klik **Tautkan toko**: pemilik toko masuk dengan akun Seller Center, lalu menyetujui akses pesanan. Halaman izin hanya berlaku sekali selama 30 menit; kalau kedaluwarsa, klik Tautkan toko lagi. Untuk aplikasi pribadi toko (seller developer), tempel kode izinnya di kolom **Tautkan dengan kode**.
+- Setelah tertaut, kartu ini menampilkan status (Aktif, Kedaluwarsa, Dicabut), nama toko, penjual, masa berlaku token dan izin, sinkron terakhir, dan jumlah pesanan 30 hari. **Sinkron sekarang** menarik pesanan terbaru. **Putuskan tautan** menghentikan pesanan baru; pesanan yang sudah masuk tetap tersimpan.
+- Satu toko hanya bisa tertaut ke satu proyek. Kalau toko mencabut izin aplikasi, tautan dan pesanannya dihapus, dan pemilik mendapat warning "Tokopedia & Shop".
+- **Alamat webhook**: alamat yang diisi sekali di Partner Center oleh developer, supaya perubahan pesanan langsung masuk.
+
 ## Pengaturan › Lanjutan
 
 Alamat: `/gfan/settings/advanced`. Kotak angka yang kosong memakai nilai bawaan server (tampil abu-abu). Kebanyakan bisnis tidak perlu mengubah halaman ini.
@@ -153,7 +175,7 @@ Alamat: `/gfan/settings/advanced`. Kotak angka yang kosong memakai nilai bawaan 
 - **Balasan**: lama bot "berpikir" sebelum membalas (paling cepat dan paling lama, detik, dipilih acak), **Jam tenang** (bot tidak membalas di jam itu, pesan dibalas setelah jam tenang selesai, follow-up tidak dikirim), **Analisis foto kiriman pelanggan** (foto dikirim ke LLM supaya bot bisa menyarankan produk dari foto), dan **Ubah pesan suara jadi teks** (butuh kunci STT di server). Kalau analisis foto atau suara dimatikan, bot hanya menerima kirimannya dan mengabari staf.
 - **Pemakaian dan biaya LLM**: biaya dan jumlah panggilan LLM per hari, dengan pilihan rentang 7, 30, atau 90 hari, grafik, dan tabel. Tarif token (USD per 1 juta) dan kurs bisa diubah di sini. Biayanya perkiraan; tagihan resmi ada di akun penyedia LLM.
 - **Pemakaian dan biaya cek resi**: jumlah cek resi ke Binderbyte per hari (otomatis dan manual), perkiraan biaya, saldo, dan sisa kuota gratis akun Binderbyte. Rentang waktunya mengikuti kartu LLM.
-- **Riwayat warning** (lipatan): semua warning yang pernah dicatat bot: pelanggan butuh staf, WhatsApp terputus, kiriman dijeda, balasan gagal terkirim, LLM bermasalah, bot berhenti, cek resi.
+- **Riwayat warning** (lipatan): semua warning yang pernah dicatat bot: pelanggan butuh staf, WhatsApp terputus, kiriman dijeda, balasan gagal terkirim, LLM bermasalah, bot berhenti, cek resi, Tokopedia & Shop.
 - **Catatan error** (lipatan): error dan warning dari proses bot, yang terbaru di atas. Untuk developer.
 
 ## Proyek baru
@@ -168,7 +190,8 @@ Tombol tanda tanya di kanan bawah membuka panel Bantuan. Tab **Tanya**: tulis pe
 
 - Mengubah kunci API (LLM, Binderbyte, STT), kata sandi dashboard, atau alamat server. Semuanya di `.env` server, hanya developer.
 - Mengirim pesan WhatsApp ke nomor yang belum pernah chat ke bot (siaran atau broadcast).
-- Melihat pesanan di Tokopedia atau Shopee. Bot hanya mencatat nomor pesanan dan resi yang ditempel pelanggan di chat.
+- Melihat pesanan Shopee. Pesanan Tokopedia & Shop masuk kalau tokonya ditautkan di Pengaturan › Tokopedia & Shop; selain itu bot hanya mencatat nomor pesanan dan resi yang ditempel pelanggan di chat.
+- Menyalakan tautan toko Tokopedia & Shop tanpa developer: kunci aplikasi TikTok Shop diisi di server.
 - Menghapus percakapan atau pelanggan.
 - Menambah pengguna dashboard dengan kata sandi berbeda. Satu kata sandi dipakai bersama.
 - Mengubah bahasa balasan bot. Bot selalu membalas dalam bahasa Indonesia.
