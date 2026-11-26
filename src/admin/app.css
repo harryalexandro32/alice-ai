@@ -211,6 +211,9 @@ main { min-width: 0; }
 .content { padding: 20px 32px 70px; max-width: 1180px; }
 /* Halaman percakapan memakai lebar lebih (dua kolom). */
 main:has(section[data-page="chat"].on) .content { max-width: 1400px; }
+/* Daftar percakapan tidak punya daftar "Di halaman ini", jadi tabelnya memakai lebar itu juga
+   (sama dengan lebar total halaman yang punya daftar: 1180 + 24 + 200). */
+main:has(section[data-page="percakapan"].on) .content { max-width: 1404px; }
 section[data-page] { display: none; }
 section[data-page].on { display: block; }
 
