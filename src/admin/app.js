@@ -342,7 +342,11 @@ function renderRecipients() {
     const role = el('select', {}, el('option', { value: 'owner', textContent: T('Pemilik', 'Owner') }), el('option', { value: 'staff', textContent: T('Staf', 'Staff') }));
     role.value = r.role;
     role.addEventListener('change', () => { r.role = role.value; touch(); });
-    const cell = (k, ph) => el('td', { className: k === 'name' ? 'first' : '' }, cellInput(r[k], (v) => { r[k] = v; touch(); }, ph));
+    const cell = (k, ph) => {
+      const input = cellInput(r[k], (v) => { r[k] = v; touch(); }, ph);
+      if (k === 'phone') input.classList.add('phone');
+      return el('td', { className: k === 'name' ? 'first' : '' }, input);
+    };
     return el('tr', {}, cell('name', T('misalnya Bu Rina', 'e.g. Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')),
       el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
   }));
@@ -1865,9 +1869,9 @@ function renderLeads() {
       sel.disabled = false;
     });
     const name = nameOf(c);
-    const who = el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }),
+    const who = el('td', { className: 'who' }, el('a', { href: convPath(c.phone), className: name ? '' : 'phone', textContent: name || c.phone }),
       c.note ? el('span', { className: 'note-ico', textContent: ' ✎', title: c.note }) : null,
-      name ? el('small', { textContent: c.phone }) : null);
+      name ? el('small', { className: 'phone', textContent: c.phone }) : null);
     const status = el('td', {}, el('div', { className: 'chiprow' },
       el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('Lengkap', 'Complete') : T('Belum lengkap', 'Incomplete') }),
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') }) : null));
@@ -2045,11 +2049,11 @@ function renderConvHead() {
   if (document.activeElement !== $('convNote') && !noteTimer) $('convNote').value = c.note || '';
   // Data pelanggan: nomor dan nama WhatsApp, lalu isian yang sudah terisi. Isian kosong ditulis "-" supaya terlihat apa yang belum diketahui.
   const facts = [
-    [T('Nomor', 'Number'), c.phone],
+    [T('Nomor', 'Number'), c.phone, 'phone'],
     ...(c.waName && c.waName !== name ? [[T('Nama WhatsApp', 'WhatsApp name'), c.waName]] : []),
     ...conv.fields.map((f) => [sentenceCase(f.label), c.lead[f.key] || '']),
   ];
-  $('convLead').replaceChildren(...facts.flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { className: v ? '' : 'empty', textContent: v || '-' })]));
+  $('convLead').replaceChildren(...facts.flatMap(([k, v, cls]) => [el('dt', { textContent: k }), el('dd', { className: v ? cls || '' : 'empty', textContent: v || '-' })]));
   $('convSum').hidden = !c.summary;
   $('convSumText').textContent = c.summary || '';
   $('replyBlocked').hidden = c.canReply;
@@ -2616,7 +2620,7 @@ function renderAttention() {
     });
     const name = nameOf(c);
     const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka percakapan', 'Open chat'));
-    rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
+    rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), className: name ? '' : 'phone', textContent: name || c.phone }), name ? el('small', { className: 'phone', textContent: c.phone }) : null),
       el('td', {}, el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') })),
       sumCell(c.summary),
       el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
@@ -2915,10 +2919,10 @@ function renderWa() {
   const code = w && !stale && w.state === 'pairing' && w.pairing_code;
   $('waCodeBox').hidden = !code;
   $('waCode').textContent = code ? w.pairing_code.replace(/^(.{4})(.{4})$/, '$1-$2') : '';
-  $('waDetail').textContent = wa && wa.pending === 'pair' ? T('Permintaan kode pairing dikirim ke bot…', 'Pairing code requested from the bot…')
-    : wa && wa.pending === 'reset' ? T('Bot sedang memutus sesi lama…', 'The bot is disconnecting the old session…')
-    : connected ? T('Tersambung sebagai ', 'Connected as ') + showPhone(w.self_phone)
-    : w && w.detail ? w.detail : '';
+  $('waDetail').replaceChildren(...(wa && wa.pending === 'pair' ? [T('Permintaan kode pairing dikirim ke bot…', 'Pairing code requested from the bot…')]
+    : wa && wa.pending === 'reset' ? [T('Bot sedang memutus sesi lama…', 'The bot is disconnecting the old session…')]
+    : connected ? [T('Tersambung sebagai ', 'Connected as '), w.self_phone ? el('span', { className: 'phone', textContent: showPhone(w.self_phone) }) : showPhone(w.self_phone)]
+    : w && w.detail ? [w.detail] : []));
   const cloud = p && p.transport === 'cloud';
   // Kode pairing hanya berguna selama belum tersambung, dan hanya di jalur Baileys.
   $('waPairBox').hidden = connected || cloud;

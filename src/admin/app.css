@@ -532,6 +532,9 @@ select.stagesel option { background-color: var(--field); color: var(--ink); font
 td.sum { max-width: 340px; min-width: 220px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 td.sum .clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 td.mono { font-family: var(--font-mono); font-size: 12px; word-break: break-word; }
+/* Nomor telepon: huruf mono, supaya angkanya rata dan mudah dibaca per digit. Geist Mono tampak lebih besar
+   dari Inter pada ukuran yang sama, jadi sedikit diperkecil. */
+.phone { font-family: var(--font-mono); font-size: .92em; font-variant-numeric: tabular-nums; }
 tr.stale td { background: var(--danger-soft); }
 .note-ico { cursor: help; }
 /* Halaman percakapan: di layar lebar chat di kiri, data pelanggan di kanan; di layar sempit bertumpuk (data dulu). */
