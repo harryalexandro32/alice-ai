@@ -118,8 +118,8 @@ const PNG = Buffer.from(
     assert.ok(checkReply('GFAF-99A tersedia'));
     assert.match(knowledgeText(), /\nGFAF-70A \| 1 \| 1/);
     assert.match(systemPrompt(), /Jam buka: Senin–Sabtu/);
-    assert.equal(state.body.profile.catalog.length, 6, 'tabel produk bawaan tampil di dashboard');
-    assert.equal(state.body.profile.products.length, 30, 'satu baris per model');
+    assert.equal(state.body.profile.catalog.length, 7, 'tabel produk bawaan tampil di dashboard');
+    assert.equal(state.body.profile.products.length, 35, 'satu baris per model');
     assert.deepEqual(state.body.profile.products[0], { name: 'GFC10-12B4', description: 'Ceiling Fan GFC — Model B4 (ceiling vent-type)', price: '', stock: '', photos: [], pdf: '', links: { tokopedia: '', shopee: '' } });
     assert.equal(state.body.profile.knowledge, undefined);
 

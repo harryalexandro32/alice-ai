@@ -21,11 +21,15 @@ cfg.dataRoot = tmp;
   const ctx = await loadProject('gfan');
   assert.ok(ctx, 'proyek gfan ada');
   await withProject(ctx, async () => {
-    assert.equal(biz.files.length, 6, '6 PDF katalog');
+    assert.equal(biz.files.length, 7, '7 PDF katalog');
     const tanpaPdf = biz.products.filter((p) => !p.pdf).map((p) => p.name);
     assert.deepEqual(tanpaPdf, [], 'semua produk punya PDF');
     const jet = biz.products.find((p) => p.name === 'GZ-200');
     assert.equal(biz.files.find((f) => f.id === jet?.pdf)?.name, 'Jet Fan - GFan');
+    // Brosur air cooler hasil pindai: produknya dipasangkan lewat teks pendamping (.txt).
+    const cooler = biz.products.find((p) => p.name === 'MHB-18-H');
+    assert.equal(biz.files.find((f) => f.id === cooler?.pdf)?.name, 'Air Cooler - GFan');
+    assert.equal(cooler?.price, 'Rp 15.000.000');
     assert.ok(mediaDir().startsWith(tmp), 'media di folder sementara');
     for (const f of biz.files) {
       assert.ok(existsSync(join(mediaDir(), f.file)), `${f.file} ada di media`);
@@ -35,7 +39,7 @@ cfg.dataRoot = tmp;
   // Diulang: tidak menambah apa pun (berkas yang ada tidak disentuh).
   assert.equal(await seedCatalogPdfs('gfan'), 0);
   const again = await loadProject('gfan');
-  await withProject(again!, async () => assert.equal(biz.files.length, 6));
+  await withProject(again!, async () => assert.equal(biz.files.length, 7));
   await closeDb();
   rmSync(tmp, { recursive: true, force: true });
   console.log('seed: OK');

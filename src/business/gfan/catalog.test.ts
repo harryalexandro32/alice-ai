@@ -14,7 +14,8 @@ assert.equal(count('GFAF-A'), 8);
 assert.equal(count('GFAF-AB'), 6);
 assert.equal(count('GAI'), 6);
 assert.equal(count('GZ'), 3);
-assert.equal(MODEL_CODES.size, 30);
+assert.equal(count('MHB'), 5);
+assert.equal(MODEL_CODES.size, 35);
 
 // Tiap baris punya sel sebanyak kolomnya — baris yang bergeser satu kolom
 // adalah cara termudah bot menjawab salah dengan yakin.
@@ -37,6 +38,8 @@ for (const line of [
   'GFAF-45AB | 18" | 220/380 | 50 | 230 | 5700 | 61 x 29 x 61 | 1 | 11 | 64',
   'GAI-250 | 220/50 | 165/225 | 1064/1405 | 371/488 | 58/66 | 1850/2450 | 0,75/1,2',
   'GZ-300 | 3000 | 240 | 2900 | 0.55 | 380/50 | 69 | 32',
+  'MHB-10-C | GAC-10-C | 16000 | 680 | 220/50 | ≤ 58 | 100 | 8–10 | 100–180 | 48 / 51 | 870 x 870 x 2100',
+  'MHB-23-H | GAC-23-H | 23000 | 1800 | 220/50 | ≤ 80 | 260 | 5–10 | 150–180 | 82 / 85 | 1100 x 1100 x 2200',
 ]) {
   assert.ok(text.includes(line), `tidak ada di teks katalog: ${line}`);
 }
@@ -49,5 +52,7 @@ assert.deepEqual(unknownModels('Seri GFC, GAI Series dan GZ cocok'), []);
 assert.deepEqual(unknownModels('Ada GFAF-70A dan GZ-400'), ['GFAF-70A', 'GZ-400']);
 assert.deepEqual(unknownModels('GFC20-30A'), ['GFC20-30A']);
 assert.deepEqual(unknownModels('GAI-100.'), []);
+assert.deepEqual(unknownModels('Air cooler MHB-18-H (GAC-18-H), mhb10a, dan MHB-10C'), []);
+assert.deepEqual(unknownModels('Ada MHB-30-H dan GAC-10-D'), ['MHB-30-H', 'MHB-10-D']);
 
 console.log(`katalog: OK — ${MODEL_CODES.size} model, teks prompt ${text.length} karakter`);
