@@ -28,6 +28,7 @@ import {
   type OrderFill,
 } from './store';
 import { inQuiet, quietEndAfter } from './quiet';
+import { onOrderRefChanged } from './tiktok';
 import { parseOrderHints } from './tracking';
 import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK } from './texts';
 import type { MediaKind, Quote } from './transport/types';
@@ -307,8 +308,11 @@ async function recordQuestion(phone: string, question: string, at: number): Prom
  * Catat nomor pesanan, resi, dan kurir dari pesan pelanggan. Hanya mengisi
  * kolom yang masih kosong: isian staf dan tangkapan sebelumnya tidak ditimpa.
  * Syarat "masih kosong" diperiksa lagi di database (fillOrder), jadi isian
- * staf yang masuk sesaat sebelumnya juga aman. Tidak membalas dan tidak
- * mengubah tahap.
+ * staf yang masuk sesaat sebelumnya juga aman. Tidak membalas. Tahap tidak
+ * diubah, kecuali nomor pesanan yang baru dicatat sama dengan pesanan dari
+ * toko Tokopedia & Shop yang ditautkan dan belum tertaut ke percakapan lain:
+ * pesanan itu lalu ditautkan ke percakapan ini, resinya diisi, dan tahapnya
+ * naik (src/tiktok.ts).
  */
 async function captureOrder(c: Contact, text: string, at: number): Promise<Contact> {
   const hints = parseOrderHints(text);
@@ -330,6 +334,18 @@ async function captureOrder(c: Contact, text: string, at: number): Promise<Conta
   if (wroteRef) console.log(`[alur] ${c.phone}: nomor pesanan dicatat: ${fill.order_ref}`);
   if (wroteAwb) console.log(`[alur] ${c.phone}: resi dicatat: ${fill.awb}${wroteCourier ? ` (${fill.courier})` : ''}`);
   else if (wroteCourier) console.log(`[alur] ${c.phone}: kurir dicatat: ${fill.courier}`);
+  if (wroteRef && fill.order_ref) {
+    // Pesanan toko yang sudah masuk: tautkan sekarang, tapi hanya yang belum tertaut ke percakapan lain
+    // (nomor dari chat tidak merebut pesanan). Error di sini tidak boleh menghentikan alur chat.
+    try {
+      if (await onOrderRefChanged(c.phone, fill.order_ref, at, { byStaff: false })) {
+        console.log(`[toko] ${c.phone}: pesanan ${fill.order_ref} ditautkan dari chat`);
+        return (await getContact(c.phone)) ?? updated;
+      }
+    } catch (e) {
+      console.error(`[toko] ${c.phone}: pesanan ${fill.order_ref} tidak bisa ditautkan: ${e instanceof Error ? e.message : e}`);
+    }
+  }
   return updated;
 }
 

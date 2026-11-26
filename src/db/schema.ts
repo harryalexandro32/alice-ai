@@ -295,5 +295,117 @@ export const trackUsage = pgTable(
   (t) => [primaryKey({ columns: [t.project, t.day] })]
 );
 
+/** Satu barang di pesanan marketplace: unit dengan SKU yang sama digabung (`qty`). */
+export interface OrderItem {
+  name: string;
+  sku: string;
+  qty: number;
+  /** Harga satuan dari marketplace, apa adanya (teks, mis. "125000"). */
+  price: string;
+}
+
+/**
+ * Tautan toko Tokopedia & Shop (aplikasi TikTok Shop Partner Center), satu
+ * per proyek (lihat src/tiktok.ts). Token disimpan apa adanya di database
+ * lokal: PostgreSQL hanya mendengar di 127.0.0.1.
+ */
+export const shopLinks = pgTable(
+  'shop_links',
+  {
+    project: text('project').primaryKey(),
+    shop_id: text('shop_id').notNull(),
+    /** Dikirim sebagai `shop_cipher` di tiap panggilan API pesanan. */
+    shop_cipher: text('shop_cipher').notNull(),
+    shop_name: text('shop_name'),
+    region: text('region'),
+    seller_name: text('seller_name'),
+    open_id: text('open_id'),
+    access_token: text('access_token').notNull(),
+    access_expires_at: ms('access_expires_at').notNull(),
+    refresh_token: text('refresh_token').notNull(),
+    refresh_expires_at: ms('refresh_expires_at').notNull(),
+    granted_scopes: jsonb('granted_scopes').$type<string[]>().notNull().default([]),
+    linked_at: ms('linked_at').notNull(),
+    /** Kapan pesanan terakhir disinkronkan (ms); null = belum pernah. */
+    last_sync_at: ms('last_sync_at'),
+    /**
+     * active | expired | revoked | unlinked. `unlinked` = diputus dari dashboard:
+     * token dan cipher kosong, baris disimpan supaya webhook pencabutan izin
+     * toko ini tetap sampai dan menghapus pesanannya.
+     */
+    status: text('status').notNull().default('active'),
+    /** Error terakhir (sinkron atau perpanjangan token); null sesudah berhasil. */
+    error: text('error'),
+    updated_at: ms('updated_at').notNull(),
+  },
+  (t) => [index('shop_links_shop').on(t.shop_id)]
+);
+
+/**
+ * Pesanan dari toko yang ditautkan, satu baris per pesanan. Waktu dalam ms.
+ * `contact_phone` = percakapan yang cocok (nomor pesanan sama dengan
+ * `contacts.order_ref`, atau ditautkan staf); null = belum tertaut.
+ */
+export const orders = pgTable(
+  'orders',
+  {
+    project: text('project').notNull(),
+    order_id: text('order_id').notNull(),
+    shop_id: text('shop_id').notNull(),
+    /** TOKOPEDIA | TIKTOK_SHOP | TIKTOK_SHOP_APP */
+    platform: text('platform'),
+    /** Ejaan API: UNPAID, ON_HOLD, AWAITING_SHIPMENT, …, CANCELLED. */
+    status: text('status').notNull(),
+    create_time: ms('create_time'),
+    update_time: ms('update_time'),
+    paid_time: ms('paid_time'),
+    cancel_time: ms('cancel_time'),
+    total_amount: text('total_amount'),
+    currency: text('currency'),
+    payment_method: text('payment_method'),
+    is_cod: boolean('is_cod').notNull().default(false),
+    buyer_user_id: text('buyer_user_id'),
+    /** Nama dan nomor penerima, disamarkan marketplace (apa adanya). */
+    recipient_name: text('recipient_name'),
+    recipient_phone: text('recipient_phone'),
+    items: jsonb('items').$type<OrderItem[]>().notNull().default([]),
+    tracking_number: text('tracking_number'),
+    shipping_provider: text('shipping_provider'),
+    fulfillment_type: text('fulfillment_type'),
+    shipping_type: text('shipping_type'),
+    cancel_reason: text('cancel_reason'),
+    contact_phone: text('contact_phone'),
+    synced_at: ms('synced_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.project, t.order_id] }), index('orders_update_time').on(t.project, t.update_time)]
+);
+
+/**
+ * Webhook Tokopedia & Shop (dikirim paling sedikit sekali): id =
+ * tts_notification_id. `pending` kosong = sudah diproses. `pending` terisi =
+ * gagal diproses (atau pesanannya belum terbaca): isi webhook-nya disimpan
+ * untuk dicoba lagi oleh putaran berkala, karena server langsung menjawab 200
+ * dan TikTok tidak mengirim ulang.
+ */
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: text('id').primaryKey(),
+    project: text('project').notNull(),
+    type: integer('type').notNull(),
+    /** Kapan webhook ini pertama masuk (ms). */
+    at: ms('at').notNull(),
+    /** Isi webhook yang belum berhasil diproses; null = selesai. */
+    pending: jsonb('pending').$type<Record<string, unknown>>(),
+    /** Jumlah percobaan yang gagal. */
+    tries: integer('tries').notNull().default(0),
+    /** Error percobaan terakhir; null sesudah berhasil. */
+    last_error: text('last_error'),
+  },
+  (t) => [index('webhook_events_at').on(t.at)]
+);
+
 export type Project = typeof projects.$inferSelect;
+export type ShopLink = typeof shopLinks.$inferSelect;
+export type OrderRow = typeof orders.$inferSelect;
 export type ProjectStatus = typeof projectStatus.$inferSelect;

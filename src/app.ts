@@ -234,7 +234,7 @@ export async function startApp(raw: Transport): Promise<void> {
   // Notifikasi ke sales dan kabar "butuh staf": hanya antre (lihat makeWaSender).
   const toSales = makeSalesNotifier(transport);
   setSalesNotifier(toSales);
-  // Pesan tes dari Pengaturan > Notifikasi: ke satu nomor, seperti kabar lain.
+  // Pesan tes dari Pengaturan > Notifikasi dan warning yang diantre dashboard: ke satu nomor, seperti kabar lain.
   setTestSender(makeWaSender(transport));
   // Balasan staf dari dashboard: isinya apa adanya; mikir singkat lalu mengetik
   // sesuai panjangnya, lalu lewat pengaman nomor di transport.

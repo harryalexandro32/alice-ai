@@ -8,25 +8,29 @@
  */
 
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { sql } from 'drizzle-orm';
 
 import { checkReply, systemPrompt } from '../brain';
 import { biz, initBiz, knowledgeText, loadProject, mediaDir, refreshBiz } from '../business';
 import { localDay } from '../clock';
 import { cfg } from '../config';
-import { closeDb, openDb } from '../db';
+import { closeDb, db, openDb } from '../db';
 import { ensureProject } from '../db/seed';
 import { humanHolds } from '../flow';
 import { handlePairingRequest, reportState, resetWaNumberCheck, startHeartbeat } from '../heartbeat';
 import { pickDelayMs, typingMs } from '../pace';
 import { withProject } from '../project';
+import { makeState, setTiktokFetch, type TiktokFetch } from '../tiktok';
 import { setQuotaFetcher, setTracker } from '../tracking';
 import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setTestSender } from '../sinks/outbox';
 import {
-  addHandoff, addMessage, addUsage, bumpTrackUsage, createContact, getContact, getProfile, getProject, humanSeenAt, pendingReplies, readStatus, recentAlerts,
-  recentMessages, saveProfile, trackUsageToday, updateContact, updateProject,
+  addHandoff, addMessage, addUsage, bumpTrackUsage, createContact, deleteShopLink, getContact, getProfile, getProject, getShopLink, getWebhookEvent, humanSeenAt, pendingReplies, readStatus,
+  recentAlerts, recentMessages, saveProfile, saveShopLink, trackUsageToday, updateContact, updateProject,
 } from '../store';
 import type { Transport, TransportState } from '../transport/types';
 import { setAdminBrain, setAdminExplainer, startAdmin, stopAdmin } from './server';
@@ -423,14 +427,14 @@ const PNG = Buffer.from(
           { name: 'Rina', role: 'apa saja', phone: 'self' },
           { name: '', role: 'staff', phone: '' },
         ],
-        notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner', resi: 'staff' },
+        notifyRoutes: { lead: 'both', llm: 'none', 'bot-mati': 'semua', ngawur: 'owner', resi: 'staff', marketplace: 'owner' },
       });
       assert.equal(rec.status, 200);
       assert.deepEqual(biz.recipients, [
         { name: 'Pak Harry', role: 'owner', phone: '+6281100000001' },
         { name: 'Rina', role: 'staff', phone: 'self' },
       ]);
-      assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none', resi: 'staff' }, 'jenis "resi" diterima');
+      assert.deepEqual(biz.notifyRoutes, { lead: 'both', llm: 'none', resi: 'staff', marketplace: 'owner' }, 'jenis "resi" dan "marketplace" diterima');
 
       // "Kirim tes": satu pesan per nomor penerima, isinya kabar apa saja yang diterima nomor itu.
       const tq = await post('/api/gfan/notify/test', {});
@@ -439,11 +443,17 @@ const PNG = Buffer.from(
       setTestSender(async (phone, text) => { sentTests.push([phone, text]); return true; });
       await deliverOutbox(['test']);
       assert.deepEqual(sentTests.map(([p]) => p), ['+6281100000001', 'self']);
-      assert.match(sentTests[0]![1], /^🔔 \*Tes notifikasi\* \| GFAN Indonesia\nIni pesan tes dari dashboard\. Kalau pesan ini sampai, nomor ini akan menerima kabar: lead baru\.$/,
-        'pemilik: hanya lead (rutenya keduanya); butuh staf ke staf');
+      assert.match(sentTests[0]![1], /^🔔 \*Tes notifikasi\* \| GFAN Indonesia\nIni pesan tes dari dashboard\. Kalau pesan ini sampai, nomor ini akan menerima kabar: lead baru, tautan toko Tokopedia & Shop\.$/,
+        'pemilik: lead (rutenya keduanya) dan tautan toko; butuh staf ke staf');
       assert.match(sentTests[1]![1], /menerima kabar: lead baru, pelanggan butuh staf, saldo atau batas cek resi\.$/, 'staf; LLM "tidak dikirim" tidak disebut');
       const st = await call(`/api/gfan/notify/test?ids=${tq.body.ids.join(',')}`);
       assert.deepEqual(st.body.items.map((x: { done: boolean }) => x.done), [true, true]);
+      // Gagal terus: baris ditutup sesudah MAX_REPLY_ATTEMPTS percobaan, tapi tidak tampil sebagai terkirim.
+      const tq2 = await post('/api/gfan/notify/test', {});
+      setTestSender(async () => { throw new Error('socket tertutup'); });
+      for (let i = 0; i < MAX_REPLY_ATTEMPTS + 2; i++) await deliverOutbox(['test']);
+      const st2 = await call(`/api/gfan/notify/test?ids=${tq2.body.ids.join(',')}`);
+      assert.deepEqual(st2.body.items.map((x: { done: boolean; attempts: number }) => [x.done, x.attempts]), [[false, MAX_REPLY_ATTEMPTS], [false, MAX_REPLY_ATTEMPTS]]);
       setTestSender(null);
       assert.match((await put({ recipients: [{ name: 'X', phone: '12' }] })).body.error, /nomor WhatsApp/);
       assert.match((await put({ recipients: [{ name: 'X' }] })).body.error, /isi nomor WhatsApp/);
@@ -617,7 +627,7 @@ const PNG = Buffer.from(
       assert.deepEqual([r1.status, r1.headers.get('location')], [302, '/gfan'], 'proyek aktif yang pertama');
       for (const path of ['/gfan', '/gfan/conversations', '/gfan/conversations/%2B6281211110001', '/gfan/knowledge/behavior', '/gfan/knowledge/products',
         '/gfan/knowledge/brochures', '/gfan/settings', '/gfan/settings/whatsapp',
-        '/gfan/settings/notifications', '/gfan/settings/advanced', '/gfan/conversations/']) {
+        '/gfan/settings/notifications', '/gfan/settings/advanced', '/gfan/conversations/', '/gfan/orders', '/gfan/settings/marketplace']) {
         const r = await page(path, false);
         assert.equal(r.status, 200, path);
         assert.match(r.headers.get('content-type') ?? '', /text\/html/);
@@ -740,7 +750,7 @@ const PNG = Buffer.from(
         const at = text.indexOf('\u2014');
         assert.equal(at, -1, `${name} masih memuat tanda pisah panjang: "${text.slice(Math.max(0, at - 40), at + 40)}"`);
       }
-      for (const id of ['login', 'assets', 'health', 'webhook', 'admin', 'logout']) {
+      for (const id of ['login', 'assets', 'health', 'webhook', 'admin', 'logout', 'tiktok', 'orders']) {
         assert.equal((await post('/api/projects', { id, name: 'X', template: 'generic' })).status, 400, `id "${id}" dipakai alamat dashboard`);
       }
     }
@@ -891,6 +901,270 @@ const PNG = Buffer.from(
       await reply('terima kasih');
       assert.equal((await getContact(P))?.stage, 'batal');
     }
+
+    // --- Tokopedia & Shop: callback izin, webhook, pesanan, tautan ke percakapan (fetch tiruan) ---
+    {
+      const KEY = 'appkey-uji';
+      const SECRET = 'secret-uji';
+      const ORDER = '576462377512830999';
+      const P2 = '+6281288880002';
+      const raw = (path: string, init: RequestInit = {}) => fetch(base + path, { redirect: 'manual', ...init });
+      const putJson = (path: string, body: unknown) => call(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const ok = (data: unknown) => new Response(JSON.stringify({ code: 0, message: 'Success', request_id: 'r', data }), { status: 200 });
+      const sec = Math.floor(Date.now() / 1000);
+      let orderStatus = 'AWAITING_SHIPMENT';
+      let failToken = false;
+      /** Selama diisi: pencarian pesanan menunggu janji ini (sinkron "sedang berjalan"). */
+      let searchGate: Promise<void> | null = null;
+      /** Selama diisi: detail pesanan menunggu janji ini (webhook "sedang diproses"). */
+      let detailGate: Promise<void> | null = null;
+      const fetched: string[] = [];
+      const fake: TiktokFetch = async (url) => {
+        const u = new URL(url);
+        fetched.push(u.pathname);
+        if (u.host === 'auth.tiktok-shops.com') {
+          if (failToken) return new Response(JSON.stringify({ code: 36004004, message: 'invalid auth code', request_id: 'r', data: {} }), { status: 200 });
+          return ok({ access_token: 'akses', access_token_expire_in: sec + 7 * 86400, refresh_token: 'segar', refresh_token_expire_in: sec + 60 * 86400, seller_name: 'Toko GFAN', granted_scopes: [] });
+        }
+        if (u.pathname === '/authorization/202309/shops') return ok({ shops: [{ id: 'SHOP-UJI', name: 'GFAN Official', region: 'ID', cipher: 'CIPHER-UJI' }] });
+        if (u.pathname === '/order/202309/orders/search') {
+          if (searchGate) await searchGate;
+          return ok({ orders: [], next_page_token: '' });
+        }
+        if (u.pathname === '/order/202507/orders') {
+          if (detailGate) await detailGate;
+          return ok({ orders: [{
+            id: ORDER, status: orderStatus, commerce_platform: 'TOKOPEDIA', create_time: sec - 600, update_time: sec, paid_time: sec - 300,
+            payment: { total_amount: '250000', currency: 'IDR' }, recipient_address: { name: 'B***i', phone_number: '(+62)812-***-1234' },
+            line_items: [{ product_name: 'Kipas Plafon', sku_id: 'S1', sale_price: '250000' }],
+          }] });
+        }
+        throw new Error(`panggilan tak terduga: ${url}`);
+      };
+
+      // Mati tanpa app key dan secret: halaman menjelaskan, callback tidak ada.
+      cfg.tiktokAppKey = '';
+      cfg.tiktokAppSecret = '';
+      assert.equal((await raw('/tiktok/auth?state=x&code=y')).status, 404, 'fitur mati');
+      assert.equal((await raw('/tiktok/webhook', { method: 'POST', body: '{}' })).status, 404);
+      const m0 = (await call('/api/gfan/marketplace')).body;
+      assert.deepEqual([m0.enabled, m0.canAuth, m0.link, m0.webhookUrl, m0.redirectUrl, m0.orders],
+        [false, false, null, 'https://alice-api.lukicenturi.com/tiktok/webhook', 'https://alice-api.lukicenturi.com/tiktok/auth', { total: 0, unmatched: 0 }]);
+      assert.equal((await call('/api/gfan/marketplace', {}, false)).status, 401, 'halaman pengaturan butuh sesi');
+      assert.equal((await post('/api/gfan/marketplace/auth-url')).status, 400, 'fitur mati: tidak ada halaman izin');
+
+      cfg.tiktokAppKey = KEY;
+      cfg.tiktokAppSecret = SECRET;
+      cfg.tiktokServiceId = 'svc-uji';
+      setTiktokFetch(fake);
+      const m1 = (await call('/api/gfan/marketplace')).body;
+      assert.deepEqual([m1.enabled, m1.canAuth, m1.authUrl], [true, true, undefined], 'alamat halaman izin tidak ikut di GET');
+      // Alamat halaman izin dibuat tiap klik, hanya dengan sesi.
+      assert.equal((await call('/api/gfan/marketplace/auth-url', { method: 'POST' }, false)).status, 401, 'butuh sesi');
+      const au = await post('/api/gfan/marketplace/auth-url');
+      assert.equal(au.status, 200);
+      assert.match(au.body.url, /^https:\/\/services\.tiktokshop\.com\/open\/authorize\?service_id=svc-uji&state=/);
+      const au2 = await post('/api/gfan/marketplace/auth-url');
+      assert.notEqual(new URL(au2.body.url).searchParams.get('state'), new URL(au.body.url).searchParams.get('state'), 'state baru tiap klik');
+
+      // Callback izin: state palsu 400 (halaman kecil, bukan JSON), ditolak pemilik toko, berhasil, dan kode yang salah.
+      const badState = await raw('/tiktok/auth?state=palsu&code=abc');
+      assert.equal(badState.status, 400);
+      assert.match(badState.headers.get('content-type') ?? '', /text\/html/);
+      const badHtml = await badState.text();
+      assert.match(badHtml, /Tautan kedaluwarsa atau tidak sah, misalnya setelah dashboard dimulai ulang\. Buka dashboard lalu klik Tautkan toko lagi\./);
+      assert.match(badHtml, /<a href="\/">/, 'tautan ke dashboard (alamat relatif tanpa ADMIN_ORIGINS)');
+      const denied = await raw(`/tiktok/auth?state=${makeState('gfan', Date.now())}&code=null&error=auth_denied`);
+      assert.deepEqual([denied.status, denied.headers.get('location')], [302, '/gfan/settings/marketplace?linked=0']);
+      failToken = true;
+      const wrong = await raw(`/tiktok/auth?state=${makeState('gfan', Date.now())}&code=lama`);
+      assert.equal(wrong.status, 302);
+      assert.match(wrong.headers.get('location') ?? '', /^\/gfan\/settings\/marketplace\?linked=0&error=.*invalid%20auth%20code/);
+      assert.equal((await call('/api/gfan/marketplace')).body.link, null);
+      failToken = false;
+      // Toko yang sudah tertaut ke proyek lain ditolak, dengan pesan yang bisa dibaca.
+      await withProject((await loadProject('toko-b'))!, () => saveShopLink({
+        shop_id: 'SHOP-UJI', shop_cipher: 'C', shop_name: 'GFAN Official', region: 'ID', seller_name: null, open_id: null, access_token: 'a',
+        access_expires_at: Date.now() + 86_400_000, refresh_token: 'r', refresh_expires_at: Date.now() + 86_400_000, granted_scopes: [],
+        linked_at: Date.now(), last_sync_at: null, status: 'active', error: null, updated_at: Date.now(),
+      }));
+      const taken = await raw(`/tiktok/auth?state=${makeState('gfan', Date.now())}&code=kode-0`);
+      assert.deepEqual([taken.status, taken.headers.get('location')], [302, `/gfan/settings/marketplace?linked=0&error=${encodeURIComponent('Toko ini sudah tertaut ke proyek toko-b. Putuskan tautannya di sana dulu.')}`]);
+      assert.equal((await call('/api/gfan/marketplace')).body.link, null);
+      await withProject((await loadProject('toko-b'))!, () => deleteShopLink());
+      // Kembali ke alamat dashboard (ADMIN_ORIGINS yang pertama); state hanya sekali pakai.
+      const origins = cfg.adminOrigins;
+      cfg.adminOrigins = ['https://dash.contoh.id'];
+      const goodState = makeState('gfan', Date.now());
+      const good = await raw(`/tiktok/auth?state=${goodState}&code=kode-1`);
+      assert.deepEqual([good.status, good.headers.get('location')], [302, 'https://dash.contoh.id/gfan/settings/marketplace?linked=1']);
+      const reused = await raw(`/tiktok/auth?state=${goodState}&code=kode-1`);
+      assert.equal(reused.status, 400, 'state yang sudah dipakai ditolak');
+      const reusedPage = await reused.text();
+      assert.match(reusedPage, /<a href="https:\/\/dash\.contoh\.id\/">/);
+      assert.match(reusedPage, /misalnya setelah dashboard dimulai ulang\. Buka dashboard lalu klik Tautkan toko lagi\./);
+      cfg.adminOrigins = origins;
+      const m2 = (await call('/api/gfan/marketplace')).body;
+      assert.deepEqual([m2.link.shopId, m2.link.shopName, m2.link.region, m2.link.sellerName, m2.link.status], ['SHOP-UJI', 'GFAN Official', 'ID', 'Toko GFAN', 'active']);
+      assert.equal(m2.link.accessExpiresAt, (sec + 7 * 86400) * 1000);
+      assert.equal(m2.link.access_token, undefined, 'token tidak dikirim ke peramban');
+
+      // Webhook: tanda tangan salah 401; benar 200, pesanan masuk sesudahnya.
+      const body = JSON.stringify({ type: 1, tts_notification_id: 'w-1', shop_id: 'SHOP-UJI', timestamp: sec, data: { order_id: ORDER, order_status: 'AWAITING_SHIPMENT', update_time: sec } });
+      const sig = createHmac('sha256', SECRET).update(KEY + body).digest('hex');
+      const hook = (b: string, authorization?: string) => raw('/tiktok/webhook', { method: 'POST', headers: { 'content-type': 'application/json', ...(authorization ? { authorization } : {}) }, body: b });
+      assert.equal((await hook(body)).status, 401, 'tanpa tanda tangan');
+      assert.equal((await hook(body, `Bearer ${sig}`)).status, 401, 'dengan awalan');
+      assert.equal((await hook(body.replace('w-1', 'w-2'), sig)).status, 401, 'badan diubah');
+      // Detail pesanan ditahan: jawaban 200 datang sebelum pemrosesan selesai, dan webhook sudah tersimpan menunggu.
+      let releaseDetail!: () => void;
+      detailGate = new Promise<void>((r) => (releaseDetail = r));
+      const details = () => fetched.filter((p) => p === '/order/202507/orders').length;
+      const detailsBefore = details();
+      const hooked = await hook(body, sig);
+      assert.deepEqual([hooked.status, await hooked.json()], [200, { ok: true }]);
+      const pending = await getWebhookEvent('w-1');
+      assert.deepEqual([pending?.tries, (pending?.pending as { tts_notification_id?: string } | null)?.tts_notification_id], [0, 'w-1'], 'tersimpan menunggu sebelum diproses');
+      assert.equal((await call('/api/gfan/orders')).body.rows.length, 0, 'belum diproses');
+      // Kiriman ulang selagi menunggu: 200, tanpa pemrosesan kedua.
+      assert.equal((await hook(body, sig)).status, 200);
+      for (let i = 0; i < 100 && details() === detailsBefore; i++) await new Promise((r) => setTimeout(r, 5));
+      releaseDetail();
+      detailGate = null;
+      let rows: { orderId: string; status: string; contactPhone: string | null; contactName: string | null; items: unknown[]; total: string }[] = [];
+      for (let i = 0; i < 100 && !rows.length; i++) {
+        rows = (await call('/api/gfan/orders')).body.rows;
+        if (!rows.length) await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.deepEqual(rows.map((r) => [r.orderId, r.status, r.contactPhone, r.total]), [[ORDER, 'AWAITING_SHIPMENT', null, '250000']]);
+      assert.deepEqual(rows[0]!.items, [{ name: 'Kipas Plafon', sku: 'S1', qty: 1, price: '250000' }]);
+      for (let i = 0; i < 100 && (await getWebhookEvent('w-1'))?.pending; i++) await new Promise((r) => setTimeout(r, 10));
+      assert.equal((await getWebhookEvent('w-1'))?.pending, null, 'selesai: pending dikosongkan');
+      assert.equal(details() - detailsBefore, 1, 'satu kali diproses');
+      assert.equal((await hook(body, sig)).status, 200, 'kiriman ulang sesudah selesai: 200');
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(details() - detailsBefore, 1, 'sesudah selesai: dilewati');
+      const other = JSON.stringify({ type: 1, tts_notification_id: 'w-3', shop_id: 'SHOP-LAIN', data: { order_id: '1' } });
+      assert.equal((await hook(other, createHmac('sha256', SECRET).update(KEY + other).digest('hex'))).status, 200, 'toko tidak dikenal: 200, diabaikan');
+
+      // Saringan dan pencarian.
+      const ids = async (qs: string) => (await call(`/api/gfan/orders?${qs}`)).body.rows.map((r: { orderId: string }) => r.orderId);
+      assert.deepEqual(await ids('status=belum-tertaut'), [ORDER]);
+      assert.deepEqual(await ids('status=perlu-kirim'), [ORDER]);
+      assert.deepEqual(await ids('status=batal'), []);
+      assert.deepEqual(await ids('q=kipas'), [ORDER]);
+      assert.deepEqual(await ids('q=b***'), [ORDER], 'nama penerima');
+      assert.deepEqual(await ids('q=zzz'), []);
+      // Saringan yang tidak dikenal (juga nama bawaan objek JS) = semua.
+      for (const status of ['ngawur', '__proto__', 'constructor', 'toString']) {
+        const r = await call(`/api/gfan/orders?status=${status}`);
+        assert.deepEqual([r.status, r.body.rows.map((x: { orderId: string }) => x.orderId)], [200, [ORDER]], `status=${status}`);
+      }
+      assert.deepEqual((await call('/api/gfan/marketplace')).body.orders, { total: 1, unmatched: 1 });
+
+      // Tautkan manual ke percakapan, lalu lepas.
+      const link = (phone: string) => putJson(`/api/gfan/orders/${ORDER}`, { phone });
+      assert.deepEqual([(await link('0812 1234 0000')).status, (await link('0812 1234 0000')).body.error], [400, 'Nomor ini tidak ada di percakapan.']);
+      assert.equal((await putJson('/api/gfan/orders/tidak-ada', { phone: '' })).status, 404);
+      await createContact(P2, `${P2.slice(1)}@s.whatsapp.net`, Date.now());
+      await updateContact(P2, { wa_name: 'Budi WA', stage: 'dihubungi' });
+      const linked = await link('0812-8888-0002');
+      assert.deepEqual([linked.status, linked.body.row.contactPhone, linked.body.row.contactName], [200, P2, 'Budi WA']);
+      assert.deepEqual([(await getContact(P2))?.order_ref, (await getContact(P2))?.stage], [ORDER, 'payment'], 'nomor pesanan diisi, tahap naik');
+      assert.deepEqual(await ids('status=belum-tertaut'), []);
+      const detail = (await call(`/api/gfan/leads/${encodeURIComponent(P2)}`)).body;
+      assert.deepEqual(detail.marketplace, {
+        orderId: ORDER, platform: 'TOKOPEDIA', status: 'AWAITING_SHIPMENT', paidTime: (sec - 300) * 1000, total: '250000', currency: 'IDR',
+        trackingNumber: null, shippingProvider: null, updateTime: sec * 1000,
+      });
+      const unlinked = await link('');
+      assert.deepEqual([unlinked.status, unlinked.body.row.contactPhone], [200, null]);
+      assert.equal((await getContact(P2))?.order_ref, null, 'nomor pesanan di percakapan ikut dilepas');
+      assert.equal((await call(`/api/gfan/leads/${encodeURIComponent(P2)}`)).body.marketplace, null);
+
+      // Pesanan hilang di tengah jalan (pemicu database membuat ubahan baris pesanan tidak mengenai apa pun): 404, bukan 500.
+      await db().execute(sql.raw('CREATE FUNCTION uji_lewati() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$'));
+      await db().execute(sql.raw('CREATE TRIGGER uji_lewati BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION uji_lewati()'));
+      try {
+        const gone = await link('0812-8888-0002');
+        assert.deepEqual([gone.status, gone.body.error], [404, 'Pesanan sudah tidak ada.']);
+      } finally {
+        await db().execute(sql.raw('DROP TRIGGER uji_lewati ON orders'));
+        await db().execute(sql.raw('DROP FUNCTION uji_lewati()'));
+      }
+
+      // Staf mengisi nomor pesanan di percakapan: pesanan yang ada langsung tertaut dan diterapkan.
+      orderStatus = 'IN_TRANSIT';
+      const again = JSON.stringify({ type: 1, tts_notification_id: 'w-4', shop_id: 'SHOP-UJI', data: { order_id: ORDER, order_status: 'IN_TRANSIT' } });
+      assert.equal((await hook(again, createHmac('sha256', SECRET).update(KEY + again).digest('hex'))).status, 200);
+      for (let i = 0; i < 100 && (await ids('status=dikirim')).length === 0; i++) await new Promise((r) => setTimeout(r, 20));
+      const byRef = await putJson(`/api/gfan/leads/${encodeURIComponent(P2)}`, { order_ref: ORDER });
+      assert.deepEqual([byRef.status, byRef.body.stage, byRef.body.order.ref], [200, 'dikirim', ORDER]);
+      assert.equal((await call('/api/gfan/orders')).body.rows[0].contactPhone, P2);
+      // Nomor pesanan dikosongkan staf: pesanan dilepas, tidak lagi mengubah percakapan ini.
+      assert.equal((await putJson(`/api/gfan/leads/${encodeURIComponent(P2)}`, { order_ref: '' })).status, 200);
+      assert.equal((await call('/api/gfan/orders')).body.rows[0].contactPhone, null, 'nomor pesanan kosong: pesanan dilepas');
+      // Diisi lagi: tertaut lagi.
+      await putJson(`/api/gfan/leads/${encodeURIComponent(P2)}`, { order_ref: ORDER });
+      assert.equal((await call('/api/gfan/orders')).body.rows[0].contactPhone, P2);
+      // Diganti ke nomor lain: pesanan lama dilepas.
+      await putJson(`/api/gfan/leads/${encodeURIComponent(P2)}`, { order_ref: 'INV/LAIN-01' });
+      assert.equal((await call('/api/gfan/orders')).body.rows[0].contactPhone, null, 'nomor pesanan diganti: pesanan lama dilepas');
+
+      // Sinkron sekarang: dijawab langsung, sinkronnya di latar belakang; klik kedua selagi berjalan tidak memulai lagi.
+      // Lalu putuskan tautan: pesanan yang sudah masuk tetap ada.
+      fetched.length = 0;
+      let openGate!: () => void;
+      searchGate = new Promise<void>((r) => { openGate = r; });
+      const synced = await post('/api/gfan/marketplace/sync');
+      assert.deepEqual([synced.status, synced.body.ok, synced.body.started, synced.body.link.shopId], [200, true, true, 'SHOP-UJI'], 'dijawab sebelum sinkron selesai');
+      const before = synced.body.link.lastSyncAt;
+      const second = await post('/api/gfan/marketplace/sync');
+      assert.deepEqual([second.status, second.body.ok, second.body.started], [200, true, false], 'sinkron masih berjalan');
+      openGate();
+      searchGate = null;
+      for (let i = 0; i < 100 && (await call('/api/gfan/marketplace')).body.link.lastSyncAt === before; i++) await new Promise((r) => setTimeout(r, 20));
+      assert.ok((await call('/api/gfan/marketplace')).body.link.lastSyncAt > (before ?? 0), 'sinkron di latar belakang selesai');
+      assert.deepEqual(fetched, ['/order/202309/orders/search'], 'satu sinkron saja');
+      const cut = await post('/api/gfan/marketplace/unlink');
+      assert.deepEqual([cut.status, cut.body.link], [200, null]);
+      const kept = await withProject((await loadProject('gfan'))!, () => getShopLink());
+      assert.deepEqual([kept?.status, kept?.shop_id, kept?.access_token], ['unlinked', 'SHOP-UJI', ''], 'baris disimpan untuk webhook pencabutan izin');
+      assert.equal((await call('/api/gfan/orders')).body.rows.length, 1);
+      assert.match((await post('/api/gfan/marketplace/sync')).body.error, /belum ditautkan/);
+
+      // Kode izin yang ditempel sendiri (aplikasi seller developer, tanpa callback).
+      assert.equal((await call('/api/gfan/marketplace/code', { method: 'POST', body: '{"code":"kode-izin-1"}' }, false)).status, 401, 'butuh sesi');
+      for (const code of [undefined, '', '   ', 'pendek', 'x'.repeat(201), 12345678]) {
+        const r = await post('/api/gfan/marketplace/code', { code });
+        assert.deepEqual([r.status, r.body.error], [400, 'Isi kode izin dari Partner Center.'], `kode ${JSON.stringify(code)}`);
+      }
+      failToken = true;
+      const badCode = await post('/api/gfan/marketplace/code', { code: 'kode-izin-lama' });
+      assert.equal(badCode.status, 400);
+      assert.match(badCode.body.error, /invalid auth code/, 'pesan dari Tokopedia & Shop yang bisa dibaca');
+      assert.equal((await call('/api/gfan/marketplace')).body.link, null);
+      failToken = false;
+      fetched.length = 0;
+      const byCode = await post('/api/gfan/marketplace/code', { code: '  kode-izin-1  ' });
+      assert.equal(byCode.status, 200);
+      assert.deepEqual([byCode.body.link.shopId, byCode.body.link.status], ['SHOP-UJI', 'active']);
+      // Sinkron pertama berjalan di latar belakang: tunggu sampai selesai sebelum fetch tiruan dilepas.
+      for (let i = 0; i < 100 && !(await call('/api/gfan/marketplace')).body.link.lastSyncAt; i++) await new Promise((r) => setTimeout(r, 20));
+      assert.ok((await call('/api/gfan/marketplace')).body.link.lastSyncAt > 0, 'sinkron pertama');
+      assert.equal(fetched[0], '/api/v2/token/get');
+      assert.equal((await post('/api/gfan/marketplace/unlink')).status, 200);
+      cfg.tiktokAppKey = '';
+      assert.equal((await post('/api/gfan/marketplace/code', { code: 'kode-izin-1' })).status, 400, 'fitur mati');
+      cfg.tiktokAppKey = KEY;
+
+      setTiktokFetch(null);
+      cfg.tiktokAppKey = '';
+      cfg.tiktokAppSecret = '';
+      cfg.tiktokServiceId = '';
+      await putJson(`/api/gfan/leads/${encodeURIComponent(P2)}`, { stage: 'baru', order_ref: '', awb: '', courier: '' });
+    }
+
 
     // --- pertanyaan yang dioper ke staf -> pengetahuan ---
     {

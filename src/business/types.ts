@@ -34,7 +34,7 @@ export interface MediaFile {
 }
 
 /** Jenis kabar yang bisa dikirim ke pemilik/staf. */
-export type NotifyKind = 'lead' | 'butuh-staf' | 'wa-putus' | 'kiriman-dijeda' | 'kiriman-gagal' | 'llm' | 'bot-mati' | 'resi';
+export type NotifyKind = 'lead' | 'butuh-staf' | 'wa-putus' | 'kiriman-dijeda' | 'kiriman-gagal' | 'llm' | 'bot-mati' | 'resi' | 'marketplace';
 /** Ke siapa sebuah jenis kabar dikirim. */
 export type Route = 'owner' | 'staff' | 'both' | 'none';
 

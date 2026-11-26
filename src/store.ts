@@ -17,13 +17,14 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notIn
 import { now } from './clock';
 import { db } from './db';
 import {
-  alerts, botOff, contacts, errors, handoffs, humanSeen, llmUsage, messages, outbox, pauses, profiles, projects, projectStatus, trackUsage,
-  type PairingRequest, type Project, type ProjectStatus, type ShipEvent,
+  alerts, botOff, contacts, errors, handoffs, humanSeen, llmUsage, messages, orders, outbox, pauses, profiles, projects, projectStatus, shopLinks,
+  trackUsage, webhookEvents,
+  type OrderItem, type OrderRow, type PairingRequest, type Project, type ProjectStatus, type ShipEvent, type ShopLink,
 } from './db/schema';
 import { currentProject } from './project';
 import type { Quote } from './transport/types';
 
-export type { PairingRequest, Project, ProjectStatus, ShipEvent };
+export type { OrderItem, OrderRow, PairingRequest, Project, ProjectStatus, ShipEvent, ShopLink };
 
 export type Dir = 'in' | 'out' | 'human';
 export type FollowupState = 'idle' | 'pending';
@@ -31,9 +32,10 @@ export type FollowupState = 'idle' | 'pending';
  * Tahap pipeline lead. Yang berubah otomatis: "baru" -> "menunggu" (bot
  * menyerahkan chat ke tim), "baru"/"menunggu" -> "dihubungi" (manusia membalas
  * atau menandai sudah ditangani), dan "baru"/"menunggu"/"dihubungi" -> "link"
- * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis. "payment" dan
- * "batal" hanya diubah staf; "dikirim" dan "selesai" diubah staf atau oleh
- * pelacakan resi (src/tracking.ts).
+ * (bot mengirim tautan beli). Tahap tidak pernah turun otomatis. "batal" hanya
+ * diubah staf; "payment" diubah staf atau oleh pesanan dari toko Tokopedia &
+ * Shop yang ditautkan (src/tiktok.ts); "dikirim" dan "selesai" diubah staf,
+ * oleh pelacakan resi (src/tracking.ts), atau oleh pesanan dari toko itu.
  */
 export const STAGES = ['baru', 'menunggu', 'dihubungi', 'link', 'payment', 'dikirim', 'selesai', 'batal'] as const;
 export type Stage = (typeof STAGES)[number];
@@ -91,8 +93,12 @@ export interface Contact {
   ship_phase: string | null;
 }
 
-/** sales = lead dan "butuh staf"; reply = balasan dari dashboard; test = pesan tes ke satu penerima notifikasi. */
-export type OutboxKind = 'sales' | 'reply' | 'test';
+/**
+ * sales = lead dan "butuh staf"; reply = balasan dari dashboard; test = pesan
+ * tes ke satu penerima notifikasi; alert = warning dari proses tanpa WhatsApp
+ * (dashboard) ke satu penerima notifikasi.
+ */
+export type OutboxKind = 'sales' | 'reply' | 'test' | 'alert';
 
 export interface OutboxRow {
   id: number;
@@ -852,6 +858,333 @@ export async function trackUsageDays(n: number): Promise<({ day: string } & Trac
     .where(eq(trackUsage.project, pid()))
     .orderBy(desc(trackUsage.day))
     .limit(n);
+}
+
+// ---------------------------------------------------------------------------
+// Toko Tokopedia & Shop: tautan toko, pesanan, dan webhook (lihat src/tiktok.ts)
+// ---------------------------------------------------------------------------
+
+/** Status pesanan yang berarti sudah dibayar (ejaan API). */
+export const PAID_STATUSES = ['AWAITING_SHIPMENT', 'PARTIALLY_SHIPPING', 'AWAITING_COLLECTION', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'] as const;
+
+/** Syarat SQL: pesanan sudah dibayar, HANYA menurut statusnya (sama dengan isPaid di src/tiktok.ts; ditahan dan batal tidak). */
+const orderPaid = () => inArray(orders.status, [...PAID_STATUSES]);
+
+/** Tautan toko proyek ini, atau undefined. */
+export async function getShopLink(): Promise<ShopLink | undefined> {
+  const [r] = await db().select().from(shopLinks).where(eq(shopLinks.project, pid())).limit(1);
+  return r;
+}
+
+/**
+ * Tautan toko dengan id toko ini, di proyek mana pun (webhook hanya membawa
+ * shop_id), juga tautan yang diputus dari dashboard (`unlinked`). Tautan
+ * aktif dulu: tautan lama yang kedaluwarsa atau diputus di proyek lain tidak
+ * boleh menerima webhook toko yang sekarang aktif di proyek ini.
+ */
+export async function shopLinkByShopId(shopId: string): Promise<ShopLink | undefined> {
+  const [r] = await db()
+    .select()
+    .from(shopLinks)
+    .where(eq(shopLinks.shop_id, shopId))
+    .orderBy(sql`(${shopLinks.status} = 'active') desc`, desc(shopLinks.updated_at))
+    .limit(1);
+  return r;
+}
+
+/** Tautan AKTIF toko ini di proyek lain selain `exceptProject`, atau undefined. */
+export async function activeShopLinkByShopId(shopId: string, exceptProject: string): Promise<ShopLink | undefined> {
+  const [r] = await db()
+    .select()
+    .from(shopLinks)
+    .where(and(eq(shopLinks.shop_id, shopId), eq(shopLinks.status, 'active'), ne(shopLinks.project, exceptProject)))
+    .limit(1);
+  return r;
+}
+
+/** Semua tautan toko yang aktif, semua proyek (putaran berkala dashboard). */
+export async function activeShopLinks(): Promise<ShopLink[]> {
+  return db().select().from(shopLinks).where(eq(shopLinks.status, 'active')).orderBy(shopLinks.project);
+}
+
+/** Simpan tautan toko proyek ini (baru, atau menimpa yang lama). */
+export async function saveShopLink(row: Omit<ShopLink, 'project'>): Promise<ShopLink> {
+  const values = { ...row, project: pid() };
+  const { project: _project, ...set } = values;
+  const [r] = await db().insert(shopLinks).values(values).onConflictDoUpdate({ target: shopLinks.project, set }).returning();
+  return r as ShopLink;
+}
+
+/** Ubah sebagian tautan toko proyek ini; undefined kalau tidak ada. */
+export async function updateShopLink(patch: Partial<Omit<ShopLink, 'project'>>): Promise<ShopLink | undefined> {
+  const [r] = await db().update(shopLinks).set(patch).where(eq(shopLinks.project, pid())).returning();
+  return r;
+}
+
+/** Hapus baris tautan toko proyek ini (pencabutan izin dari toko; pemutusan dari dashboard memakai status `unlinked`). */
+export async function deleteShopLink(): Promise<void> {
+  await db().delete(shopLinks).where(eq(shopLinks.project, pid()));
+}
+
+/**
+ * Simpan satu pesanan (baru, atau menimpa data marketplace yang lama).
+ * Data yang lebih tua tidak menimpa yang lebih baru: baris tersimpan hanya
+ * ditimpa kalau `update_time`-nya kosong atau tidak lebih baru dari yang
+ * masuk (misalnya webhook masuk di tengah sinkron yang lama). Kalau tidak
+ * ditimpa, baris tersimpan yang dikembalikan; null kalau baris itu sudah
+ * dihapus sementara itu (mis. izin toko dicabut). `contact_phone` tidak
+ * disentuh: tautan ke percakapan diatur matchOrder dan staf.
+ */
+export async function upsertOrderRow(row: Omit<OrderRow, 'project' | 'contact_phone'>): Promise<OrderRow | null> {
+  const values = { ...row, project: pid() };
+  const { project: _project, order_id: _id, ...set } = values;
+  const [r] = await db()
+    .insert(orders)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [orders.project, orders.order_id],
+      set,
+      setWhere: sql`${orders.update_time} is null or excluded.update_time >= ${orders.update_time}`,
+    })
+    .returning();
+  if (r) return r;
+  return (await getOrder(row.order_id)) ?? null;
+}
+
+export async function getOrder(orderId: string): Promise<OrderRow | undefined> {
+  const [r] = await db().select().from(orders).where(and(eq(orders.project, pid()), eq(orders.order_id, orderId))).limit(1);
+  return r;
+}
+
+/** Tautkan pesanan ke percakapan (null = lepas). Undefined kalau pesanannya tidak ada. */
+export async function setOrderContact(orderId: string, phone: string | null): Promise<OrderRow | undefined> {
+  const [r] = await db()
+    .update(orders)
+    .set({ contact_phone: phone })
+    .where(and(eq(orders.project, pid()), eq(orders.order_id, orderId)))
+    .returning();
+  return r;
+}
+
+/**
+ * Lepas pesanan dari percakapan ini, kecuali `keepOrderId`: nomor pesanannya
+ * diganti atau dikosongkan, jadi pesanan lama tidak boleh lagi mengubah resi
+ * dan tahapnya. Null = lepas semua. Mengembalikan jumlah yang dilepas.
+ */
+export async function detachOrdersExcept(phone: string, keepOrderId: string | null): Promise<number> {
+  const rows = await db()
+    .update(orders)
+    .set({ contact_phone: null })
+    .where(and(eq(orders.project, pid()), eq(orders.contact_phone, phone), ...(keepOrderId ? [ne(orders.order_id, keepOrderId)] : [])))
+    .returning({ id: orders.order_id });
+  return rows.length;
+}
+
+/** Hapus semua pesanan toko ini di proyek ini (toko memutus izin aplikasi). Mengembalikan jumlahnya. */
+export async function deleteOrders(shopId: string): Promise<number> {
+  const rows = await db()
+    .delete(orders)
+    .where(and(eq(orders.project, pid()), eq(orders.shop_id, shopId)))
+    .returning({ id: orders.order_id });
+  return rows.length;
+}
+
+/**
+ * Toko mencabut izin aplikasi: hapus semua pesanan dan semua baris tautan
+ * toko ini di SEMUA proyek (tidak terikat proyek yang sedang dilayani),
+ * juga tautan yang diputus dari dashboard di proyek lain. Pesanan dan
+ * tautan dihapus dalam satu transaksi: kalau gagal, tidak ada yang terhapus
+ * dan percobaan berikutnya mengulang semuanya. Mengembalikan proyek yang
+ * tersentuh (urut) dan jumlah pesanan yang dihapus.
+ */
+export async function deleteShopEverywhere(shopId: string): Promise<{ projects: string[]; orders: number }> {
+  return db().transaction(async (tx) => {
+    const gone = await tx.delete(orders).where(eq(orders.shop_id, shopId)).returning({ project: orders.project });
+    const links = await tx.delete(shopLinks).where(eq(shopLinks.shop_id, shopId)).returning({ project: shopLinks.project });
+    const projects = [...new Set([...gone, ...links].map((r) => r.project))].sort();
+    return { projects, orders: gone.length };
+  });
+}
+
+/** Pesanan terbaru dulu (menurut waktu ubah di marketplace). */
+export async function listOrders(limit: number): Promise<OrderRow[]> {
+  return db()
+    .select()
+    .from(orders)
+    .where(eq(orders.project, pid()))
+    .orderBy(sql`${orders.update_time} desc nulls last`, desc(orders.order_id))
+    .limit(limit);
+}
+
+/**
+ * `total` = pesanan yang dibuat sejak `since` (ms). `unmatched` = SEMUA
+ * pesanan yang sudah dibayar tapi belum tertaut ke percakapan, tanpa batas
+ * tanggal, supaya angka di sidebar sama dengan saringan "belum tertaut".
+ */
+export async function orderCounts(since: number): Promise<{ total: number; unmatched: number }> {
+  const [r] = await db()
+    .select({
+      total: sql<number>`count(*) filter (where coalesce(${orders.create_time}, ${orders.update_time}, ${orders.synced_at}) >= ${since})::int`,
+      unmatched: sql<number>`count(*) filter (where ${and(orderPaid(), isNull(orders.contact_phone))})::int`,
+    })
+    .from(orders)
+    .where(eq(orders.project, pid()));
+  return { total: Number(r?.total ?? 0), unmatched: Number(r?.unmatched ?? 0) };
+}
+
+/**
+ * Pesanan satu percakapan: yang ditautkan ke nomor ini (terbaru dulu), atau
+ * yang nomor pesanannya sama dengan `orderRef` dan belum tertaut ke
+ * percakapan lain (percakapan tidak pernah menampilkan pesanan pembeli lain).
+ * Undefined kalau tidak ada.
+ */
+export async function orderForContact(phone: string, orderRef: string | null): Promise<OrderRow | undefined> {
+  const byRef = orderRef ? and(eq(orders.order_id, orderRef), or(isNull(orders.contact_phone), eq(orders.contact_phone, phone))) : undefined;
+  const [r] = await db()
+    .select()
+    .from(orders)
+    .where(and(eq(orders.project, pid()), or(eq(orders.contact_phone, phone), byRef)))
+    .orderBy(sql`(${orders.contact_phone} = ${phone}) desc nulls last`, sql`${orders.update_time} desc nulls last`)
+    .limit(1);
+  return r;
+}
+
+/**
+ * Pesanan yang belum tertaut, padahal ada percakapan dengan nomor pesanan
+ * yang sama (nomor itu dicatat sebelum pesanannya masuk). Paling banyak 500.
+ */
+export async function unmatchedOrdersWithRef(limit = 500): Promise<OrderRow[]> {
+  return db()
+    .selectDistinct({ order: orders })
+    .from(orders)
+    .innerJoin(contacts, and(eq(contacts.project, orders.project), eq(contacts.order_ref, orders.order_id)))
+    .where(and(eq(orders.project, pid()), isNull(orders.contact_phone)))
+    .limit(limit)
+    .then((rows) => rows.map((r) => r.order));
+}
+
+/** Kontak yang nomor pesanannya sama persis dengan `orderRef` (yang terakhir chat dulu). */
+export async function contactByOrderRef(orderRef: string): Promise<Contact | undefined> {
+  const [r] = await db()
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.project, pid()), eq(contacts.order_ref, orderRef)))
+    .orderBy(desc(contacts.last_inbound_at))
+    .limit(1);
+  return toContact(r);
+}
+
+/** Webhook disimpan sekian lama untuk menolak kiriman ganda (TikTok mengulang paling lama ±15 jam). */
+const WEBHOOK_KEEP_MS = 7 * 24 * 3_600_000;
+
+/** Jenis webhook "toko mencabut izin": dicoba lagi sampai berhasil, tidak pernah dibuang. */
+const WEBHOOK_DEAUTH = 6;
+
+/** Webhook dengan id ini sudah pernah diproses sampai selesai (bukan yang masih menunggu dicoba lagi). */
+export async function hasWebhookEvent(id: string): Promise<boolean> {
+  const [r] = await db()
+    .select({ id: webhookEvents.id })
+    .from(webhookEvents)
+    .where(and(eq(webhookEvents.id, id), isNull(webhookEvents.pending)))
+    .limit(1);
+  return Boolean(r);
+}
+
+/** Catatan satu webhook: kapan pertama masuk (`at`), dan `pending` (null = selesai diproses). */
+export async function getWebhookEvent(id: string): Promise<{ at: number; pending: Record<string, unknown> | null; tries: number } | undefined> {
+  const [r] = await db()
+    .select({ at: webhookEvents.at, pending: webhookEvents.pending, tries: webhookEvents.tries })
+    .from(webhookEvents)
+    .where(eq(webhookEvents.id, id))
+    .limit(1);
+  return r;
+}
+
+/**
+ * Simpan webhook yang baru masuk SEBELUM server menjawab 200: isinya
+ * disimpan sebagai menunggu (`pending`, 0 percobaan), jadi webhook ini tidak
+ * hilang kalau proses berhenti sebelum selesai memprosesnya; putaran berkala
+ * mencobanya lagi. Proyeknya disebut terang (server belum ada di proyek).
+ * 'baru' = baru disimpan; 'selesai' = id ini sudah pernah selesai diproses;
+ * 'menunggu' = id ini sudah ada dan masih menunggu (diproses atau dicoba lagi).
+ */
+export async function receiveWebhookEvent(
+  project: string, id: string, type: number, event: Record<string, unknown>, at: number
+): Promise<'baru' | 'selesai' | 'menunggu'> {
+  const [r] = await db()
+    .insert(webhookEvents)
+    .values({ id, project, type, at, pending: event, tries: 0 })
+    .onConflictDoNothing({ target: webhookEvents.id })
+    .returning({ id: webhookEvents.id });
+  if (r) {
+    await pruneWebhookEvents(at);
+    return 'baru';
+  }
+  const [old] = await db().select({ pending: webhookEvents.pending }).from(webhookEvents).where(eq(webhookEvents.id, id)).limit(1);
+  return old && old.pending === null ? 'selesai' : 'menunggu';
+}
+
+/**
+ * Buang catatan webhook yang lebih tua dari 7 hari. Webhook pencabutan izin
+ * yang belum berhasil tetap disimpan: itu harus dicoba lagi sampai berhasil.
+ */
+async function pruneWebhookEvents(at: number): Promise<void> {
+  await db()
+    .delete(webhookEvents)
+    .where(and(lt(webhookEvents.at, at - WEBHOOK_KEEP_MS), or(isNull(webhookEvents.pending), ne(webhookEvents.type, WEBHOOK_DEAUTH))));
+}
+
+/**
+ * Catat satu webhook sebagai selesai diproses (baru, atau yang tadinya
+ * menunggu dicoba lagi). Catatan lama dibuang sekalian.
+ */
+export async function finishWebhookEvent(id: string, type: number, at: number): Promise<void> {
+  await db()
+    .insert(webhookEvents)
+    .values({ id, project: pid(), type, at })
+    .onConflictDoUpdate({ target: webhookEvents.id, set: { pending: null, last_error: null } });
+  await pruneWebhookEvents(at);
+}
+
+/**
+ * Catat satu webhook yang gagal diproses (atau pesanannya belum terbaca):
+ * isinya disimpan untuk dicoba lagi, jumlah percobaan naik satu.
+ * Mengembalikan jumlah percobaan yang gagal sejauh ini.
+ */
+export async function failWebhookEvent(id: string, type: number, event: Record<string, unknown>, error: string, at: number): Promise<number> {
+  const [r] = await db()
+    .insert(webhookEvents)
+    .values({ id, project: pid(), type, at, pending: event, tries: 1, last_error: error })
+    .onConflictDoUpdate({
+      target: webhookEvents.id,
+      set: { pending: event, tries: sql`${webhookEvents.tries} + 1`, last_error: error },
+    })
+    .returning({ tries: webhookEvents.tries });
+  await pruneWebhookEvents(at);
+  return r?.tries ?? 1;
+}
+
+/** Webhook yang menunggu dicoba lagi dan belum menyerah: kurang dari `maxTries` percobaan, atau pencabutan izin. */
+const webhookRetryable = (maxTries: number) =>
+  and(isNotNull(webhookEvents.pending), or(lt(webhookEvents.tries, maxTries), eq(webhookEvents.type, WEBHOOK_DEAUTH)));
+
+/** Webhook proyek ini yang menunggu dicoba lagi, terlama dulu, paling banyak `limit`. */
+export async function pendingWebhookEvents(
+  limit: number, maxTries: number
+): Promise<{ id: string; type: number; at: number; pending: Record<string, unknown>; tries: number }[]> {
+  const rows = await db()
+    .select({ id: webhookEvents.id, type: webhookEvents.type, at: webhookEvents.at, pending: webhookEvents.pending, tries: webhookEvents.tries })
+    .from(webhookEvents)
+    .where(and(eq(webhookEvents.project, pid()), webhookRetryable(maxTries)))
+    .orderBy(asc(webhookEvents.at), asc(webhookEvents.id))
+    .limit(limit);
+  return rows.map((r) => ({ ...r, pending: r.pending ?? {} }));
+}
+
+/** Proyek yang punya webhook yang menunggu dicoba lagi (semua proyek; putaran berkala dashboard). */
+export async function pendingWebhookProjects(maxTries: number): Promise<string[]> {
+  const rows = await db().selectDistinct({ project: webhookEvents.project }).from(webhookEvents).where(webhookRetryable(maxTries));
+  return rows.map((r) => r.project);
 }
 
 // ---------------------------------------------------------------------------

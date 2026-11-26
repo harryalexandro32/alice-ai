@@ -121,6 +121,7 @@
       <div class="nav-group" data-en="Overview">Ringkasan</div>
       <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span></a>
       <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span><span class="badge" id="convBadge"></span></a>
+      <a data-nav="pesanan"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Orders">Pesanan</span><span class="badge" id="shopBadge"></span></a>
       <div class="nav-group" data-en="Bot knowledge">Pengetahuan bot</div>
       <a data-nav="behavior"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="How the bot talks">Cara bot bicara</span></a>
       <a data-nav="produk"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
@@ -129,6 +130,7 @@
       <a data-nav="pengaturan"><svg class="i" aria-hidden="true"><use href="#i-toggle"/></svg><span data-en="General">Umum</span></a>
       <a data-nav="whatsapp"><svg class="i" aria-hidden="true"><use href="#i-smartphone"/></svg><span>WhatsApp</span></a>
       <a data-nav="notifikasi"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg><span data-en="Notifications">Notifikasi</span></a>
+      <a data-nav="marketplace"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span>Tokopedia &amp; Shop</span></a>
       <a data-nav="lanjutan"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg><span data-en="Advanced">Lanjutan</span></a>
     </nav>
     <div class="sb-foot">
@@ -207,6 +209,20 @@
         </div>
       </section>
 
+      <!-- ================= Pesanan Tokopedia & Shop ================= -->
+      <section data-page="pesanan">
+        <div class="card">
+          <div class="cb">
+            <div class="leadbar">
+              <input type="search" id="shopSearch" placeholder="Cari nomor pesanan, nama penerima, atau barang…" data-en-ph="Search order number, recipient name or item…">
+            </div>
+            <div class="filters" id="shopFilters" role="group" aria-label="Saring"></div>
+            <p class="help" id="shopCount" style="margin:8px 0 10px"></p>
+            <div class="scroll"><table class="list shop-orders" id="shopOrders"></table></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ================= Satu percakapan ================= -->
       <section data-page="chat">
         <div class="convgrid">
@@ -235,6 +251,7 @@
           </div>
           <div class="cp-sec order" id="convOrder">
             <h3 class="cp-h" data-en="Order">Pesanan</h3>
+            <p class="cp-shop" id="convShop" hidden></p>
             <label class="f"><span data-en="Order number">Nomor pesanan</span><input type="text" id="orderRef" maxlength="60" autocomplete="off" placeholder="Dari Tokopedia atau Shopee" data-en-ph="From Tokopedia or Shopee"></label>
             <div class="row">
               <label class="f"><span data-en="Tracking number">Nomor resi</span><input type="text" id="orderAwb" maxlength="40" autocomplete="off"></label>
@@ -484,6 +501,14 @@
             <div class="scroll"><table class="list" id="routes"></table></div>
             <p class="help" style="margin-top:10px" data-en="News about WhatsApp itself (disconnected, sending paused, a dashboard reply that failed) and a stopped bot cannot travel over WhatsApp. It shows in the dashboard: on Home and in Settings › Advanced.">Notifikasi soal WhatsApp itu sendiri (terputus, kiriman dijeda, balasan dashboard gagal) dan soal bot yang berhenti tidak bisa dikirim lewat WhatsApp. Notifikasi ini tampil di dashboard, yaitu di Beranda dan di Pengaturan › Lanjutan.</p>
           </div>
+        </div>
+      </section>
+
+      <!-- ================= Pengaturan: Tokopedia & Shop ================= -->
+      <section data-page="marketplace">
+        <div class="card">
+          <div class="ch"><h2 data-en="Shop link">Tautan toko</h2><p class="help" data-en="Once the shop is linked, each order's payment, tracking number and courier arrive by themselves. An order is matched to a conversation by its order number only, because the marketplace hides the buyer's name and phone number.">Setelah toko ditautkan, status pembayaran, nomor resi, dan kurir tiap pesanan masuk sendiri. Pesanan dicocokkan ke percakapan hanya lewat nomor pesanan, karena marketplace menyamarkan nama dan nomor pembeli.</p></div>
+          <div class="cb" id="mkBody"></div>
         </div>
       </section>
 

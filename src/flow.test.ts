@@ -18,11 +18,12 @@ import { recipientsFor, waTargets } from './notify';
 import { missingFields, quoteNote, greetingFor, setGreetingRandom, timeOpener, handleHumanReply, handleInbound, holdReason, isOptOut, runDeferred, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
-import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, setTestSender, type ReplyPayload } from './sinks/outbox';
+import { deliverOutbox, MAX_REPLY_ATTEMPTS, QUICK_KINDS, setReplySender, setSalesNotifier, setTestSender, type ReplyPayload } from './sinks/outbox';
+import { ALERT_TITLES, raiseAlert } from './alerts';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
-import { getContact, listHandoffs, outboxAdd, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, updateContact, updateProject, importContact } from './store';
+import { getContact, getOrder, listHandoffs, outboxAdd, outboxPending, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, setOrderContact, updateContact, updateProject, importContact, upsertOrderRow } from './store';
 import { handoffText, NON_TEXT, noDash, followupText, OPT_OUT_ACK } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
@@ -1279,6 +1280,39 @@ const tests: [string, () => Promise<void>][] = [
     assert.deepEqual([c?.awb, c?.courier], ['JP1234567890', 'jnt']);
   }],
 
+  ['nomor pesanan dari chat yang sudah ada di pesanan Tokopedia & Shop: ditautkan, resi diisi, tahap naik', async () => {
+    const ORDER = '576123456789012345';
+    await upsertOrderRow({
+      order_id: ORDER, shop_id: 'SHOP-ID', platform: 'TOKOPEDIA', status: 'AWAITING_SHIPMENT', create_time: T0 - HOUR, update_time: T0 - 30 * MINUTE,
+      paid_time: T0 - 50 * MINUTE, cancel_time: null, total_amount: '250000', currency: 'IDR', payment_method: null, is_cod: false, buyer_user_id: null,
+      recipient_name: 'B***i', recipient_phone: null, items: [], tracking_number: 'JP7770001', shipping_provider: 'J&T Express', fulfillment_type: null,
+      shipping_type: null, cancel_reason: null, synced_at: T0,
+    });
+    await say('halo');
+    await say(`pesanan saya ${ORDER} sudah dibayar ya`);
+    assert.equal((await getOrder(ORDER))?.contact_phone, A, 'pesanan ditautkan ke percakapan ini');
+    const c = await getContact(A);
+    assert.deepEqual([c?.order_ref, c?.stage, c?.awb, c?.courier], [ORDER, 'payment', 'JP7770001', 'jnt']);
+    // Nomor pesanan yang belum ada di pesanan toko: hanya dicatat, tahap tidak diubah (lihat tes di atas).
+  }],
+
+  ['nomor pesanan dari chat yang sudah tertaut ke percakapan lain: tidak direbut', async () => {
+    const ORDER = '576123456789012399';
+    const OTHER = '+6281299990055';
+    await upsertOrderRow({
+      order_id: ORDER, shop_id: 'SHOP-ID', platform: 'TOKOPEDIA', status: 'IN_TRANSIT', create_time: T0 - HOUR, update_time: T0 - 30 * MINUTE,
+      paid_time: T0 - 50 * MINUTE, cancel_time: null, total_amount: '250000', currency: 'IDR', payment_method: null, is_cod: false, buyer_user_id: null,
+      recipient_name: 'B***i', recipient_phone: null, items: [], tracking_number: 'JP7770002', shipping_provider: 'J&T Express', fulfillment_type: null,
+      shipping_type: null, cancel_reason: null, synced_at: T0,
+    });
+    await setOrderContact(ORDER, OTHER);
+    await say('halo');
+    await say(`pesanan saya ${ORDER} ya`);
+    assert.equal((await getOrder(ORDER))?.contact_phone, OTHER, 'pesanan tetap di percakapan lain');
+    const c = await getContact(A);
+    assert.deepEqual([c?.order_ref, c?.stage, c?.awb], [ORDER, 'baru', null], 'nomornya dicatat, tapi resi dan tahap tidak diambil');
+  }],
+
   ['dioper ke tim: tahap "baru" jadi "menunggu"; balasan admin, "sudah ditangani", atau tautan beli memindahkannya', async () => {
     // Pertanyaan biasa: tahap tetap.
     await say('halo');
@@ -1356,6 +1390,60 @@ const tests: [string, () => Promise<void>][] = [
       setTestSender(null);
       setReplySender(null);
     }
+  }],
+
+  ['warning dari proses tanpa WhatsApp (dashboard): diantre untuk pemilik, lalu dikirim bot', async () => {
+    const OWNER = '+6281299990077';
+    biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }, { name: 'Pemilik', role: 'owner', phone: OWNER }];
+    const text = 'Token toko GFAN Official tidak bisa diperpanjang.';
+    assert.equal(await raiseAlert('marketplace', text, { key: 'token' }), true);
+    const message = `⚠️ ${ALERT_TITLES.marketplace} | ${biz.brand}\n${text}`;
+    let rows = await outboxPending(20, ['alert']);
+    assert.deepEqual(rows.map((r) => [r.kind, r.payload]), [['alert', { phone: OWNER, text: message, kind: 'marketplace' }]], 'satu baris untuk pemilik');
+    // Masa tenang 24 jam: tidak diantre lagi.
+    assert.equal(await raiseAlert('marketplace', text, { key: 'token' }), false);
+    // whatsapp: false tidak diantre.
+    await raiseAlert('kiriman-gagal', 'x', { key: 'k', whatsapp: false });
+    assert.equal((await outboxPending(20, ['alert'])).length, 1);
+    const got: string[] = [];
+    // Tanpa pengirim (mis. cli.ts): menunggu, tidak dihitung gagal.
+    await deliverOutbox(QUICK_KINDS);
+    assert.equal((await outboxPending(20, ['alert']))[0]?.attempts, 0);
+    setTestSender(async (phone, t) => {
+      got.push(`${phone}: ${t}`);
+      return true;
+    });
+    try {
+      await deliverOutbox(QUICK_KINDS);
+      assert.deepEqual(got, [`${OWNER}: ${message}`]);
+      rows = await outboxPending(20, ['alert']);
+      assert.equal(rows.length, 0, 'terkirim');
+    } finally {
+      setTestSender(null);
+    }
+  }],
+
+  ['warning antrean yang gagal terus: ditutup sesudah MAX_REPLY_ATTEMPTS percobaan, keluar dari antrean', async () => {
+    const OWNER = '+6281299990077';
+    biz.recipients = [{ name: 'Pemilik', role: 'owner', phone: OWNER }];
+    assert.equal(await raiseAlert('marketplace', 'Token toko GFAN Official tidak bisa diperpanjang.', { key: 'token' }), true);
+    const [row] = await outboxPending(20, ['alert']);
+    assert.ok(row, 'satu baris warning diantre');
+    let tries = 0;
+    setTestSender(async () => {
+      tries += 1;
+      throw new Error('socket tertutup');
+    });
+    try {
+      for (let i = 0; i < MAX_REPLY_ATTEMPTS + 3; i++) await deliverOutbox(QUICK_KINDS);
+    } finally {
+      setTestSender(null);
+    }
+    assert.equal(tries, MAX_REPLY_ATTEMPTS, 'berhenti mencoba setelah batas');
+    const [state] = await outboxState([row!.id]);
+    assert.equal(state?.attempts, MAX_REPLY_ATTEMPTS);
+    assert.notEqual(state?.done_at, null, 'ditutup');
+    assert.deepEqual(await outboxPending(20, ['alert']), [], 'tidak ada lagi di antrean');
   }],
 
   ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {

@@ -37,16 +37,21 @@ import type { MediaFile } from '../business/types';
 import { cfg, normPhone, parseSalesNumber } from '../config';
 import { ensureProject } from '../db/seed';
 import { localDay } from '../clock';
-import { applyHumanReply, holdReason, markHandled, switchBot } from '../flow';
+import { applyHumanReply, contactName, holdReason, markHandled, switchBot } from '../flow';
 import { llmEnabled } from '../llm/provider';
 import { recipientsFor } from '../notify';
 import { currentProject, withProject } from '../project';
 import { MAX_REPLY_ATTEMPTS, type ReplyPayload } from '../sinks/outbox';
 import {
-  countImported, getContact, getHandoff, getProject, importContact, listHandoffs, listProjects, messagePage, messagesAround, metrics, normQuestion,
-  outboxAdd, outboxState, pendingReplies, readAllStatus, readStatus, resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
-  type Contact, type HandoffRow, type Project, type ProjectPatch, type StaffPatch, type Stage,
+  countImported, getContact, getHandoff, getOrder, getProject, getShopLink, importContact, listHandoffs, listOrders, listProjects, messagePage,
+  messagesAround, metrics, normQuestion, orderCounts, orderForContact, outboxAdd, outboxState, pendingReplies, readAllStatus, readStatus,
+  resolveHandoffs, setPairingRequest, setStageNote, STAGES, updateProject,
+  type Contact, type HandoffRow, type OrderRow, type Project, type ProjectPatch, type StaffPatch, type Stage,
 } from '../store';
+import {
+  authUrl, consumeState, isPaid, linkOrderToContact, linkShop, onOrderRefChanged, processWebhook, readState, receiveWebhook, redirectUrl, shopRound, syncOrders,
+  syncRunning, tiktokEnabled, unlinkShop, verifyWebhook, webhookProject, webhookUrl, type WebhookEvent,
+} from '../tiktok';
 import { COURIERS, isCourier, phaseOf, trackContact, trackingEnabled, trackingLinks } from '../tracking';
 import { matchProducts, pdfPlain, squash } from './pdftext';
 import { renamedPath, ROUTES } from './routes';
@@ -173,6 +178,8 @@ const BRAND: Record<string, [string, string]> = {
 const PROJECT_ID = /^[a-z0-9-]{2,32}$/;
 export const RESERVED = new Set([
   'api', 'login', 'logout', 'assets', 'admin', 'health', 'webhook', 'robots.txt', 'favicon.ico',
+  // Callback izin dan webhook Tokopedia & Shop (/tiktok/…), dan halaman Pesanan.
+  'tiktok', 'orders',
   // Nama bagian halaman, yang baru dan yang lama: tidak boleh tertukar dengan id proyek.
   'conversations', 'knowledge', 'settings', 'percakapan', 'pengetahuan', 'pengaturan',
 ]);
@@ -297,6 +304,93 @@ function groupHandoffs(rows: HandoffRow[]) {
   return [...groups.values()].map(({ phones, ...g }) => ({ ...g, people: phones.size }));
 }
 
+/** Saringan halaman Pesanan: id saringan -> status pesanan yang masuk (ejaan API). */
+const ORDER_GROUPS: Record<string, (o: OrderRow) => boolean> = {
+  semua: () => true,
+  'belum-bayar': (o) => o.status === 'UNPAID' || o.status === 'ON_HOLD',
+  'perlu-kirim': (o) => o.status === 'AWAITING_SHIPMENT' || o.status === 'PARTIALLY_SHIPPING',
+  dikirim: (o) => o.status === 'AWAITING_COLLECTION' || o.status === 'IN_TRANSIT',
+  selesai: (o) => o.status === 'DELIVERED' || o.status === 'COMPLETED',
+  batal: (o) => o.status === 'CANCELLED',
+  'belum-tertaut': (o) => isPaid(o.status) && !o.contact_phone,
+};
+
+/** Alamat dashboard untuk kembali dari halaman izin: ADMIN_ORIGINS yang pertama, kalau tidak ada alamat relatif. */
+const dashboardOrigin = (): string => cfg.adminOrigins[0] ?? '';
+
+const escHtml = (v: string): string => v.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+
+/** Halaman kecil untuk state izin yang tidak sah, kedaluwarsa, atau sudah dipakai. */
+function badStatePage(): string {
+  const home = escHtml(`${dashboardOrigin()}/`);
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>Tautan tidak sah</title><style>body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:48px 16px;background:#fff;color:#1a1a1a}` +
+    `main{max-width:32rem;margin:0 auto}a{color:#0b57d0}</style></head><body><main>` +
+    `<p>Tautan kedaluwarsa atau tidak sah, misalnya setelah dashboard dimulai ulang. Buka dashboard lalu klik Tautkan toko lagi.</p>` +
+    `<p><a href="${home}">Buka dashboard</a></p></main></body></html>`;
+}
+
+/** Id pesanan di alamat: huruf, angka, garis bawah, tanda minus. */
+const ORDER_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Satu pesanan untuk dashboard. `contactName` = nama di percakapan yang tertaut (atau nama WhatsApp-nya). */
+function shopOrderView(o: OrderRow, contact?: Contact) {
+  return {
+    orderId: o.order_id, platform: o.platform, status: o.status, createTime: o.create_time, updateTime: o.update_time, paidTime: o.paid_time,
+    total: o.total_amount, currency: o.currency, paymentMethod: o.payment_method, isCod: o.is_cod, recipientName: o.recipient_name,
+    recipientPhone: o.recipient_phone, items: o.items ?? [], trackingNumber: o.tracking_number, shippingProvider: o.shipping_provider,
+    cancelReason: o.cancel_reason, contactPhone: o.contact_phone,
+    contactName: contact ? (contactName(contact) ?? contact.wa_name ?? null) : null,
+  };
+}
+
+/** Pesanan beserta nama percakapannya (satu kueri per nomor yang berbeda). */
+async function shopOrderViews(rows: OrderRow[]) {
+  const phones = [...new Set(rows.map((o) => o.contact_phone).filter((p): p is string => Boolean(p)))];
+  const contacts = new Map((await Promise.all(phones.map((p) => getContact(p)))).filter((c): c is Contact => Boolean(c)).map((c) => [c.phone, c]));
+  return rows.map((o) => shopOrderView(o, o.contact_phone ? contacts.get(o.contact_phone) : undefined));
+}
+
+/**
+ * Mulai sinkron pesanan proyek ini di latar belakang. False kalau sinkron
+ * untuk proyek ini masih berjalan (dari tombol, sinkron pertama, atau putaran
+ * berkala; penjaganya ada di syncOrders), jadi tidak dimulai dua kali.
+ */
+function startSync(project: string): boolean {
+  if (syncRunning(project)) return false;
+  void syncOrders(project).catch((e) => console.error(`[toko] ${project}: sinkron gagal: ${e instanceof Error ? e.message : e}`));
+  return true;
+}
+
+/** Halaman izin bisa dibuka: fitur menyala dan TIKTOK_SERVICE_ID diisi. */
+const canAuth = (): boolean => tiktokEnabled() && Boolean(cfg.tiktokServiceId);
+
+/**
+ * Halaman Pengaturan > Tokopedia & Shop: menyala atau belum, alamat untuk
+ * Partner Center, tautan toko, dan jumlah pesanan 30 hari. Alamat halaman
+ * izin tidak ada di sini: dibuat baru tiap klik (POST /marketplace/auth-url).
+ */
+async function marketplaceView() {
+  const at = Date.now();
+  const enabled = tiktokEnabled();
+  const [link, orders] = await Promise.all([getShopLink(), orderCounts(at - 30 * DAY)]);
+  return {
+    enabled,
+    webhookUrl: webhookUrl(),
+    redirectUrl: redirectUrl(),
+    canAuth: canAuth(),
+    // Diputus dari dashboard (`unlinked`): barisnya masih ada untuk webhook pencabutan izin, tapi halamannya tampil belum ditautkan.
+    link: link && link.status !== 'unlinked'
+      ? {
+          shopId: link.shop_id, shopName: link.shop_name, region: link.region, sellerName: link.seller_name, status: link.status, error: link.error,
+          linkedAt: link.linked_at, accessExpiresAt: link.access_expires_at, refreshExpiresAt: link.refresh_expires_at, lastSyncAt: link.last_sync_at,
+          scopes: link.granted_scopes ?? [],
+        }
+      : null,
+    orders,
+  };
+}
+
 export function createAdminHandler(store: AdminStore) {
   /**
    * Teks sebuah PDF. Dibaca sekali lalu disimpan di samping PDF-nya sebagai
@@ -336,7 +430,9 @@ export function createAdminHandler(store: AdminStore) {
     if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
     const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 100));
     const before = Math.floor(Number(url.searchParams.get('before')));
-    const [messages, pending] = await Promise.all([messagePage(phone, limit, before > 0 ? before : undefined), pendingReplies(phone)]);
+    const [messages, pending, shop] = await Promise.all([
+      messagePage(phone, limit, before > 0 ? before : undefined), pendingReplies(phone), orderForContact(phone, c.order_ref),
+    ]);
     const hold = c.opted_out_at ? 'berhenti' : c.pending_off ? 'tombol' : c.address ? await holdReason(c.address, Date.now()) : null;
     return json(200, {
       contact: {
@@ -346,6 +442,13 @@ export function createAdminHandler(store: AdminStore) {
       },
       fields: biz.leadFields.map((f) => ({ key: f.key, label: f.label })),
       order: orderView(c),
+      // Pesanan Tokopedia & Shop yang tertaut ke percakapan ini (atau bernomor sama), atau null.
+      marketplace: shop
+        ? {
+            orderId: shop.order_id, platform: shop.platform, status: shop.status, paidTime: shop.paid_time, total: shop.total_amount,
+            currency: shop.currency, trackingNumber: shop.tracking_number, shippingProvider: shop.shipping_provider, updateTime: shop.update_time,
+          }
+        : null,
       couriers: COURIERS,
       messages,
       more: messages.length === limit,
@@ -400,6 +503,16 @@ export function createAdminHandler(store: AdminStore) {
     // Alamat lama (/admin, /admin/#gfan, /admin/gfan/api/…) -> beranda baru.
     if (path === '/admin' || path.startsWith('/admin/')) return redirect(301, '/');
 
+    // --- Tokopedia & Shop: callback izin dan webhook, tanpa sesi (dilindungi state dan tanda tangan) ---
+    if (path === '/tiktok/auth' && method === 'GET') {
+      const badState = () => {
+        res.writeHead(400, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
+        res.end(badStatePage());
+      };
+      return tiktokAuth(url, redirect, badState, () => file('page.html', 'html', 404));
+    }
+    if (path === '/tiktok/webhook' && method === 'POST') return tiktokWebhook(req, json);
+
     if (path.startsWith('/api/')) return handleApi(req, res, path, url, method, json, secure);
 
     if (method !== 'GET' && method !== 'HEAD') return json(405, { error: 'Alamat ini tidak ditemukan.' });
@@ -439,6 +552,88 @@ export function createAdminHandler(store: AdminStore) {
     return file('page.html', 'html', 200, {
       'set-cookie': `${LAST_PROJECT}=${id}; SameSite=Strict; Path=/; Max-Age=${365 * 86400}${secure}`,
     });
+  }
+
+  /**
+   * Kembali dari halaman izin Tokopedia & Shop: `state` menunjuk proyeknya
+   * (ditandatangani, 30 menit, sekali pakai). Tautkan tokonya, mulai sinkron
+   * pertama di latar belakang, lalu kembali ke halaman pengaturannya di
+   * dashboard (ADMIN_ORIGINS yang pertama). State yang tidak sah: halaman
+   * kecil 400 dengan tautan ke dashboard.
+   */
+  async function tiktokAuth(
+    url: URL, redirect: (code: 301 | 302, location: string) => void, badState: () => void, notFound: () => void
+  ): Promise<void> {
+    if (!tiktokEnabled()) return notFound();
+    const state = url.searchParams.get('state') ?? '';
+    const at = Date.now();
+    const project = readState(state, at);
+    const ctx = project ? await loadProject(project) : undefined;
+    if (!project || !ctx || !consumeState(state, at)) return badState();
+    const back = (query: string) => redirect(302, `${dashboardOrigin()}/${project}/settings/marketplace?${query}`);
+    const code = url.searchParams.get('code') ?? '';
+    const denied = url.searchParams.get('error');
+    if (denied && denied !== 'auth_denied') return back(`linked=0&error=${encodeURIComponent(denied.slice(0, 200))}`);
+    if (denied || !code || code === 'null') return back('linked=0');
+    try {
+      await withProject(ctx, () => linkShop(project, code));
+    } catch (e) {
+      const msg = (e instanceof Error ? e.message : String(e)).slice(0, 200);
+      console.error(`[toko] ${project}: tautan toko gagal: ${msg}`);
+      return back(`linked=0&error=${encodeURIComponent(msg)}`);
+    }
+    // Sinkron pertama tidak ditunggu: pemilik langsung kembali ke dashboard.
+    void withProject(ctx, () => syncOrders(project)).catch((e) => console.error(`[toko] ${project}: sinkron pertama gagal: ${e instanceof Error ? e.message : e}`));
+    return back('linked=1');
+  }
+
+  /**
+   * Webhook Tokopedia & Shop. Tanda tangan salah = 401 (satu-satunya
+   * penolakan; 500 hanya kalau database tidak bisa menyimpannya). Webhook
+   * disimpan sebagai menunggu di `webhook_events`, lalu langsung 200 (TikTok
+   * menunggu paling lama 3 detik), lalu isinya ditangani sesudahnya.
+   */
+  async function tiktokWebhook(req: IncomingMessage, json: (code: number, body: unknown) => void): Promise<void> {
+    if (!tiktokEnabled()) return json(404, { error: 'Alamat ini tidak ditemukan.' });
+    let raw: Buffer;
+    try {
+      raw = await readBody(req, 64 * 1024);
+    } catch {
+      return json(413, { error: 'Badan webhook terlalu besar.' });
+    }
+    const auth = req.headers.authorization;
+    if (!verifyWebhook(cfg.tiktokAppKey, cfg.tiktokAppSecret, raw, typeof auth === 'string' ? auth : undefined)) {
+      console.error('[toko] webhook ditolak: tanda tangan tidak sah');
+      return json(401, { error: 'Tanda tangan webhook tidak sah.' });
+    }
+    let event: WebhookEvent;
+    try {
+      event = JSON.parse(raw.toString('utf8')) as WebhookEvent;
+    } catch {
+      console.error('[toko] webhook diabaikan: isinya bukan JSON');
+      return json(200, { ok: true });
+    }
+    const project = await webhookProject(event?.shop_id);
+    if (!project) {
+      console.log(`[toko] webhook untuk toko yang tidak dikenal (${String(event?.shop_id)}) diabaikan`);
+      return json(200, { ok: true });
+    }
+    // Disimpan dulu sebagai menunggu, baru dijawab 200: kalau proses berhenti sebelum selesai, putaran berkala
+    // memprosesnya. Gagal menyimpan = 500, jadi TikTok mengirim ulang.
+    let received: Awaited<ReturnType<typeof receiveWebhook>>;
+    try {
+      received = await receiveWebhook(project, event);
+    } catch (e) {
+      console.error(`[toko] webhook gagal disimpan: ${e instanceof Error ? e.message : e}`);
+      return json(500, { error: 'Webhook belum bisa disimpan. Coba lagi nanti.' });
+    }
+    json(200, { ok: true });
+    // Sudah selesai: kiriman ganda. Masih menunggu: sedang diproses atau menunggu putaran berkala, tidak diproses dua kali.
+    if (received.state !== 'baru') {
+      console.log(`[toko] webhook ${received.id} sudah ${received.state === 'selesai' ? 'selesai' : 'menunggu'}, dilewati`);
+      return;
+    }
+    void processWebhook(project, event, received.id).catch((e) => console.error(`[toko] webhook gagal: ${e instanceof Error ? e.message : e}`));
   }
 
   /** /api/…: masuk, keluar, daftar proyek, dan /api/<proyek>/… untuk satu proyek. */
@@ -603,7 +798,7 @@ export function createAdminHandler(store: AdminStore) {
     if (path === '/notify/test' && method === 'POST') {
       const phones = [...new Set(biz.recipients.map((r) => r.phone).filter(Boolean))];
       if (!phones.length) return json(400, { error: 'Belum ada penerima. Tambahkan penerima, simpan, lalu kirim tes lagi.' });
-      const KINDS = [['lead', 'lead baru'], ['butuh-staf', 'pelanggan butuh staf'], ['llm', 'LLM bermasalah'], ['resi', 'saldo atau batas cek resi']] as const;
+      const KINDS = [['lead', 'lead baru'], ['butuh-staf', 'pelanggan butuh staf'], ['llm', 'LLM bermasalah'], ['resi', 'saldo atau batas cek resi'], ['marketplace', 'tautan toko Tokopedia & Shop']] as const;
       const at = Date.now();
       const ids: number[] = [];
       for (const phone of phones) {
@@ -620,7 +815,8 @@ export function createAdminHandler(store: AdminStore) {
     if (path === '/notify/test' && method === 'GET') {
       const ids = (url.searchParams.get('ids') ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 40);
       const rows = await outboxState(ids);
-      return json(200, { items: rows.map((r) => ({ id: r.id, done: r.done_at !== null, attempts: r.attempts })) });
+      // Baris yang ditutup sesudah MAX_REPLY_ATTEMPTS kali gagal (lihat src/sinks/outbox.ts) tidak dihitung terkirim.
+      return json(200, { items: rows.map((r) => ({ id: r.id, done: r.done_at !== null && r.attempts < MAX_REPLY_ATTEMPTS, attempts: r.attempts })) });
     }
 
     if (path === '/leads' && method === 'GET') {
@@ -674,8 +870,11 @@ export function createAdminHandler(store: AdminStore) {
           patch.courier = courier || null;
         }
         if (!Object.keys(patch).length) return json(400, { error: 'Isi tahap, catatan, atau data pesanan.' });
-        const c = await setStageNote(phone, patch);
+        let c = await setStageNote(phone, patch);
         if (!c) return json(404, { error: 'Kontak tidak ditemukan.' });
+        // Nomor pesanan diganti atau dikosongkan: pesanan Tokopedia & Shop lama dilepas. Nomor yang sudah ada
+        // di pesanan Tokopedia & Shop: tautkan, isi resi, naikkan tahap.
+        if ('order_ref' in patch && (await onOrderRefChanged(phone, patch.order_ref ?? null))) c = (await getContact(phone)) ?? c;
         return json(200, { ok: true, stage: c.stage, note: c.note, order: orderView(c) });
       }
       // "Cek resi": tanya status kurir sekarang. Pelacak yang gagal bukan 500:
@@ -719,6 +918,78 @@ export function createAdminHandler(store: AdminStore) {
         }
         return json(200, { ok: true });
       }
+    }
+
+    // --- Tokopedia & Shop: tautan toko dan pesanan ---
+    if (path === '/marketplace' && method === 'GET') return json(200, await marketplaceView());
+    // Alamat halaman izin dengan state baru (sekali pakai, 30 menit), dibuat saat pemilik mengeklik "Tautkan toko".
+    if (path === '/marketplace/auth-url' && method === 'POST') {
+      if (!canAuth()) return json(400, { error: 'Fitur Tokopedia & Shop belum menyala, atau TIKTOK_SERVICE_ID masih kosong.' });
+      return json(200, { url: authUrl(project.id, Date.now()) });
+    }
+    // Kode izin yang ditempel pemilik (aplikasi "seller developer" di Partner Center bisa menampilkan kodenya
+    // langsung, tanpa kembali ke /tiktok/auth). Sama dengan callback: tautkan, lalu sinkron pertama di latar belakang.
+    if (path === '/marketplace/code' && method === 'POST') {
+      if (!tiktokEnabled()) return json(400, { error: 'Fitur Tokopedia & Shop belum menyala. Isi TIKTOK_APP_KEY dan TIKTOK_APP_SECRET di server.' });
+      const body = JSON.parse((await readBody(req, 2000)).toString('utf8') || '{}') as { code?: unknown };
+      const code = typeof body.code === 'string' ? body.code.trim() : '';
+      if (code.length < 8 || code.length > 200) return json(400, { error: 'Isi kode izin dari Partner Center.' });
+      try {
+        await linkShop(project.id, code);
+      } catch (e) {
+        const msg = (e instanceof Error ? e.message : String(e)).slice(0, 200);
+        console.error(`[toko] ${project.id}: tautan toko dengan kode gagal: ${msg}`);
+        return json(400, { error: msg });
+      }
+      console.log(`[dashboard] ${project.id}: toko ditautkan dengan kode izin`);
+      void syncOrders(project.id).catch((e) => console.error(`[toko] ${project.id}: sinkron pertama gagal: ${e instanceof Error ? e.message : e}`));
+      return json(200, await marketplaceView());
+    }
+    if (path === '/marketplace/unlink' && method === 'POST') {
+      await unlinkShop(project.id);
+      return json(200, await marketplaceView());
+    }
+    if (path === '/marketplace/sync' && method === 'POST') {
+      const link = await getShopLink();
+      if (!link || link.status !== 'active' || !tiktokEnabled()) return json(400, { error: 'Toko belum ditautkan. Tautkan toko dulu.' });
+      // Sinkron bisa lama (banyak halaman): dijawab sekarang, sinkronnya jalan di latar belakang.
+      const started = startSync(project.id);
+      return json(200, { ok: true, started, ...(await marketplaceView()) });
+    }
+    if (path === '/orders' && method === 'GET') {
+      const key = url.searchParams.get('status') ?? 'semua';
+      const group = Object.hasOwn(ORDER_GROUPS, key) ? ORDER_GROUPS[key] : ORDER_GROUPS.semua;
+      const text = (url.searchParams.get('q') ?? '').trim().toLowerCase().slice(0, 100);
+      const limit = Math.min(200, Math.max(1, Math.floor(Number(url.searchParams.get('limit'))) || 200));
+      // Disaring di JS atas pesanan terbaru (cukup untuk satu toko); 2.000 baris paling banyak.
+      const rows = (await listOrders(2000))
+        .filter(group as (o: OrderRow) => boolean)
+        .filter((o) => !text || [o.order_id, o.recipient_name ?? '', ...(o.items ?? []).map((x) => x.name)].some((v) => v.toLowerCase().includes(text)))
+        .slice(0, limit);
+      return json(200, { rows: await shopOrderViews(rows) });
+    }
+    const shopOrder = path.match(/^\/orders\/([^/]+)$/);
+    if (shopOrder && method === 'PUT') {
+      let id = '';
+      try {
+        id = decodeURIComponent(shopOrder[1] as string);
+      } catch {
+        // alamat rusak: dianggap id tidak sah di bawah
+      }
+      if (!ORDER_ID.test(id)) return json(400, { error: 'Nomor pesanan tidak sah.' });
+      const body = JSON.parse((await readBody(req, 2000)).toString('utf8') || '{}') as { phone?: unknown };
+      const raw = String(body.phone ?? '').trim();
+      if (!(await getOrder(id))) return json(404, { error: 'Pesanan tidak ditemukan.' });
+      let phone: string | null = null;
+      if (raw) {
+        phone = CONTACT.test(raw) ? raw : normPhone(raw);
+        if (!phone || !(await getContact(phone))) return json(400, { error: 'Nomor ini tidak ada di percakapan.' });
+      }
+      const row = await linkOrderToContact(id, phone);
+      // Pesanannya hilang di tengah jalan (mis. izin toko dicabut): 404, bukan 500.
+      if (!row) return json(404, { error: 'Pesanan sudah tidak ada.' });
+      console.log(`[dashboard] ${project.id}: pesanan ${id} ${phone ? `ditautkan ke ${phone}` : 'dilepas dari percakapan'}`);
+      return json(200, { ok: true, row: (await shopOrderViews([row]))[0] });
     }
 
     // Pertanyaan yang dioper ke staf, dikelompokkan per pertanyaan yang sama.
@@ -1033,6 +1304,9 @@ export function createAdminHandler(store: AdminStore) {
 // ---------------------------------------------------------------------------
 
 let server: Server | null = null;
+/** Putaran Tokopedia & Shop (token dan sinkron pesanan) tiap 15 menit. */
+let shopTimer: NodeJS.Timeout | null = null;
+const SHOP_EVERY_MS = 15 * 60_000;
 
 export function adminPort(): number | null {
   const a = server?.address();
@@ -1050,6 +1324,9 @@ export async function startAdmin(store: AdminStore): Promise<number> {
     s.listen(cfg.adminPort, cfg.adminHost, () => resolve());
   });
   server = s;
+  // Tanpa TIKTOK_APP_KEY dan TIKTOK_APP_SECRET putarannya langsung selesai (lihat shopRound).
+  shopTimer = setInterval(() => void shopRound(), SHOP_EVERY_MS);
+  shopTimer.unref();
   const port = adminPort() as number;
   console.log(`[dashboard] http://${cfg.adminHost === '0.0.0.0' ? 'localhost' : cfg.adminHost}:${port}/`);
   if (cfg.adminHost !== '127.0.0.1' && cfg.adminHost !== 'localhost') {
@@ -1059,6 +1336,8 @@ export async function startAdmin(store: AdminStore): Promise<number> {
 }
 
 export async function stopAdmin(): Promise<void> {
+  if (shopTimer) clearInterval(shopTimer);
+  shopTimer = null;
   await new Promise<void>((r) => (server ? server.close(() => r()) : r()));
   server = null;
 }

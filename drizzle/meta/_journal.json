@@ -43,6 +43,13 @@
       "when": 1795664466697,
       "tag": "0005_biaya_cek_resi",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795673075274,
+      "tag": "0006_toko_tiktok",
+      "breakpoints": true
     }
   ]
 }

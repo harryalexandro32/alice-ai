@@ -10,7 +10,7 @@
 import { biz } from './business';
 import type { NotifyKind, Recipient, Route } from './business/types';
 
-export const NOTIFY_KINDS: readonly NotifyKind[] = ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati', 'resi'];
+export const NOTIFY_KINDS: readonly NotifyKind[] = ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati', 'resi', 'marketplace'];
 
 /** Rute bawaan: urusan pelanggan ke staf, urusan sistem ke pemilik. */
 export const DEFAULT_ROUTES: Record<NotifyKind, Route> = {
@@ -22,6 +22,7 @@ export const DEFAULT_ROUTES: Record<NotifyKind, Route> = {
   llm: 'owner',
   'bot-mati': 'owner',
   resi: 'owner',
+  marketplace: 'owner',
 };
 
 export const routeOf = (kind: NotifyKind): Route => biz.notifyRoutes[kind] ?? DEFAULT_ROUTES[kind];
