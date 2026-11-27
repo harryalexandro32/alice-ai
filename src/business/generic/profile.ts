@@ -17,14 +17,14 @@ export const generic: Business = {
   honorific: 'Kak',
 
   greeting:
-    'Halo, terima kasih sudah menghubungi kami 🙏\n' +
+    'Halo, terima kasih sudah menghubungi kami 🙏🏻\n' +
     'Ada yang bisa kami bantu?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Nama\n' +
     '2. Kota / alamat\n' +
     '3. Kebutuhannya',
   greetingKnown:
-    'Halo, terima kasih sudah menghubungi kami 🙏\n' +
+    'Halo, terima kasih sudah menghubungi kami 🙏🏻\n' +
     'Dengan Kak {nama}, betul?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Kota / alamat\n' +

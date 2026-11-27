@@ -30,7 +30,7 @@ import {
 import { inQuiet, quietEndAfter } from './quiet';
 import { onOrderRefChanged } from './tiktok';
 import { parseOrderHints } from './tracking';
-import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK, paceEmoji, PRAY, withoutEmoji } from './texts';
+import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK, paceEmoji, PRAY, sameText, withoutEmoji } from './texts';
 import type { MediaKind, Quote } from './transport/types';
 
 /** `image` = path file foto atau PDF; kalau ada, `text` menjadi keterangannya. */
@@ -528,7 +528,7 @@ export async function runDeferredTurn(phone: string): Promise<void> {
   }
   if (c.opted_out_at) {
     // Minta berhenti di jam tenang: jawaban tetapnya baru dikirim sekarang, sekali.
-    if (c.last_out_text !== OPT_OUT_ACK) await reply(c, OPT_OUT_ACK);
+    if (!sameText(c.last_out_text, OPT_OUT_ACK)) await reply(c, OPT_OUT_ACK);
     return;
   }
   if (await humanHolds(c.address, at)) {
@@ -599,8 +599,8 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
   if (!text && !image) {
     if (media) {
       const ack = mediaAck(media);
-      if (c.last_out_text !== ack) c = await reply(c, ack);
-    } else if (m.media !== 'stiker' && c.last_out_text !== NON_TEXT && !isNew) {
+      if (!sameText(c.last_out_text, ack)) c = await reply(c, ack);
+    } else if (m.media !== 'stiker' && !sameText(c.last_out_text, NON_TEXT) && !isNew) {
       // Jangan mengulang pemberitahuan yang sama untuk tiap pesan beruntun.
       c = await reply(c, NON_TEXT);
     }
@@ -657,6 +657,7 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     }
     if (out) {
       // Emoji tidak di setiap pesan. Tanda lampiran "[foto:…]" bukan pesan bot.
+      // Balasan yang hanya emoji tetap terkirim (lihat paceEmoji), bukan diserahkan ke tim.
       const spoken = history.filter((t) => t.dir === 'out' && !t.text.startsWith('[')).map((t) => t.text);
       out = paceEmoji(out, isNew ? [c.last_out_text] : spoken);
     }

@@ -137,8 +137,9 @@ async function humanSkip(c: Contact, t: number, due: number, humanAt: number): P
 async function botText(c: Contact, t: number): Promise<string> {
   let text = followupText(contactName(c), missingFields(c));
   try {
-    text = (await writer(c, (t - c.last_inbound_at) / HOUR)) ?? text;
-    text = followupEmoji(noDash(text));
+    const written = await writer(c, (t - c.last_inbound_at) / HOUR);
+    // Hanya tulisan LLM yang emojinya dipindah ke akhir; kalimat tetap dibiarkan apa adanya.
+    text = written ? followupEmoji(noDash(written)) : noDash(text);
   } catch (e) {
     console.error(`[follow-up] ${c.phone}: penulis gagal, pakai kalimat tetap: ${e instanceof Error ? e.message : e}`);
   }

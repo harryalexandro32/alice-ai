@@ -360,7 +360,7 @@ export async function followupBrain(input: FollowupInput): Promise<string | null
     '\n\nTUGAS KHUSUS (bukan membalas pesan)\n' +
     `Pelanggan ini diam sekitar ${Math.round(input.hours)} jam setelah balasan terakhir kita. Tulis SATU pesan follow-up untuknya di "reply":\n` +
     '- Paling panjang 3 baris. Sapa singkat, lalu sambung percakapan di atas secara spesifik: sebut hal yang terakhir dibahas atau yang masih kita tunggu darinya.\n' +
-    `- Tutup dengan satu pertanyaan ringan yang mudah dijawab, lalu ${PRAY}.` +
+    `- Aturan emoji di GAYA tidak berlaku untuk pesan ini: tutup dengan satu pertanyaan ringan yang mudah dijawab, lalu ${PRAY}.` +
     (input.missing.length ? ` Data yang belum ada dan boleh ditanyakan: ${input.missing.join(', ')}.` : '') +
     '\n- Jangan mengulang salam pembuka, jangan mendesak, jangan menjanjikan apa pun, jangan menyebut harga, dan jangan mengarang hal yang tidak ada di riwayat.\n' +
     '- "fields" semua null, "intent" "other", "photos", "docs", dan "buy" kosong, "summary" kosong.';

@@ -1236,8 +1236,8 @@ export function createAdminHandler(store: AdminStore) {
       for (const f of biz.files) if (isPdf(f) && f.read) setPdfText(f.id, await textOfPdf(f));
       const result = await brain({ text, known: body.known ?? {}, history, justGreeted: false });
       if (!result) return json(502, { error: 'LLM tidak menjawab. Coba lagi.' });
-      // Sama seperti di WhatsApp: emoji tidak di setiap pesan.
-      result.reply = paceEmoji(result.reply, history.filter((h) => h.dir === 'out').map((h) => h.text));
+      // Sama seperti di WhatsApp: emoji tidak di setiap pesan, dan tanda lampiran "[foto:…]" bukan pesan bot.
+      result.reply = paceEmoji(result.reply, history.filter((h) => h.dir === 'out' && !h.text.startsWith('[')).map((h) => h.text));
       const asked = [text, ...history.filter((h) => h.dir === 'in').map((h) => h.text)].join('\n');
       return json(200, {
         ...result,

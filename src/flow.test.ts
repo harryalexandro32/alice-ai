@@ -24,7 +24,7 @@ import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
 import { getContact, getOrder, listHandoffs, outboxAdd, outboxPending, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, setBotOff, setOrderContact, updateContact, updateProject, importContact, upsertOrderRow } from './store';
-import { followupEmoji, handoffText, NON_TEXT, noDash, followupText, humanFollowupText, oneEmoji, OPT_OUT_ACK, paceEmoji, PRAY } from './texts';
+import { followupEmoji, handoffText, hasEmoji, NON_TEXT, noDash, followupText, humanFollowupText, oneEmoji, OPT_OUT_ACK, paceEmoji, PRAY, sameText } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
 setDefaultProject(seedCtx('gfan'));
@@ -1680,8 +1680,36 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(paceEmoji('Boleh 🙏🏻\nKota mana?', ['Siap ☺️', 'a', 'b']), 'Boleh 🙏🏻\nKota mana?', 'hanya dua pesan terakhir');
     assert.equal(paceEmoji('Kipas GFAN® 16 inci, harga ↔ stok ✅', ['Halo 🙏']), 'Kipas GFAN® 16 inci, harga ↔ stok', 'tanda ® dan panah bukan emoji');
     assert.equal(followupEmoji('Halo Pak, jadi yang mana?'), `Halo Pak, jadi yang mana? ${PRAY}`);
-    assert.equal(followupEmoji('Halo Pak 😊 jadi yang mana? 🙏'), 'Halo Pak 😊 jadi yang mana?');
+    assert.equal(followupEmoji('Halo Pak 😊 jadi yang mana? 🙏'), 'Halo Pak jadi yang mana? 😊', 'emoji pertama pindah ke akhir');
     assert.match(systemPrompt(), /Emoji boleh, tapi jarang/);
+
+    // Emoji yang dibuang tidak meninggalkan spasi sebelum tanda baca.
+    const none = (t: string) => paceEmoji(t, ['Halo 🙏']);
+    assert.equal(none('Kami cek dulu ya 🙏🏻, nanti kami kabari'), 'Kami cek dulu ya, nanti kami kabari');
+    assert.equal(none('Oke 👍!'), 'Oke!');
+    assert.equal(none('Terima kasih 🙏🏻.'), 'Terima kasih.');
+    // Titik hanya untuk awal kalimat baru, bukan sebelum sapaan, nama, atau kode produk.
+    assert.equal(none('Siap 🙏🏻 Pak, kami cek dulu.'), 'Siap Pak, kami cek dulu.');
+    assert.equal(none('Kipas 🌀 GFAN tersedia'), 'Kipas GFAN tersedia');
+    assert.equal(none('Ada 😊 GFAF-40A ready'), 'Ada GFAF-40A ready');
+    assert.equal(none('Terima kasih 🙏🏻 Kami cek dulu'), 'Terima kasih. Kami cek dulu');
+    // Tanda panah dan simbol bukan emoji; bendera dan gabungan ZWJ satu emoji.
+    for (const e of ['🙏', '🙏🏻', '☺️', '😊', '⚡', '👍', '❤️', '👨‍👩‍👧', '🇮🇩']) assert.ok(hasEmoji(e), e);
+    for (const e of ['➡', '⬇', '★', '✓', '➀', '®', '©', '™', '↔', '☺']) assert.ok(!hasEmoji(e), e);
+    assert.equal(oneEmoji('Merdeka 🇮🇩🇮🇩 semua'), 'Merdeka 🇮🇩 semua');
+    assert.equal(none('Kami sekeluarga 👨‍👩‍👧 senang'), 'Kami sekeluarga senang');
+    // Balasan yang hanya emoji tetap terkirim dengan satu emoji.
+    assert.equal(none('🙏🏻'), '🙏🏻');
+    assert.equal(none('🙏🏻😊'), '🙏🏻');
+    // Spasi sisa dirapikan; baris kosong di antara paragraf tetap.
+    assert.equal(none('Terima kasih 🙏 😊 Kami cek'), 'Terima kasih. Kami cek');
+    assert.equal(oneEmoji('Siap 🙏 😊 Kami'), 'Siap 🙏 Kami');
+    assert.equal(none('Baik 🙏\n\nKota mana?'), 'Baik\n\nKota mana?');
+    assert.equal(none('Baik\n\n🙏\n\nKota mana?'), 'Baik\n\nKota mana?');
+    // Kalimat tetap lama (🙏 polos) dikenali sama dengan yang baru.
+    assert.ok(sameText(NON_TEXT.replace(PRAY, '🙏'), NON_TEXT));
+    assert.ok(!sameText(null, NON_TEXT));
+    assert.ok(!sameText(OPT_OUT_ACK, NON_TEXT));
 
     // Salam pembuka memakai emoji, jadi balasan LLM sesudahnya dan sesudahnya lagi tanpa emoji.
     next = () => R('Ada, Pak 🙏🏻 Untuk ruangan seluas apa?');
@@ -1695,6 +1723,14 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(sent[3], 'Siap, kami catat ☺️', 'dua pesan terakhir tanpa emoji: boleh satu');
     await say('makasih');
     assert.equal(sent[4], 'Siap, kami catat');
+    next = () => R('🙏🏻');
+    await say('sama-sama');
+    assert.deepEqual(sent.slice(5), [PRAY], 'balasan hanya emoji tidak menjadi kalimat cadangan');
+
+    // Setelah deploy: NON_TEXT lama dengan 🙏 polos tidak dikirim ulang.
+    await updateContact(A, { last_out_text: NON_TEXT.replace(PRAY, '🙏') });
+    await say(null);
+    assert.equal(sent.length, 6, 'pemberitahuan lama tidak diulang');
   }],
 
   ['sapaan dengan emoji tetap sapaan kosong; follow-up LLM ditutup emoji', async () => {
