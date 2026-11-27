@@ -1693,9 +1693,16 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(none('Kipas 🌀 GFAN tersedia'), 'Kipas GFAN tersedia');
     assert.equal(none('Ada 😊 GFAF-40A ready'), 'Ada GFAF-40A ready');
     assert.equal(none('Terima kasih 🙏🏻 Kami cek dulu'), 'Terima kasih. Kami cek dulu');
+    assert.equal(none('Siap 🙏🏻 Budi, kami cek.'), 'Siap Budi, kami cek.', 'nama sebagai sapaan');
     // Tanda panah dan simbol bukan emoji; bendera dan gabungan ZWJ satu emoji.
     for (const e of ['🙏', '🙏🏻', '☺️', '😊', '⚡', '👍', '❤️', '👨‍👩‍👧', '🇮🇩']) assert.ok(hasEmoji(e), e);
     for (const e of ['➡', '⬇', '★', '✓', '➀', '®', '©', '™', '↔', '☺']) assert.ok(!hasEmoji(e), e);
+    // Tanda panah, centang, © ® ™ dengan FE0F juga bukan emoji, dan tetap utuh di teks.
+    for (const e of ['➡️', '⬅️', '↔️', '⤴️', '⬇️', '✔️', '✖️', '©️', '®️', '™️', 'GFAN©️']) assert.ok(!hasEmoji(e), e);
+    assert.equal(none('Rute: Jakarta ➡️ Bandung ➡️ Garut'), 'Rute: Jakarta ➡️ Bandung ➡️ Garut');
+    assert.equal(none('✔️ Ready stok\n✔️ Garansi 1 tahun'), '✔️ Ready stok\n✔️ Garansi 1 tahun');
+    assert.equal(none('GFAN©️ Indonesia ✅ ready'), 'GFAN©️ Indonesia ready');
+    assert.ok(hasEmoji('✅'));
     assert.equal(oneEmoji('Merdeka 🇮🇩🇮🇩 semua'), 'Merdeka 🇮🇩 semua');
     assert.equal(none('Kami sekeluarga 👨‍👩‍👧 senang'), 'Kami sekeluarga senang');
     // Balasan yang hanya emoji tetap terkirim dengan satu emoji.

@@ -35,10 +35,13 @@ export const SMILE = '☺️';
  * diberi penanda tampilan emoji (FE0F, mis. "☺️" dan "❤️"); termasuk warna
  * kulit, gabungan ZWJ, dan bendera (dua huruf regional). Sengaja tidak
  * menangkap © ® ™ ★ ✓, tanda panah, dan "☺" tanpa FE0F, yang bisa muncul di
- * nama produk atau teks biasa.
+ * nama produk atau teks biasa. Tanda panah (➡️ ↔️), centang (✔️ ✖️), © ® ™
+ * tetap bukan emoji walau ditulis dengan FE0F oleh keyboard atau LLM
+ * ("Jakarta ➡️ Bandung", "✔️ Ready stok"), jadi dibiarkan utuh di teks.
  */
+const TEXT_SYMBOL = '[\\u{00A9}\\u{00AE}\\u{2122}\\u{2190}-\\u{21FF}\\u{27A1}\\u{2934}\\u{2935}\\u{2B05}-\\u{2B07}\\u{2713}\\u{2714}\\u{2716}]';
 const EMOJI_SRC =
-  '(?:[\\u{1F1E6}-\\u{1F1FF}]{2}|\\p{Emoji_Presentation}|\\p{Extended_Pictographic}\\u{FE0F})[\\u{FE0F}\\u{1F3FB}-\\u{1F3FF}]*' +
+  `(?:[\\u{1F1E6}-\\u{1F1FF}]{2}|\\p{Emoji_Presentation}|(?!${TEXT_SYMBOL})\\p{Extended_Pictographic}\\u{FE0F})[\\u{FE0F}\\u{1F3FB}-\\u{1F3FF}]*` +
   '(?:\\u{200D}\\p{Extended_Pictographic}[\\u{FE0F}\\u{1F3FB}-\\u{1F3FF}]*)*';
 const EMOJI = new RegExp(EMOJI_SRC, 'u');
 /** Rangkaian emoji, boleh berselang spasi ("🙏 😊"), beserta spasi di kiri-kanannya. */
@@ -76,10 +79,11 @@ function ownHonorific(): string {
 
 /**
  * Kata berhuruf besar sesudah emoji yang bukan awal kalimat baru: sapaan
- * ("Pak", sapaan profil) atau kode/merek berhuruf kapital semua ("GFAN",
- * "GFAF-40A").
+ * ("Pak", sapaan profil), kode/merek berhuruf kapital semua ("GFAN",
+ * "GFAF-40A"), atau nama yang langsung diikuti koma ("Siap 🙏🏻 Budi, kami cek").
  */
 function keepsSentence(after: string): boolean {
+  if (/^\p{Lu}\p{Ll}+,/u.test(after)) return true;
   const word = after.match(/^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/u)?.[0] ?? '';
   if (HONORIFICS.has(word)) return true;
   if (!/\p{Ll}/u.test(word) && word.replace(/-/g, '').length >= 2) return true;
