@@ -15,7 +15,7 @@ import { marketsOf } from './business/catalog';
 import type { Intent, Lesson } from './business/types';
 import { unknownCodes } from './guard';
 import { askJson } from './llm/provider';
-import { noDash } from './texts';
+import { noDash, oneEmoji, PRAY, SMILE } from './texts';
 
 export interface BrainInput {
   text: string;
@@ -100,6 +100,9 @@ GAYA
 - Bahasanya positif: sebutkan manfaatnya bagi pelanggan, jangan menyindir atau
   merendahkan cara dan pilihan lain.
 - Jangan pernah memakai tanda pisah panjang ("—" atau "–"). Pakai koma atau titik.
+- Emoji boleh, tapi jarang: kebanyakan balasan tanpa emoji. Paling banyak satu,
+  di akhir kalimat, dan hanya ${PRAY} (terima kasih, maaf, minta tolong) atau ${SMILE}
+  (ramah). Jangan pakai emoji kalau balasan Asisten di RIWAYAT baru saja memakainya.
 - Jangan pernah menulis tautan, alamat situs, atau link wa.me di "reply".${
     sells ? ' Tautan beli dikirim otomatis lewat "buy" (lihat MEMBELI).' : ' Tim kami yang\n  membagikan tautan secara langsung.'
   }
@@ -266,7 +269,7 @@ export function parseBrain(raw: string): BrainResult | null {
   } catch {
     return null;
   }
-  const reply = typeof obj.reply === 'string' ? noDash(obj.reply.trim()) : '';
+  const reply = typeof obj.reply === 'string' ? oneEmoji(noDash(obj.reply.trim())) : '';
   if (!reply) return null;
 
   // Hanya kunci yang dikenal profil yang diambil; sisanya dibuang.
@@ -357,7 +360,7 @@ export async function followupBrain(input: FollowupInput): Promise<string | null
     '\n\nTUGAS KHUSUS (bukan membalas pesan)\n' +
     `Pelanggan ini diam sekitar ${Math.round(input.hours)} jam setelah balasan terakhir kita. Tulis SATU pesan follow-up untuknya di "reply":\n` +
     '- Paling panjang 3 baris. Sapa singkat, lalu sambung percakapan di atas secara spesifik: sebut hal yang terakhir dibahas atau yang masih kita tunggu darinya.\n' +
-    '- Tutup dengan satu pertanyaan ringan yang mudah dijawab.' +
+    `- Aturan emoji di GAYA tidak berlaku untuk pesan ini: tutup dengan satu pertanyaan ringan yang mudah dijawab, lalu ${PRAY}.` +
     (input.missing.length ? ` Data yang belum ada dan boleh ditanyakan: ${input.missing.join(', ')}.` : '') +
     '\n- Jangan mengulang salam pembuka, jangan mendesak, jangan menjanjikan apa pun, jangan menyebut harga, dan jangan mengarang hal yang tidak ada di riwayat.\n' +
     '- "fields" semua null, "intent" "other", "photos", "docs", dan "buy" kosong, "summary" kosong.';

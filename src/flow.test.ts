@@ -24,7 +24,7 @@ import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
 import { getContact, getOrder, listHandoffs, outboxAdd, outboxPending, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, setBotOff, setOrderContact, updateContact, updateProject, importContact, upsertOrderRow } from './store';
-import { handoffText, NON_TEXT, noDash, followupText, humanFollowupText, OPT_OUT_ACK } from './texts';
+import { followupEmoji, handoffText, hasEmoji, NON_TEXT, noDash, followupText, humanFollowupText, oneEmoji, OPT_OUT_ACK, paceEmoji, PRAY, sameText } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
 setDefaultProject(seedCtx('gfan'));
@@ -1074,7 +1074,7 @@ const tests: [string, () => Promise<void>][] = [
     });
     advance(23 * HOUR + MINUTE);
     assert.equal(await follow(), 1);
-    assert.equal(sent.at(-1), 'Halo Pak Budi, untuk exhaust gudangnya kemarin, ukuran ruangannya jadi berapa ya?');
+    assert.equal(sent.at(-1), `Halo Pak Budi, untuk exhaust gudangnya kemarin, ukuran ruangannya jadi berapa ya? ${PRAY}`, 'ditutup 🙏🏻');
     assert.equal(seen[0]?.summary, 'Cari exhaust gudang; menunggu ukuran.');
     assert.ok(seen[0]!.hours > 22.9 && seen[0]!.hours < 23.2);
 
@@ -1111,7 +1111,7 @@ const tests: [string, () => Promise<void>][] = [
       assert.equal(sent[0], 'Halo, selamat siang, selamat datang di toko kami, ada yang bisa dibantu?');
       assert.equal(sent[1], 'Ada, Pak, ini katalognya. Ukuran 16-20 inci tersedia.');
       assert.equal(sent[2], '[pdf:Katalog Seri A.pdf] Katalog, Seri A');
-      assert.equal(sent[3], 'Halo Pak, jadi yang mana?');
+      assert.equal(sent[3], `Halo Pak, jadi yang mana? ${PRAY}`);
       assert.ok(sent.every((t) => !dash.test(t)), 'tidak ada satu pun kiriman yang membawa tanda pisah panjang');
       // Kabar ke staf dan kalimat tetap mesin juga bersih.
       next = () => null;
@@ -1671,6 +1671,83 @@ const tests: [string, () => Promise<void>][] = [
     await say('ada katalog online?');
     assert.ok(!sent.some((t) => /gfan\.co\.id/.test(t)), 'tautan tidak terkirim');
     assert.equal(sent.length, 2, 'diganti kalimat cadangan');
+  }],
+
+  ['emoji: paling banyak satu, dan tidak di setiap balasan', async () => {
+    assert.equal(oneEmoji('Siap Pak 🙏🏻😊 Kami cek ☺️ dulu ya 👍'), 'Siap Pak 🙏🏻 Kami cek dulu ya');
+    assert.equal(paceEmoji('Terima kasih 🙏🏻 Kami cek dulu ya ☺️', []), 'Terima kasih 🙏🏻 Kami cek dulu ya');
+    assert.equal(paceEmoji('Terima kasih 🙏🏻 Kami cek dulu ya', ['Siap ☺️', 'Kota mana?']), 'Terima kasih. Kami cek dulu ya');
+    assert.equal(paceEmoji('Boleh 🙏🏻\nKota mana?', ['Siap ☺️', 'a', 'b']), 'Boleh 🙏🏻\nKota mana?', 'hanya dua pesan terakhir');
+    assert.equal(paceEmoji('Kipas GFAN® 16 inci, harga ↔ stok ✅', ['Halo 🙏']), 'Kipas GFAN® 16 inci, harga ↔ stok', 'tanda ® dan panah bukan emoji');
+    assert.equal(followupEmoji('Halo Pak, jadi yang mana?'), `Halo Pak, jadi yang mana? ${PRAY}`);
+    assert.equal(followupEmoji('Halo Pak 😊 jadi yang mana? 🙏'), 'Halo Pak jadi yang mana? 😊', 'emoji pertama pindah ke akhir');
+    assert.match(systemPrompt(), /Emoji boleh, tapi jarang/);
+
+    // Emoji yang dibuang tidak meninggalkan spasi sebelum tanda baca.
+    const none = (t: string) => paceEmoji(t, ['Halo 🙏']);
+    assert.equal(none('Kami cek dulu ya 🙏🏻, nanti kami kabari'), 'Kami cek dulu ya, nanti kami kabari');
+    assert.equal(none('Oke 👍!'), 'Oke!');
+    assert.equal(none('Terima kasih 🙏🏻.'), 'Terima kasih.');
+    // Titik hanya untuk awal kalimat baru, bukan sebelum sapaan, nama, atau kode produk.
+    assert.equal(none('Siap 🙏🏻 Pak, kami cek dulu.'), 'Siap Pak, kami cek dulu.');
+    assert.equal(none('Kipas 🌀 GFAN tersedia'), 'Kipas GFAN tersedia');
+    assert.equal(none('Ada 😊 GFAF-40A ready'), 'Ada GFAF-40A ready');
+    assert.equal(none('Terima kasih 🙏🏻 Kami cek dulu'), 'Terima kasih. Kami cek dulu');
+    assert.equal(none('Siap 🙏🏻 Budi, kami cek.'), 'Siap Budi, kami cek.', 'nama sebagai sapaan');
+    // Tanda panah dan simbol bukan emoji; bendera dan gabungan ZWJ satu emoji.
+    for (const e of ['🙏', '🙏🏻', '☺️', '😊', '⚡', '👍', '❤️', '👨‍👩‍👧', '🇮🇩']) assert.ok(hasEmoji(e), e);
+    for (const e of ['➡', '⬇', '★', '✓', '➀', '®', '©', '™', '↔', '☺']) assert.ok(!hasEmoji(e), e);
+    // Tanda panah, centang, © ® ™ dengan FE0F juga bukan emoji, dan tetap utuh di teks.
+    for (const e of ['➡️', '⬅️', '↔️', '⤴️', '⬇️', '✔️', '✖️', '©️', '®️', '™️', 'GFAN©️']) assert.ok(!hasEmoji(e), e);
+    assert.equal(none('Rute: Jakarta ➡️ Bandung ➡️ Garut'), 'Rute: Jakarta ➡️ Bandung ➡️ Garut');
+    assert.equal(none('✔️ Ready stok\n✔️ Garansi 1 tahun'), '✔️ Ready stok\n✔️ Garansi 1 tahun');
+    assert.equal(none('GFAN©️ Indonesia ✅ ready'), 'GFAN©️ Indonesia ready');
+    assert.ok(hasEmoji('✅'));
+    assert.equal(oneEmoji('Merdeka 🇮🇩🇮🇩 semua'), 'Merdeka 🇮🇩 semua');
+    assert.equal(none('Kami sekeluarga 👨‍👩‍👧 senang'), 'Kami sekeluarga senang');
+    // Balasan yang hanya emoji tetap terkirim dengan satu emoji.
+    assert.equal(none('🙏🏻'), '🙏🏻');
+    assert.equal(none('🙏🏻😊'), '🙏🏻');
+    // Spasi sisa dirapikan; baris kosong di antara paragraf tetap.
+    assert.equal(none('Terima kasih 🙏 😊 Kami cek'), 'Terima kasih. Kami cek');
+    assert.equal(oneEmoji('Siap 🙏 😊 Kami'), 'Siap 🙏 Kami');
+    assert.equal(none('Baik 🙏\n\nKota mana?'), 'Baik\n\nKota mana?');
+    assert.equal(none('Baik\n\n🙏\n\nKota mana?'), 'Baik\n\nKota mana?');
+    // Kalimat tetap lama (🙏 polos) dikenali sama dengan yang baru.
+    assert.ok(sameText(NON_TEXT.replace(PRAY, '🙏'), NON_TEXT));
+    assert.ok(!sameText(null, NON_TEXT));
+    assert.ok(!sameText(OPT_OUT_ACK, NON_TEXT));
+
+    // Salam pembuka memakai emoji, jadi balasan LLM sesudahnya dan sesudahnya lagi tanpa emoji.
+    next = () => R('Ada, Pak 🙏🏻 Untuk ruangan seluas apa?');
+    await say('ada jet fan?');
+    assert.ok(sent[0]?.includes('🙏'), 'salam dari profil tidak diubah');
+    assert.equal(sent[1], 'Ada, Pak. Untuk ruangan seluas apa?');
+    await say('10 x 20 meter');
+    assert.equal(sent[2], 'Ada, Pak. Untuk ruangan seluas apa?', 'salam masih di dua pesan terakhir');
+    next = () => R('Siap, kami catat ☺️');
+    await say('ok');
+    assert.equal(sent[3], 'Siap, kami catat ☺️', 'dua pesan terakhir tanpa emoji: boleh satu');
+    await say('makasih');
+    assert.equal(sent[4], 'Siap, kami catat');
+    next = () => R('🙏🏻');
+    await say('sama-sama');
+    assert.deepEqual(sent.slice(5), [PRAY], 'balasan hanya emoji tidak menjadi kalimat cadangan');
+
+    // Setelah deploy: NON_TEXT lama dengan 🙏 polos tidak dikirim ulang.
+    await updateContact(A, { last_out_text: NON_TEXT.replace(PRAY, '🙏') });
+    await say(null);
+    assert.equal(sent.length, 6, 'pemberitahuan lama tidak diulang');
+  }],
+
+  ['sapaan dengan emoji tetap sapaan kosong; follow-up LLM ditutup emoji', async () => {
+    await say('halo 🙏🏻');
+    assert.equal(brainCalls.length, 0, 'tidak perlu LLM');
+    onlyGreeting();
+    setFollowupWriter(async () => 'Halo Pak, jadi pasang di gudang yang mana?');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), `Halo Pak, jadi pasang di gudang yang mana? ${PRAY}`);
   }],
 ];
 

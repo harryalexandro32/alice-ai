@@ -31,7 +31,7 @@ export const gfan: Business = {
   honorific: 'Bapak/Ibu',
 
   greeting:
-    'Halo, terima kasih sudah menghubungi GFAN Indonesia 🙏\n' +
+    'Halo, terima kasih sudah menghubungi GFAN Indonesia 🙏🏻\n' +
     'Ada yang bisa kami bantu soal kipas & ventilasinya?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Nama\n' +
@@ -39,7 +39,7 @@ export const gfan: Business = {
     '3. Kebutuhan (untuk ruangan apa, luas ?m x ?m)',
 
   greetingKnown:
-    'Halo, terima kasih sudah menghubungi GFAN Indonesia 🙏\n' +
+    'Halo, terima kasih sudah menghubungi GFAN Indonesia 🙏🏻\n' +
     'Dengan Bapak/Ibu {nama}, betul?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Kota / alamat\n' +

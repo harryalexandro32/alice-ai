@@ -20,7 +20,7 @@ import { contactName, humanHolds, missingFields, openForHumanFollowup, projectPa
 import { biz } from './business';
 import { inQuiet, quietEndAfter, quietStartBefore } from './quiet';
 import { addMessage, followupCandidates, humanSeenAt, isBotOff, recentMessages, updateContact, type Contact } from './store';
-import { followupText, humanFollowupText, noDash } from './texts';
+import { followupEmoji, followupText, humanFollowupText, noDash } from './texts';
 
 /** Menulis follow-up untuk satu pelanggan; null = pakai kalimat tetap. */
 export type FollowupWriter = (c: Contact, hours: number) => Promise<string | null>;
@@ -131,13 +131,15 @@ async function humanSkip(c: Contact, t: number, due: number, humanAt: number): P
 /**
  * Follow-up setelah bot membalas: ditulis untuk percakapan ini kalau bisa;
  * kalau LLM mati atau jawabannya ditolak pagar, kalimat tetap yang dipakai —
- * follow-up tidak boleh batal.
+ * follow-up tidak boleh batal. Tulisan LLM ditutup dengan tepat satu emoji,
+ * seperti kalimat tetapnya.
  */
 async function botText(c: Contact, t: number): Promise<string> {
   let text = followupText(contactName(c), missingFields(c));
   try {
-    text = (await writer(c, (t - c.last_inbound_at) / HOUR)) ?? text;
-    text = noDash(text);
+    const written = await writer(c, (t - c.last_inbound_at) / HOUR);
+    // Hanya tulisan LLM yang emojinya dipindah ke akhir; kalimat tetap dibiarkan apa adanya.
+    text = written ? followupEmoji(noDash(written)) : noDash(text);
   } catch (e) {
     console.error(`[follow-up] ${c.phone}: penulis gagal, pakai kalimat tetap: ${e instanceof Error ? e.message : e}`);
   }
