@@ -30,7 +30,7 @@ import {
 import { inQuiet, quietEndAfter } from './quiet';
 import { onOrderRefChanged } from './tiktok';
 import { parseOrderHints } from './tracking';
-import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK } from './texts';
+import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK, paceEmoji, PRAY, withoutEmoji } from './texts';
 import type { MediaKind, Quote } from './transport/types';
 
 /** `image` = path file foto atau PDF; kalau ada, `text` menjadi keterangannya. */
@@ -53,7 +53,7 @@ export function setBeforeTurn(fn: () => Promise<void>): void {
 
 /** Berkas yang sama paling banyak sekian kali per pelanggan dalam riwayat terakhirnya. */
 const MAX_SAME_FILE = 3;
-const ATTACH_FAILED = 'Mohon maaf, berkasnya belum berhasil terkirim dari sini 🙏 Tim kami yang akan mengirimkannya ya.';
+const ATTACH_FAILED = `Mohon maaf, berkasnya belum berhasil terkirim dari sini ${PRAY} Tim kami yang akan mengirimkannya ya.`;
 
 export interface Inbound {
   phone: string;
@@ -99,8 +99,9 @@ export function contactName(c: Pick<Contact, 'lead'>): string | null {
 function bareGreeting(text: string): boolean {
   return (
     text.length <= 30 &&
-    /^(p+|halo+|hallo+|hai+|hi+|hello+|helo+|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|permisi|misi|ass?alam\S*( ?wr\.? ?wb\.?| ?alaikum\S*)?|info|min|admin|kak|gan|bos|tes|test)[\s!.,?🙏]*$/i.test(
-      text.trim()
+    /^(p+|halo+|hallo+|hai+|hi+|hello+|helo+|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|permisi|misi|ass?alam\S*( ?wr\.? ?wb\.?| ?alaikum\S*)?|info|min|admin|kak|gan|bos|tes|test)[\s!.,?]*$/i.test(
+      // "halo 🙏🏻", "pagi 😊": emoji apa pun di belakang sapaan tidak mengubahnya.
+      withoutEmoji(text).trim()
     )
   );
 }
@@ -653,6 +654,11 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     if (rejected) {
       console.error(`[alur] ${c.phone}: balasan dibuang (${rejected})`);
       out = null;
+    }
+    if (out) {
+      // Emoji tidak di setiap pesan. Tanda lampiran "[foto:…]" bukan pesan bot.
+      const spoken = history.filter((t) => t.dir === 'out' && !t.text.startsWith('[')).map((t) => t.text);
+      out = paceEmoji(out, isNew ? [c.last_out_text] : spoken);
     }
     if (!out) {
       // Tanpa jawaban dari LLM: minta data yang kurang, atau serahkan ke manusia.
