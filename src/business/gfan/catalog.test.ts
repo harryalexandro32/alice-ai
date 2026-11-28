@@ -44,6 +44,8 @@ for (const line of [
   assert.ok(text.includes(line), `tidak ada di teks katalog: ${line}`);
 }
 assert.ok(!/\bRp\b|harga/i.test(text), 'katalog tidak boleh memuat harga');
+// Brosur lama salah cetak (MHB): bot tahu padanannya dengan GAC.
+assert.ok(text.includes('MHB-18-H = GAC-18-H'), 'padanan kode MHB lama ada di teks katalog');
 
 // Model karangan tertangkap; yang asli (dengan ejaan apa pun) lolos.
 assert.deepEqual(unknownModels('Kami sarankan GFAF-40A atau GAI-200, juga GFC10-12B4.'), []);

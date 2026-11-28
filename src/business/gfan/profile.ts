@@ -145,6 +145,7 @@ export const gfan: Business = {
     { q: 'air cooler yang paling besar kapasitasnya berapa, harganya berapa?', has: [/GAC-23-H/, /23\.?000/, /18\.?000\.?000/] },
     { q: 'GAC-10-A tangkinya berapa liter dan berapa watt', has: [/100/, /550/] },
     { q: 'GAC-18-H tangkinya berapa liter, volume udaranya berapa?', has: [/260/, /18\.?000/] },
+    { q: 'di brosur ada MHB-18-H, itu tangkinya berapa liter?', has: [/GAC-18-H/, /260/] },
     { q: 'harga jet fan GZ-200 berapa?', has: [/6\.?500\.?000/] },
     { q: 'GFAF-40A berapa watt dan berapa air delivery nya?', has: [/130/, /2\.?880/] },
     { q: 'exhaust fan industri yang 24 inci ada? modelnya apa', has: [/GFAF-60A/] },

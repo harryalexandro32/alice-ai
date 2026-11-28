@@ -253,6 +253,8 @@ export const SERIES: Series[] = [
       'Sistem evaporatif alami (bukan AC/freon): butuh udara segar masuk dan jalur buang udara panas supaya pendinginannya terasa.',
       'Motor 100% tembaga (copper). Semua model 220 V 50 Hz.',
       '5 model. Volume udara 12000–23000 m³/h, daya 550–1800 W, tangki air 100–260 L, area jangkauan 60–180 m².',
+      // SEMENTARA: hapus setelah brosur yang sudah diperbaiki dipasang.
+      'Brosur PDF air cooler yang beredar sekarang salah cetak: kodenya tertulis MHB (MHB-10-A, MHB-10-B, MHB-10-C, MHB-18-H, MHB-23-H). Kode yang benar GAC dengan angka dan huruf yang sama: MHB-18-H = GAC-18-H, dan seterusnya. Kalau pelanggan menyebut kode MHB, jawab dengan kode GAC yang sama dan jelaskan singkat bahwa itu model yang sama.',
     ],
     tables: [
       {
