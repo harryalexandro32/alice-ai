@@ -15,8 +15,9 @@ import { llmEnabled } from '../llm/provider';
 import { now } from '../clock';
 import { holdFrom } from '../flow';
 import { currentProject } from '../project';
-import { chatHolds, readStatus, recentAlerts, recentContacts, recentErrors, usageDays } from '../store';
-import type { AdminStore, AlertItem, BotStatus, ErrorItem, LeadRow, UsageReport } from './stores';
+import { chatHolds, readStatus, recentAlerts, recentContacts, recentErrors, trackUsageDays, usageDays } from '../store';
+import { freeLeft, quotaError, quotaState, refreshQuota, trackingEnabled, trackPrice } from '../tracking';
+import type { AdminStore, AlertItem, BotStatus, ErrorItem, LeadRow, ResiUsage, UsageReport } from './stores';
 
 export async function alertItems(): Promise<AlertItem[]> {
   return (await recentAlerts(50)).map((a) => ({ at: a.at, kind: a.kind, text: a.text }));
@@ -66,12 +67,35 @@ export async function botStatus(): Promise<BotStatus> {
   };
 }
 
-export async function usageReport(): Promise<UsageReport> {
+/**
+ * Cek resi per hari dan keadaan akun Binderbyte. Akun dibaca dari simpanan
+ * di memori (dibaca ulang di latar belakang tiap jam). `wait` (hanya /usage):
+ * tunggu pembacaan pertama kalau belum ada simpanan dan belum ada error.
+ * Tanpa `wait` (/state) jaringan tidak pernah ditunggu: simpanan, atau
+ * TRACK_PRICE_IDR kalau belum ada.
+ */
+async function resiUsage(wait: boolean): Promise<ResiUsage> {
+  const [days, cached] = await Promise.all([trackUsageDays(90), quotaState()]);
+  const q = cached ?? (wait && quotaError() === null ? await refreshQuota() : null);
+  return {
+    enabled: trackingEnabled(),
+    price: trackPrice(q),
+    dailyMax: cfg.trackDailyMax,
+    days,
+    account: q ? { used: q.used, limit: q.limit, freeLeft: freeLeft(q), balance: q.balance, at: q.at } : null,
+    accountError: quotaError(),
+  };
+}
+
+/** `waitAccount`: lihat resiUsage (true hanya untuk /usage). */
+export async function usageReport(opts: { waitAccount?: boolean } = {}): Promise<UsageReport> {
+  const [days, resi] = await Promise.all([usageDays(90), resiUsage(Boolean(opts.waitAccount))]);
   return {
     model: cfg.llmModel,
     price: { in: cfg.llmPriceIn, cached: cfg.llmPriceCached, out: cfg.llmPriceOut },
     usdIdr: cfg.usdIdr,
-    days: await usageDays(90),
+    days,
+    resi,
   };
 }
 

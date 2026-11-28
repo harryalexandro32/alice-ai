@@ -154,9 +154,10 @@ let known = {};
 // memakai yang sama untuk memeriksa dan mengalihkan alamat): ubah keduanya bersama.
 /** Halaman -> alamat di bawah /<proyek>/. */
 const ROUTES = {
-  beranda: '', percakapan: 'conversations',
+  beranda: '', percakapan: 'conversations', pesanan: 'orders',
   behavior: 'knowledge/behavior', produk: 'knowledge/products', brosur: 'knowledge/brochures',
   pengaturan: 'settings', whatsapp: 'settings/whatsapp', notifikasi: 'settings/notifications', lanjutan: 'settings/advanced',
+  marketplace: 'settings/marketplace',
 };
 /** Alamat lama (bahasa Indonesia) -> alamat baru. */
 const OLD_ROUTES = {
@@ -199,6 +200,7 @@ function parseRoute(pathname) {
 const PAGES = {
   beranda: () => ['', T('Beranda', 'Home'), T('Ringkasan 7 hari terakhir, pelanggan yang menunggu staf, dan pertanyaan yang belum bisa dijawab bot.', 'A summary of the last 7 days, customers waiting for staff, and questions that the bot cannot answer yet.')],
   percakapan: () => ['', T('Percakapan', 'Conversations'), T('Semua calon pelanggan yang chat dengan bot. Klik satu baris untuk membuka percakapannya dan membalas dari sini.', 'All prospective customers who chatted with the bot. Click a row to open the conversation and reply from here.')],
+  pesanan: () => ['', T('Pesanan', 'Orders'), T('Pesanan dari toko Tokopedia & Shop yang ditautkan. Pesanan dicocokkan ke percakapan lewat nomor pesanan, atau ditautkan di sini.', 'Orders from the linked Tokopedia & Shop store. An order is matched to a conversation by its order number, or you link it here.')],
   chat: () => [T('Percakapan', 'Conversations'), T('Percakapan', 'Conversation'), ''],
   behavior: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Cara bot bicara', 'How the bot talks'), T('Siapa yang menjawab, pembukaan, pertanyaan dan rekomendasi, gaya, dan yang harus dijawab manusia. Perubahan berlaku mulai pesan berikutnya setelah Anda menyimpan.', 'Who answers, the opening, questions and recommendations, the style, and what a human must answer. Changes apply from the next message after you save.')],
   produk: () => [T('Pengetahuan bot', 'Bot knowledge'), T('Produk', 'Products'), T('Daftar produk, pengetahuan lain, dan pertanyaan yang belum terjawab. Bot tidak menjawab hal yang tidak tertulis di sini.', 'The product list, other knowledge and unanswered questions. The bot does not answer anything that is not written here.')],
@@ -206,6 +208,7 @@ const PAGES = {
   pengaturan: () => [T('Pengaturan', 'Settings'), T('Umum', 'General'), T('Proyek, saat admin ikut membalas, dan follow-up.', 'Project, when an admin also replies, and follow-up.')],
   whatsapp: () => [T('Pengaturan', 'Settings'), 'WhatsApp', T('Tautkan nomor bot, lihat keadaan bot, dan pengaman nomornya.', 'Link the bot\'s number, and see the bot\'s status and the number safeguard.')],
   notifikasi: () => [T('Pengaturan', 'Settings'), T('Notifikasi', 'Notifications'), T('Siapa yang dikabari bot, dan notifikasi mana untuk siapa.', 'Who the bot notifies, and which notification goes to whom.')],
+  marketplace: () => [T('Pengaturan', 'Settings'), 'Tokopedia & Shop', T('Tautkan toko Tokopedia & Shop agar status pembayaran dan resi pesanan masuk sendiri ke percakapan.', 'Link your Tokopedia & Shop store so that the payment status and the tracking number of an order go to the conversation automatically.')],
   lanjutan: () => [T('Pengaturan', 'Settings'), T('Lanjutan', 'Advanced'), T('Mode uji, batas dan pengaman, irama balasan, biaya LLM, riwayat warning, dan catatan error.', 'Test mode, limits and safeguards, reply rhythm, LLM cost, warning history and the error log.')],
   notfound: () => ['', T('Halaman tidak ditemukan', 'Page not found'), ''],
 };
@@ -334,6 +337,8 @@ const NOTIFY = [
   ['lead', () => T('Lead baru (data pelanggan lengkap)', 'New lead (customer data complete)'), 'staff'],
   ['butuh-staf', () => T('Pelanggan butuh staf (bot tidak bisa menjawab, pelanggan minta bicara dengan orang, atau mengirim suara atau dokumen)', 'Customer needs staff (the bot cannot answer, the customer asks to talk to a person, or sends a voice note or a document)'), 'staff'],
   ['llm', () => T('LLM bermasalah atau jatah hariannya habis', 'LLM has a problem or its daily limit is used up'), 'owner'],
+  ['resi', () => T('Cek resi: saldo Binderbyte menipis atau batas harian tercapai', 'Tracking number check: the Binderbyte balance is low or the daily limit is reached'), 'owner'],
+  ['marketplace', () => T('Tokopedia & Shop: tautan toko putus atau akan berakhir', 'Tokopedia & Shop: the store link is broken or expires soon'), 'owner'],
 ];
 function renderRecipients() {
   const list = profile.recipients;
@@ -342,7 +347,11 @@ function renderRecipients() {
     const role = el('select', {}, el('option', { value: 'owner', textContent: T('Pemilik', 'Owner') }), el('option', { value: 'staff', textContent: T('Staf', 'Staff') }));
     role.value = r.role;
     role.addEventListener('change', () => { r.role = role.value; touch(); });
-    const cell = (k, ph) => el('td', { className: k === 'name' ? 'first' : '' }, cellInput(r[k], (v) => { r[k] = v; touch(); }, ph));
+    const cell = (k, ph) => {
+      const input = cellInput(r[k], (v) => { r[k] = v; touch(); }, ph);
+      if (k === 'phone') input.classList.add('phone');
+      return el('td', { className: k === 'name' ? 'first' : '' }, input);
+    };
     return el('tr', {}, cell('name', T('misalnya Bu Rina', 'for example Rina')), el('td', {}, role), cell('phone', T('0812… atau self', '0812… or self')),
       el('td', { className: 'act' }, xBtn(T('Hapus', 'Delete'), () => { list.splice(i, 1); touch(); renderRecipients(); })));
   }));
@@ -1065,6 +1074,7 @@ $('resetChat').addEventListener('click', () => {
 
 // Panel samping "Coba chat": tersedia di semua halaman Pengetahuan.
 function openTry() {
+  closeHelp();
   $('uji').classList.add('on');
   $('ujiBg').classList.add('on');
   $('uji').setAttribute('aria-hidden', 'false');
@@ -1081,8 +1091,174 @@ $('ujiBg').addEventListener('click', closeTry);
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if ($('uji').classList.contains('on')) closeTry();
+  else if ($('help').classList.contains('on')) closeHelp();
   else if ($('importDlg').classList.contains('on')) $('importDlg').classList.remove('on');
   else if ($('linkDlg').classList.contains('on')) $('linkDlg').classList.remove('on');
+});
+
+// ---------- bantuan ----------
+// Panel Bantuan (tombol tanda tanya di kanan bawah). Tab "Tanya": pertanyaan staf tentang dashboard dijawab LLM
+// dari src/admin/bantuan.md lewat POST help/ask; tab "Panduan": berkas itu digambar apa adanya (renderMd).
+// Riwayat tanya jawab hanya di memori halaman. Pertanyaan yang tidak terjawab dicatat server untuk pengembang.
+let helpHistory = [];
+let helpData = null;
+const HELP_SUGGEST = () => [
+  T('Bagaimana cara menautkan WhatsApp?', 'How do I link WhatsApp?'),
+  T('Di mana mengubah salam pembuka?', 'Where do I change the greeting?'),
+  T('Bagaimana membalas pelanggan dari dashboard?', 'How do I reply to a customer from here?'),
+  T('Kenapa bot tidak membalas?', 'Why is the bot not replying?'),
+];
+
+function helpMsg(cls, text) {
+  const m = el('div', { className: 'msg ' + cls, textContent: text });
+  $('helpChat').append(m);
+  $('helpChat').scrollTop = $('helpChat').scrollHeight;
+  return m;
+}
+
+/** Awal percakapan bantuan: keterangan singkat dan beberapa pertanyaan contoh. */
+function helpIntro() {
+  $('helpChat').replaceChildren(
+    el('div', { className: 'msg note', textContent: T('Tanya apa saja tentang dashboard ini. Jawabannya diambil dari panduan.', 'Ask anything about this dashboard. Answers come from the guide.') }),
+    el('div', { className: 'help-sug' }, ...HELP_SUGGEST().map((q) => el('button', { className: 'btn ghost', type: 'button', textContent: q, onclick: () => askHelp(q) })))
+  );
+}
+
+async function askHelp(question) {
+  const q = String(question || '').trim();
+  if (!q || $('helpSend').disabled) return;
+  $('helpText').value = '';
+  const sug = $('helpChat').querySelector('.help-sug');
+  if (sug) sug.remove();
+  helpMsg('in', q);
+  const wait = helpMsg('note', T('sedang mencari jawaban…', 'looking it up…'));
+  $('helpSend').disabled = true;
+  try {
+    const r = await api('help/ask', { method: 'POST', body: JSON.stringify({ question: q, history: helpHistory, lang }) });
+    wait.remove();
+    const m = helpMsg('out', r.answer);
+    if (r.page && PAGES[r.page]) {
+      // Tautan sungguhan: router menanganinya; panelnya ditutup supaya halamannya terlihat.
+      m.append(el('a', { className: 'btn ghost sm goto', href: pathOf(r.page), onclick: () => closeHelp() }, ico('arrow-right'), el('span', { textContent: T('Buka ', 'Open ') + PAGES[r.page]()[1] })));
+    }
+    if (!r.found) helpMsg('note', T('Pertanyaan ini dicatat untuk developer.', 'This question was noted for the developer.'));
+    helpHistory = [...helpHistory, { dir: 'in', text: q }, { dir: 'out', text: r.answer }].slice(-8);
+  } catch (err) {
+    wait.remove();
+    helpMsg('bad', err.message);
+  }
+  $('helpSend').disabled = false;
+  $('helpText').focus();
+}
+
+/**
+ * Markdown sederhana jadi DOM tanpa innerHTML: judul (#, ##, ###), daftar "- " dengan sub-daftar (indentasi
+ * 2 spasi), paragraf, **tebal**, dan `kode`. Cukup untuk bantuan.md; tautan dan tabel tidak dipakai di sana.
+ */
+function renderMd(text) {
+  const inline = (str) => {
+    const frag = document.createDocumentFragment();
+    const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+    let last = 0;
+    let m;
+    while ((m = re.exec(str))) {
+      if (m.index > last) frag.append(str.slice(last, m.index));
+      const t = m[0];
+      frag.append(t[0] === '`' ? el('code', { textContent: t.slice(1, -1) }) : el('b', { textContent: t.slice(2, -2) }));
+      last = m.index + t.length;
+    }
+    if (last < str.length) frag.append(str.slice(last));
+    return frag;
+  };
+  const out = [];
+  const stack = []; // daftar yang sedang terbuka: { ul, indent }
+  let para = [];
+  const flushPara = () => {
+    if (!para.length) return;
+    const p = el('p');
+    p.append(inline(para.join(' ')));
+    out.push(p);
+    para = [];
+  };
+  for (const raw of text.split('\n')) {
+    const h = raw.match(/^(#{1,3}) (.*)/);
+    if (h) {
+      flushPara();
+      stack.length = 0;
+      const n = el('h' + h[1].length);
+      n.append(inline(h[2]));
+      out.push(n);
+      continue;
+    }
+    const li = raw.match(/^( *)- (.*)/);
+    if (li) {
+      flushPara();
+      const indent = li[1].length;
+      while (stack.length && stack[stack.length - 1].indent > indent) stack.pop();
+      if (!stack.length || stack[stack.length - 1].indent < indent) {
+        const ul = el('ul');
+        if (stack.length) stack[stack.length - 1].ul.lastElementChild.append(ul); else out.push(ul);
+        stack.push({ ul, indent });
+      }
+      const item = el('li');
+      item.append(inline(li[2]));
+      stack[stack.length - 1].ul.append(item);
+      continue;
+    }
+    if (!raw.trim()) { flushPara(); stack.length = 0; continue; }
+    if (stack.length && /^\s/.test(raw)) { stack[stack.length - 1].ul.lastElementChild.append(' ', inline(raw.trim())); continue; }
+    stack.length = 0;
+    para.push(raw.trim());
+  }
+  flushPara();
+  return out;
+}
+
+async function loadGuide() {
+  if (helpData) return;
+  $('helpGuide').replaceChildren(el('p', { className: 'help', textContent: T('Memuat panduan…', 'Loading the guide…') }));
+  try {
+    helpData = await api('help');
+    $('helpGuide').replaceChildren(...renderMd(helpData.text));
+  } catch (e) {
+    helpData = null;
+    $('helpGuide').replaceChildren(el('p', { className: 'load-err', textContent: e.message }));
+  }
+}
+
+function helpTab(which) {
+  for (const b of document.querySelectorAll('.help-tabs [role=tab]')) {
+    const on = b.dataset.tab === which;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  }
+  $('helpChat').hidden = which !== 'ask';
+  $('helpForm').hidden = which !== 'ask';
+  $('helpGuide').hidden = which !== 'guide';
+  if (which === 'guide') void loadGuide();
+  else $('helpText').focus();
+}
+
+function openHelp() {
+  closeTry();
+  $('help').classList.add('on');
+  $('helpBg').classList.add('on');
+  $('help').setAttribute('aria-hidden', 'false');
+  if (!$('helpChat').childElementCount) helpIntro();
+  setTimeout(() => { if (!$('helpForm').hidden) $('helpText').focus(); }, 50);
+}
+function closeHelp() {
+  $('help').classList.remove('on');
+  $('helpBg').classList.remove('on');
+  $('help').setAttribute('aria-hidden', 'true');
+}
+$('helpFab').addEventListener('click', openHelp);
+$('helpClose').addEventListener('click', closeHelp);
+$('helpBg').addEventListener('click', closeHelp);
+$('helpForm').addEventListener('submit', (e) => { e.preventDefault(); void askHelp($('helpText').value); });
+document.querySelector('.help-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[role=tab]');
+  if (b) helpTab(b.dataset.tab);
 });
 
 // ---------- pencarian cepat (QuickSwitch) ----------
@@ -1090,10 +1266,10 @@ document.addEventListener('keydown', (e) => {
 // aksi. Dibuka dengan tombol Cari di bilah atas, Ctrl+K / ⌘K, atau "/" selama tidak sedang mengetik.
 // Semua dicari di peramban dari data yang sudah dimuat; daftar percakapan dimuat saat kotak dibuka kalau belum ada.
 
-const QS_PAGES = ['beranda', 'percakapan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'lanjutan'];
+const QS_PAGES = ['beranda', 'percakapan', 'pesanan', 'behavior', 'produk', 'brosur', 'pengaturan', 'whatsapp', 'notifikasi', 'marketplace', 'lanjutan'];
 /** Urutan kelompok hasil, dan berapa hasil paling banyak per kelompok. */
 const QS_GROUPS = [
-  ['page', () => T('Halaman', 'Pages'), 9], ['chat', () => T('Percakapan', 'Conversations'), 8],
+  ['page', () => T('Halaman', 'Pages'), 11], ['chat', () => T('Percakapan', 'Conversations'), 8],
   ['product', () => T('Produk', 'Products'), 6], ['project', () => T('Proyek', 'Projects'), 5], ['action', () => T('Aksi', 'Actions'), 5],
 ];
 $('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
@@ -1102,7 +1278,8 @@ $('qsKey').textContent = /Mac|iPhone|iPad/.test(navigator.platform || navigator.
 const QS_KEYS = {
   beranda: 'home dashboard ringkasan', percakapan: 'chat lead pelanggan customer', behavior: 'salam gaya aturan prompt pelajaran ajari',
   produk: 'katalog harga stok marketplace tokopedia shopee', brosur: 'pdf katalog', pengaturan: 'proyek follow-up',
-  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'penerima sales wa kabar', lanjutan: 'biaya llm error warning mode uji',
+  whatsapp: 'wa qr pairing tautkan nomor', notifikasi: 'penerima sales wa kabar', lanjutan: 'biaya llm error warning mode uji resi binderbyte saldo',
+  marketplace: 'tokopedia tiktok shop toko tautkan pesanan', pesanan: 'order pesanan resi bayar tokopedia',
 };
 /** Huruf kecil tanpa aksen, untuk dicocokkan. */
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -1154,6 +1331,7 @@ function qsItems() {
     run: () => $('lang').querySelector('[data-lang="' + (lang === 'en' ? 'id' : 'en') + '"]').click() });
   add({ group: 'action', icon: 'message-square', label: T('Coba chat', 'Try chat'), sub: T('Uji jawaban bot', 'Test the bot\'s answers'),
     run: () => (KNOWLEDGE.includes(page) ? Promise.resolve() : go(pathOf('behavior'))).then(openTry) });
+  add({ group: 'action', icon: 'help-circle', label: T('Bantuan', 'Help'), sub: T('Tanya cara pakai dashboard', 'Ask how the dashboard works'), keys: 'help bantuan panduan tanya cara', run: openHelp });
   add({ group: 'action', icon: 'log-out', label: T('Keluar', 'Sign out'), keys: 'logout', run: () => $('logout').click() });
   return items;
 }
@@ -1727,24 +1905,73 @@ const FILTER_HELP = () => ({
   menunggu: T('Bot sudah meneruskan percakapan ini ke tim, dan belum ada staf yang membalas. Tahapnya pindah ke Dihubungi saat staf membalas atau menandainya sudah ditangani.',
     'The bot forwarded this conversation to the team, and no staff member has replied yet. The stage moves to Contacted when staff reply or mark it as handled.'),
   dihubungi: T('Staf sudah membalas pelanggan ini, dari HP atau dari dashboard.', 'A staff member has replied to this customer, from the phone or from the dashboard.'),
-  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, karena bot tidak bisa melihat pesanan di marketplace.',
-    'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, because the bot cannot see orders in the marketplace.'),
-  payment: T('Pelanggan sedang membayar atau sudah membayar. Hanya staf yang mengubah tahap ini.', 'The customer is paying or has paid. Only staff change this stage.'),
-  dikirim: T('Barangnya sudah dikirim ke pelanggan. Hanya staf yang mengubah tahap ini.', 'The goods were shipped to the customer. Only staff change this stage.'),
-  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Hanya staf yang mengubah tahap ini.', 'The order is complete: the customer received the goods. Only staff change this stage.'),
+  link: T('Bot sudah mengirim link Tokopedia atau Shopee. Staf yang memindahkannya ke Pembayaran atau Batal, atau pesanan dari toko Tokopedia & Shop yang ditautkan.',
+    'The bot sent a Tokopedia or Shopee link. Staff move it to Payment or Cancelled, or an order from the linked Tokopedia & Shop store moves it.'),
+  payment: T('Pelanggan sedang membayar atau sudah membayar. Staf yang mengubah tahap ini, atau pesanan dari toko Tokopedia & Shop yang ditautkan.', 'The customer is paying or has paid. Staff change this stage, or an order from the linked Tokopedia & Shop store changes it.'),
+  dikirim: T('Barangnya sudah dikirim ke pelanggan. Staf yang mengubah tahap ini, atau pelacakan resi dan pesanan dari toko Tokopedia & Shop yang ditautkan.', 'The goods were shipped to the customer. Staff change this stage, or the tracking number check and orders from the linked Tokopedia & Shop store change it.'),
+  selesai: T('Pesanan selesai: pelanggan sudah menerima barangnya. Staf yang mengubah tahap ini, atau pelacakan resi dan pesanan dari toko Tokopedia & Shop yang ditautkan.', 'The order is complete: the customer received the goods. Staff change this stage, or the tracking number check and orders from the linked Tokopedia & Shop store change it.'),
   batal: T('Pelanggan tidak jadi membeli. Hanya staf yang mengubah tahap ini.', 'The customer did not buy. Only staff change this stage.'),
   staf: T('Ini bukan tahap. Bot meminta bantuan staf dan belum ada staf yang membalas, di tahap apa pun. Tanda ini hilang saat staf membalas, atau saat ditandai sudah ditangani (misalnya setelah pelanggan ditelepon).',
     'Not a stage. The bot asked staff for help and no staff member has replied yet, at any stage. It clears when staff reply, or when it is marked as handled (for example after someone phones the customer).'),
 });
 const matchFilter = (c, f) => f === 'semua' || (f === 'staf' ? c.needsSales : (c.stage || 'baru') === f);
 
+// Urutan tabel Percakapan: kolom ('nama', 'tahap', 'f:<kunci isian>', 'status', 'bot', 'chat') dan arahnya.
+// Diingat di peramban ini. Bawaan: chat terakhir, yang terbaru di atas.
+let leadSort = { key: 'chat', dir: 'desc' };
+try {
+  const [key, dir] = (localStorage.getItem('leadSort') || '').split('|');
+  if (key && (dir === 'asc' || dir === 'desc')) leadSort = { key, dir };
+} catch { /* penyimpanan diblokir: urutan bawaan */ }
+
+/** Nilai urut satu baris untuk satu kolom. null = kosong, selalu di bawah apa pun arahnya. */
+function sortValue(c, key) {
+  if (key === 'nama') return nameOf(c) || c.phone;
+  if (key === 'tahap') return STAGES.indexOf(c.stage || 'baru');
+  // Perlu staf paling penting, lalu data lengkap.
+  if (key === 'status') return (c.needsSales ? 2 : 0) + (c.complete ? 1 : 0);
+  if (key === 'bot') return botHeld(c.hold) ? 1 : 0;
+  if (key === 'chat') return c.lastAt ? new Date(c.lastAt).getTime() : null;
+  if (key.startsWith('f:')) return (c.lead && c.lead[key.slice(2)]) || null;
+  return null;
+}
+
+function sortLeads(list) {
+  const { key, dir } = leadSort;
+  const sign = dir === 'asc' ? 1 : -1;
+  const coll = new Intl.Collator(locale(), { numeric: true, sensitivity: 'base' });
+  // sort() stabil: baris dengan nilai sama tetap dalam urutan dari server (chat terakhir).
+  return list.map((c) => [c, sortValue(c, key)]).sort(([, a], [, b]) => {
+    if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+    return sign * (typeof a === 'string' ? coll.compare(a, b) : a - b);
+  }).map(([c]) => c);
+}
+
 function visibleLeads() {
   const q = $('leadSearch').value.trim().toLowerCase();
-  return leadData.rows.filter((c) => {
+  return sortLeads(leadData.rows.filter((c) => {
     if (!matchFilter(c, leadFilter)) return false;
     if (!q) return true;
     return [c.phone, c.summary || '', c.note || '', c.waName || '', ...Object.values(c.lead)].join(' ').toLowerCase().includes(q);
+  }));
+}
+
+/**
+ * Judul kolom yang bisa diurutkan: tombol di dalam th. Klik pertama memakai arah awal kolomnya
+ * (first: 'desc' untuk waktu dan status, supaya yang terbaru atau terpenting di atas); klik berikutnya membalik arah.
+ */
+function sortHead(label, key, first = 'asc') {
+  const on = leadSort.key === key;
+  const b = el('button', { type: 'button', className: 'sorthd' + (on ? ' on' : '') }, label);
+  if (on) b.append(ico(leadSort.dir === 'asc' ? 'arrow-up' : 'arrow-down'));
+  b.addEventListener('click', () => {
+    leadSort = { key, dir: on ? (leadSort.dir === 'asc' ? 'desc' : 'asc') : first };
+    try { localStorage.setItem('leadSort', key + '|' + leadSort.dir); } catch { /* berlaku untuk kunjungan ini saja */ }
+    renderLeads();
   });
+  const th = el('th', {}, b);
+  if (on) th.setAttribute('aria-sort', leadSort.dir === 'asc' ? 'ascending' : 'descending');
+  return th;
 }
 
 /** Saringan; loading = jumlahnya belum diketahui (kerangka). Saringan tahap memakai warna tahapnya. */
@@ -1772,6 +1999,11 @@ function renderLeadsPending() {
   $('leads').replaceChildren(el('tbody', {}, ...(failed ? [emptyRow(1, loadError(leadError))] : skeleton('row', 3))));
 }
 
+/** Sel ringkasan: paling banyak 3 baris (CSS), teks lengkapnya di tooltip. */
+function sumCell(text) {
+  return el('td', { className: 'sum' }, el('div', { className: 'clamp', textContent: text || '-', title: text || '' }));
+}
+
 function renderLeads() {
   if (!profile) return;
   if (leadsPending || !leadData) return renderLeadsPending();
@@ -1780,10 +2012,13 @@ function renderLeads() {
   renderFilters();
   const nameKey = (profile.leadFields.find((f) => f.isName) || {}).key;
   const fields = r.fields.filter((f) => f.key !== nameKey);
-  const head = el('tr', {}, el('th', { textContent: T('Pelanggan', 'Customer') }), el('th', { textContent: T('Tahap', 'Stage') }),
-    ...fields.map((f) => el('th', { textContent: sentenceCase(f.label) })),
-    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), el('th', { textContent: 'Status' }), el('th', { textContent: 'Bot' }),
-    el('th', { textContent: T('Chat terakhir', 'Last message') }));
+  // Kolom yang dulu diurutkan bisa hilang (isian dihapus, proyek lain): kembali ke urutan bawaan.
+  const keys = ['nama', 'tahap', ...fields.map((f) => 'f:' + f.key), 'status', 'bot', 'chat'];
+  if (!keys.includes(leadSort.key)) leadSort = { key: 'chat', dir: 'desc' };
+  const head = el('tr', {}, sortHead(T('Pelanggan', 'Customer'), 'nama'), sortHead(T('Tahap', 'Stage'), 'tahap'),
+    ...fields.map((f) => sortHead(sentenceCase(f.label), 'f:' + f.key)),
+    el('th', { textContent: T('Ringkasan percakapan', 'Conversation summary') }), sortHead('Status', 'status', 'desc'), sortHead(T('Bot menjawab', 'Bot replies'), 'bot'),
+    sortHead(T('Chat terakhir', 'Last message'), 'chat', 'desc'));
   const list = visibleLeads();
   const rows = list.map((c) => {
     // Menunggu jam tenang = bot tetap aktif di chat ini, hanya balasannya tertunda.
@@ -1808,14 +2043,15 @@ function renderLeads() {
       sel.disabled = false;
     });
     const name = nameOf(c);
-    const who = el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }),
+    const who = el('td', { className: 'who' }, el('a', { href: convPath(c.phone), className: name ? '' : 'phone', textContent: name || c.phone }),
       c.note ? el('span', { className: 'note-ico', textContent: ' ✎', title: c.note }) : null,
-      name ? el('small', { textContent: c.phone }) : null);
+      name ? el('small', { className: 'phone', textContent: c.phone }) : null);
     const status = el('td', {}, el('div', { className: 'chiprow' },
       el('span', { className: 'chip ' + (c.complete ? 'ok' : ''), textContent: c.complete ? T('Lengkap', 'Complete') : T('Belum lengkap', 'Incomplete') }),
       c.needsSales ? el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') }) : null));
-    const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => el('td', { textContent: c.lead[f.key] || '-' })),
-      el('td', { className: 'sum', textContent: c.summary || '-' }), status,
+    // Kebutuhan berisi kalimat bebas: tampil seperti ringkasan (kecil, pudar, paling banyak 3 baris).
+    const tr = el('tr', {}, who, el('td', {}, stage), ...fields.map((f) => (f.key === 'need' ? sumCell(c.lead[f.key]) : el('td', { textContent: c.lead[f.key] || '-' }))),
+      sumCell(c.summary), status,
       el('td', {}, el('label', { className: 'switch' }, box, why ? el('span', { className: 'chip ' + (c.hold === 'berhenti' ? 'danger' : 'warn'), textContent: cap(why) }) : null)),
       el('td', { textContent: c.lastAt ? when(c.lastAt) : T('belum pernah chat', 'never chatted'), style: 'white-space:nowrap' }));
     // Klik di mana saja pada baris (selain kontrolnya) membuka percakapannya.
@@ -1841,7 +2077,7 @@ $('leadExport').addEventListener('click', () => {
   const r = leadData;
   const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const lines = [[T('Nomor', 'Number'), ...r.fields.map((f) => sentenceCase(f.label)), T('Tahap', 'Stage'), T('Catatan', 'Note'), T('Ringkasan', 'Summary'), T('Lengkap', 'Complete'),
-    T('Perlu staf', 'Needs staff'), 'Bot', T('Chat terakhir', 'Last message')]];
+    T('Perlu staf', 'Needs staff'), T('Bot menjawab', 'Bot replies'), T('Chat terakhir', 'Last message')]];
   for (const c of visibleLeads()) {
     lines.push([c.phone, ...r.fields.map((f) => c.lead[f.key] || ''), stageLabel(c.stage || 'baru'), c.note || '', c.summary || '', c.complete ? T('ya', 'yes') : T('tidak', 'no'),
       c.needsSales ? T('ya', 'yes') : '', botHeld(c.hold) ? T('diam', 'off') : T('aktif', 'on'), c.lastAt ? new Date(c.lastAt).toLocaleString(locale()) : '']);
@@ -1875,21 +2111,379 @@ $('importForm').addEventListener('submit', async (e) => {
   $('knownImport').disabled = false;
 });
 
+// ---------- Tokopedia & Shop: tautan toko dan halaman Pesanan ----------
+/** Jawaban GET marketplace terakhir (tautan toko, alamat untuk Partner Center, jumlah pesanan); null = belum dimuat. */
+let shopInfo = null;
+let shopInfoError = '';
+/** Pesanan di saringan dan pencarian sekarang; null = belum dimuat. */
+let shopRows = null;
+let shopRowsError = '';
+let shopFilter = 'semua';
+/** Nomor urut muat daftar: jawaban yang terlambat (saringan sudah berganti) dibuang. */
+let shopSeq = 0;
+let shopSearchTimer = null;
+
+/** Saringan halaman Pesanan (id sama dengan server). */
+const SHOP_FILTERS = () => [
+  ['semua', T('Semua', 'All')], ['belum-bayar', T('Belum bayar', 'Unpaid')], ['perlu-kirim', T('Perlu dikirim', 'To ship')],
+  ['dikirim', T('Dikirim', 'Shipped')], ['selesai', T('Selesai', 'Completed')], ['batal', T('Batal', 'Cancelled')],
+  ['belum-tertaut', T('Belum tertaut', 'Not linked')],
+];
+/** Status pesanan (ejaan API) -> [label, warna chip], menurut kelompok saringannya. */
+function shopStatus(s) {
+  if (s === 'UNPAID' || s === 'ON_HOLD') return [T('Belum bayar', 'Unpaid'), 'warn'];
+  if (s === 'AWAITING_SHIPMENT' || s === 'PARTIALLY_SHIPPING') return [T('Perlu dikirim', 'To ship'), 'info'];
+  if (s === 'AWAITING_COLLECTION' || s === 'IN_TRANSIT') return [T('Dikirim', 'Shipped'), 'info'];
+  if (s === 'DELIVERED' || s === 'COMPLETED') return [T('Selesai', 'Completed'), 'ok'];
+  if (s === 'CANCELLED') return [T('Batal', 'Cancelled'), 'danger'];
+  return [s || '-', ''];
+}
+const PLATFORMS = { TOKOPEDIA: 'Tokopedia', TIKTOK_SHOP: 'TikTok Shop', TIKTOK_SHOP_APP: 'TikTok Shop App' };
+/** Total pesanan: Rupiah lewat idr, mata uang lain apa adanya. */
+function shopMoney(total, currency) {
+  if (total === null || total === undefined || total === '') return '-';
+  const n = Number(total);
+  return (!currency || currency === 'IDR') && Number.isFinite(n) ? idr(n) : total + ' ' + (currency || '');
+}
+
+/** Angka di menu Pesanan: semua pesanan yang sudah dibayar tapi belum tertaut ke percakapan (sama dengan saringan "Belum tertaut"). */
+function setShopBadge() {
+  const n = shopInfo && shopInfo.orders ? shopInfo.orders.unmatched : 0;
+  const b = $('shopBadge');
+  b.textContent = n > 99 ? '99+' : String(n);
+  b.classList.toggle('on', n > 0);
+  const tip = n + T(' pesanan dibayar belum tertaut ke percakapan', n === 1 ? ' paid order not linked to a conversation' : ' paid orders not linked to a conversation');
+  b.title = n > 0 ? tip : '';
+  if (n > 0) b.setAttribute('aria-label', tip); else b.removeAttribute('aria-label');
+}
+
+async function loadShopInfo() {
+  const pid = project;
+  try {
+    const r = await api('marketplace');
+    if (pid !== project) return;
+    shopInfo = r;
+    shopInfoError = '';
+  } catch (e) {
+    if (pid !== project) return;
+    shopInfoError = e.message;
+  }
+  setShopBadge();
+  if (page === 'marketplace') renderMarketplace();
+  if (page === 'pesanan' && shopRows) renderShopOrders();
+}
+
+/** Kembali dari halaman izin (?linked=1|0&error=…): kabari sekali, lalu bersihkan alamatnya. */
+function readLinked() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('linked')) return;
+  if (q.get('linked') === '1') toast(T('Toko berhasil ditautkan. Pesanan 30 hari terakhir sedang disinkronkan.', 'Shop linked. Orders from the last 30 days are syncing.'));
+  else if (q.get('error')) toast(T('Toko tidak tertaut. Error: ', 'Shop not linked. Error: ') + q.get('error'), true);
+  else toast(T('Toko tidak tertaut. Pemilik toko tidak menyetujui akses, atau prosesnya dibatalkan.', 'Shop not linked. The shop owner did not approve access, or the process was cancelled.'), true);
+  history.replaceState(null, '', location.pathname + location.hash);
+}
+
+/** Satu alamat untuk Partner Center, dengan tombol salin. */
+function urlRow(label, url) {
+  const copy = el('button', { type: 'button', className: 'btn ghost sm', textContent: T('Salin', 'Copy') });
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(T('Alamat disalin.', 'Address copied.'));
+    } catch { toast(T('Tidak bisa menyalin. Pilih alamatnya, lalu salin sendiri.', 'Could not copy. Select the address and copy it yourself.'), true); }
+  });
+  return el('div', { className: 'mk-url' }, el('span', { className: 'cp-k', textContent: label }), el('code', { textContent: url }), copy);
+}
+
+/**
+ * Tombol ke halaman izin Tokopedia & Shop (tab baru); tanpa TIKTOK_SERVICE_ID
+ * hanya keterangan. Alamatnya dibuat server saat diklik (state sekali pakai).
+ * Tab baru dibuka langsung saat klik (supaya tidak dicegat pemblokir popup),
+ * lalu diarahkan sesudah alamatnya ada. Kalau tab tidak bisa dibuka,
+ * tautannya ditampilkan untuk diklik sendiri.
+ */
+function authButton(m, again = false) {
+  if (!m.canAuth) return el('p', { className: 'help', textContent: T('TIKTOK_SERVICE_ID di .env server masih kosong, jadi halaman izin belum bisa dibuka.', 'TIKTOK_SERVICE_ID in the server .env is empty, so the authorization page cannot open yet.') });
+  const btn = el('button', { type: 'button', className: 'btn' });
+  withIcon(btn, 'package', again ? T('Tautkan lagi', 'Link again') : T('Tautkan toko', 'Link shop'));
+  const fallback = el('span', { className: 'help' });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    fallback.replaceChildren();
+    const tab = window.open('', '_blank');
+    try {
+      const r = await api('marketplace/auth-url', { method: 'POST' });
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = r.url;
+      } else {
+        const a = el('a', { href: r.url, target: '_blank', rel: 'noopener', textContent: T('Buka halaman izin Tokopedia & Shop', 'Open the Tokopedia & Shop authorization page') });
+        fallback.replaceChildren(T('Tab baru tidak bisa dibuka. ', 'A new tab could not open. '), a);
+      }
+    } catch (e) {
+      if (tab) tab.close();
+      toast(e.message, true);
+    }
+    btn.disabled = false;
+  });
+  return el('span', {}, btn, ' ', fallback);
+}
+
+/**
+ * Kode izin yang ditempel sendiri: aplikasi "seller developer" (aplikasi
+ * pribadi untuk toko sendiri di Partner Center) bisa menampilkan kodenya
+ * langsung, tanpa kembali ke dashboard. Server menukarnya seperti callback izin.
+ */
+function codeForm() {
+  const input = el('input', { type: 'text', className: 'phone', maxLength: 200, autocomplete: 'off', spellcheck: false });
+  input.setAttribute('aria-label', T('Kode izin dari Partner Center', 'Authorization code from Partner Center'));
+  const btn = el('button', { type: 'button', className: 'btn ghost', textContent: T('Tautkan dengan kode', 'Link with code') });
+  const send = async () => {
+    const code = input.value.trim();
+    if (code.length < 8) {
+      toast(T('Isi kode izin dari Partner Center.', 'Enter the authorization code from Partner Center.'), true);
+      input.focus();
+      return;
+    }
+    btn.disabled = true;
+    try {
+      shopInfo = await api('marketplace/code', { method: 'POST', body: JSON.stringify({ code }) });
+      toast(T('Toko berhasil ditautkan. Pesanan 30 hari terakhir sedang disinkronkan.', 'Shop linked. Orders from the last 30 days are syncing.'));
+    } catch (e) {
+      toast(T('Toko tidak tertaut. Error: ', 'Shop not linked. Error: ') + e.message, true);
+      btn.disabled = false;
+      return;
+    }
+    setShopBadge();
+    renderMarketplace();
+  };
+  btn.addEventListener('click', () => void send());
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') void send(); });
+  return el('div', { className: 'mk-code' },
+    el('p', { className: 'help', textContent: T('Atau tempel kode izin dari Partner Center:', 'Or paste the authorization code from Partner Center:') }),
+    el('div', { className: 'mk-code-row' }, input, btn));
+}
+
+/** Alamat webhook harus ke server ini, bukan ke dashboard di Vercel. */
+const webhookNote = () => el('p', { className: 'help', textContent: T(
+  'Alamat webhook harus memakai alamat server ini (PUBLIC_BASE_URL), bukan alamat dashboard di Vercel. Tanda tangan webhook dihitung dari isi kiriman apa adanya, jadi kiriman itu harus langsung sampai ke server ini.',
+  'The webhook address must use this server address (PUBLIC_BASE_URL), not the dashboard address on Vercel. The webhook signature is computed over the exact request body, so the request must reach this server directly.') });
+
+function renderMarketplace() {
+  const box = $('mkBody');
+  if (!shopInfo) {
+    busy(['mkBody'], !shopInfoError);
+    box.replaceChildren(shopInfoError ? errorNote(shopInfoError) : el('p', {}, skelText(T('Memuat keadaan tautan toko Tokopedia & Shop di sini', 'Loading the Tokopedia & Shop link state here'))));
+    return;
+  }
+  busy(['mkBody'], false);
+  const m = shopInfo;
+  const webhook = urlRow('Webhook URL', m.webhookUrl);
+  if (!m.enabled) {
+    box.replaceChildren(
+      el('p', { className: 'help', textContent: T('Fitur ini belum menyala. Isi TIKTOK_APP_KEY, TIKTOK_APP_SECRET, dan TIKTOK_SERVICE_ID di .env server, lalu jalankan ulang dashboard. Ketiga nilai ini ada di halaman aplikasi Anda di Partner Center (partner.tiktokshop.com).',
+        'This feature is off. Fill in TIKTOK_APP_KEY, TIKTOK_APP_SECRET and TIKTOK_SERVICE_ID in the server .env, then restart the dashboard. All three values are on your app page in Partner Center (partner.tiktokshop.com).') }),
+      el('p', { className: 'help', textContent: T('Di halaman aplikasi itu, isi juga dua alamat ini:', 'On that app page, also enter these two addresses:') }),
+      urlRow(T('Redirect URL (callback izin)', 'Redirect URL (authorization callback)'), m.redirectUrl), webhook, webhookNote());
+    return;
+  }
+  const l = m.link;
+  if (!l) {
+    box.replaceChildren(
+      el('div', { className: 'tblfoot' }, authButton(m)),
+      codeForm(),
+      el('p', { className: 'help', textContent: T('Pemilik toko masuk dengan akun Seller Center, lalu menyetujui akses pesanan. Setelah itu halaman ini menampilkan tokonya.',
+        'The shop owner signs in with the Seller Center account and approves order access. This page then shows the shop.') }),
+      el('div', { className: 'sub', textContent: T('Alamat webhook', 'Webhook address') }),
+      el('p', { className: 'help', textContent: T('Isi alamat ini sekali di Partner Center, supaya perubahan pesanan langsung masuk:', 'Enter this address once in Partner Center, so order changes arrive at once:') }),
+      webhook, webhookNote());
+    return;
+  }
+  const [stText, stCls] = l.status === 'active' ? [T('Aktif', 'Active'), 'ok'] : l.status === 'expired' ? [T('Kedaluwarsa', 'Expired'), 'warn'] : [T('Dicabut', 'Revoked'), 'danger'];
+  const facts = [
+    [T('Toko', 'Shop'), (l.shopName || l.shopId) + (l.region ? ' (' + l.region + ')' : '')],
+    [T('Penjual', 'Seller'), l.sellerName || '-'],
+    [T('Token berlaku sampai', 'Token valid until'), l.accessExpiresAt ? when(l.accessExpiresAt) : '-'],
+    [T('Izin berakhir', 'Authorization ends'), l.refreshExpiresAt ? when(l.refreshExpiresAt) : '-'],
+    [T('Sinkron terakhir', 'Last sync'), l.lastSyncAt ? when(l.lastSyncAt) : T('belum pernah', 'never')],
+  ];
+  const sync = el('button', { type: 'button', className: 'btn ghost' });
+  withIcon(sync, 'refresh', T('Sinkron sekarang', 'Sync now'));
+  sync.disabled = l.status !== 'active';
+  sync.addEventListener('click', async () => {
+    sync.disabled = true;
+    const pid = project;
+    try {
+      shopInfo = await api('marketplace/sync', { method: 'POST' });
+      toast(shopInfo.started
+        ? T('Sinkron dimulai. Halaman ini diperbarui dalam beberapa detik.', 'Sync started. This page updates in a few seconds.')
+        : T('Sinkron masih berjalan. Halaman ini diperbarui dalam beberapa detik.', 'A sync is still running. This page updates in a few seconds.'));
+      // Sinkron berjalan di server (latar belakang): data halaman ini dibaca lagi sesudah 5 detik.
+      setTimeout(() => { if (pid === project) void loadShopInfo(); }, 5000);
+    } catch (e) { toast(e.message, true); }
+    setShopBadge();
+    renderMarketplace();
+  });
+  const cut = el('button', { type: 'button', className: 'btn danger' });
+  withIcon(cut, 'x', T('Putuskan tautan', 'Unlink'));
+  cut.addEventListener('click', async () => {
+    if (!confirm(T('Putuskan tautan toko ini? Pesanan baru tidak masuk lagi. Pesanan yang sudah masuk tetap disimpan.', 'Unlink this shop? New orders stop arriving. Orders already here are kept.'))) return;
+    cut.disabled = true;
+    try {
+      shopInfo = await api('marketplace/unlink', { method: 'POST' });
+      toast(T('Tautan toko diputus.', 'Shop unlinked.'));
+    } catch (e) { toast(e.message, true); }
+    setShopBadge();
+    renderMarketplace();
+  });
+  const counts = el('a', { href: pathOf('pesanan'),
+    textContent: m.orders.total + T(' pesanan 30 hari, ', ' orders in 30 days, ') + m.orders.unmatched + T(' belum tertaut ke percakapan', ' not linked to a conversation') });
+  box.replaceChildren(
+    el('div', {}, el('span', { className: 'chip ' + stCls, textContent: stText }), l.error ? el('span', { className: 'help', textContent: ' ' + T('Error: ', 'Error: ') + l.error }) : null),
+    el('dl', { className: 'cp-dl mk-facts' }, ...facts.flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { textContent: v })])),
+    el('p', {}, counts),
+    el('div', { className: 'tblfoot' }, sync, l.status !== 'active' ? authButton(m, true) : null, cut),
+    el('div', { className: 'sub', textContent: T('Alamat webhook', 'Webhook address') }),
+    webhook, webhookNote());
+}
+
+async function loadShopOrders() {
+  const pid = project;
+  const seq = ++shopSeq;
+  const q = new URLSearchParams({ status: shopFilter, q: $('shopSearch').value.trim(), limit: '200' });
+  try {
+    const r = await api('orders?' + q);
+    if (pid !== project || seq !== shopSeq) return;
+    shopRows = r.rows;
+    shopRowsError = '';
+  } catch (e) {
+    if (pid !== project || seq !== shopSeq) return;
+    shopRowsError = e.message;
+    toast(e.message, true);
+  }
+  renderShopOrders();
+}
+
+function renderShopFilters() {
+  $('shopFilters').replaceChildren(...SHOP_FILTERS().map(([k, label]) => {
+    const b = el('button', { type: 'button', className: k === shopFilter ? 'on' : '' }, label);
+    b.setAttribute('aria-pressed', String(k === shopFilter));
+    b.addEventListener('click', () => {
+      shopFilter = k;
+      shopRows = null;
+      renderShopOrders();
+      void loadShopOrders();
+    });
+    return b;
+  }));
+}
+
+/** Tautkan (atau lepas, phone '') satu pesanan ke percakapan, lalu muat ulang daftar dan angkanya. */
+async function linkShopOrder(orderId, phone, btn) {
+  btn.disabled = true;
+  try {
+    await api('orders/' + encodeURIComponent(orderId), { method: 'PUT', body: JSON.stringify({ phone }) });
+    toast(phone ? T('Pesanan ditautkan ke percakapan.', 'Order linked to the conversation.') : T('Pesanan dilepas dari percakapan.', 'Order unlinked from the conversation.'));
+  } catch (e) {
+    toast(e.message, true);
+    btn.disabled = false;
+    return;
+  }
+  void loadShopInfo();
+  await loadShopOrders();
+}
+
+function shopOrderRow(o) {
+  const items = o.items || [];
+  const first = items[0];
+  const what = first ? first.name + (first.qty > 1 ? ' ×' + first.qty : '') + (items.length > 1 ? ' ' + T('+' + (items.length - 1) + ' lainnya', '+' + (items.length - 1) + ' more') : '') : '';
+  const [stText, stCls] = shopStatus(o.status);
+  const status = el('span', { className: 'chip' + (stCls ? ' ' + stCls : ''), textContent: stText });
+  if (o.cancelReason) status.title = o.cancelReason;
+  let link;
+  if (o.contactPhone) {
+    const off = el('button', { type: 'button', className: 'btn ghost sm', textContent: T('Lepas', 'Unlink') });
+    off.addEventListener('click', () => void linkShopOrder(o.orderId, '', off));
+    link = el('td', { className: 'who' }, el('a', { href: convPath(o.contactPhone), className: o.contactName ? '' : 'phone', textContent: o.contactName || o.contactPhone }),
+      o.contactName ? el('small', { className: 'phone', textContent: o.contactPhone }) : null, off);
+  } else {
+    const input = el('input', { type: 'text', className: 'phone', placeholder: '+62…' });
+    input.setAttribute('aria-label', T('Nomor percakapan untuk pesanan ini', 'Conversation number for this order'));
+    const on = el('button', { type: 'button', className: 'btn ghost sm', textContent: T('Tautkan', 'Link') });
+    const send = () => (input.value.trim() ? void linkShopOrder(o.orderId, input.value.trim(), on) : input.focus());
+    on.addEventListener('click', send);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    link = el('td', {}, el('div', { className: 'shop-link' }, input, on));
+  }
+  return el('tr', {},
+    el('td', {}, el('div', { className: 'shop-id' }, el('small', { className: 'phone', textContent: o.orderId }), o.platform ? el('span', { className: 'chip', textContent: PLATFORMS[o.platform] || o.platform }) : null),
+      what ? el('small', { className: 'shop-item', textContent: what }) : null),
+    el('td', {}, status),
+    el('td', { textContent: o.paidTime ? when(o.paidTime) : '-', style: 'white-space:nowrap' }),
+    el('td', { textContent: shopMoney(o.total, o.currency), style: 'white-space:nowrap' }),
+    el('td', {}, o.trackingNumber ? el('span', { className: 'phone', textContent: o.trackingNumber }) : '-', o.trackingNumber && o.shippingProvider ? el('small', { className: 'shop-item', textContent: o.shippingProvider }) : null),
+    link);
+}
+
+function renderShopOrders() {
+  renderShopFilters();
+  if (!shopRows) {
+    const failed = Boolean(shopRowsError);
+    busy(['shopOrders'], !failed);
+    $('shopCount').replaceChildren(failed ? '' : skelText(T('00 pesanan', '00 orders')));
+    $('shopOrders').replaceChildren(el('tbody', {}, ...(failed ? [emptyRow(1, loadError(shopRowsError))] : skeleton('row', 3))));
+    return;
+  }
+  busy(['shopOrders'], false);
+  const head = el('tr', {}, ...[T('Pesanan', 'Order'), 'Status', T('Dibayar', 'Paid'), 'Total', T('Resi', 'Tracking'), T('Percakapan', 'Conversation')].map((t) => el('th', { textContent: t })));
+  const linked = shopInfo && shopInfo.link;
+  const empty = !linked && shopFilter === 'semua' && !$('shopSearch').value.trim()
+    ? T('Belum ada pesanan. Tautkan toko di Pengaturan > Tokopedia & Shop.', 'No orders yet. Link the shop in Settings > Tokopedia & Shop.')
+    : T('Tidak ada pesanan di saringan ini.', 'No orders in this filter.');
+  $('shopOrders').replaceChildren(el('thead', {}, head), el('tbody', {}, ...(shopRows.length ? shopRows.map(shopOrderRow) : [emptyRow(6, empty)])));
+  $('shopCount').textContent = shopRows.length + T(' pesanan', shopRows.length === 1 ? ' order' : ' orders') + (shopRows.length >= 200 ? T(' (200 terbaru)', ' (latest 200)') : '');
+}
+
+$('shopSearch').addEventListener('input', () => {
+  clearTimeout(shopSearchTimer);
+  shopSearchTimer = setTimeout(() => void loadShopOrders(), 250);
+});
+
 // ---------- satu percakapan ----------
 /** Percakapan yang sedang dibuka: data terakhir dari server + pesan lama yang dimuat. */
 let conv = null;
 let convTimer = null;
 let noteTimer = null;
+/** Isian pesanan (nomor pesanan, resi, kurir): jeda simpan, kolom yang menunggu disimpan, dan yang sedang disimpan. */
+let orderTimer = null;
+const orderPending = new Set();
+const orderSaving = new Set();
+/** Simpanan isian pesanan yang sedang berjalan (Promise), atau null. Simpanan berikutnya dan "Cek resi" menunggu yang ini. */
+let orderSave = null;
+/** Percakapan pemilik orderSave. Hasil simpanan percakapan lain tidak menghentikan simpanan atau "Cek resi" di percakapan ini. */
+let orderSaveConv = null;
+/** id kolom di halaman -> [nama kolom di server, kunci di conv.order]. */
+const ORDER_INPUTS = { orderRef: ['order_ref', 'ref'], orderAwb: ['awb', 'awb'], orderCourier: ['courier', 'courier'] };
 
 async function openConv(phone) {
   if (!conv || conv.phone !== phone) {
+    // Isian pesanan yang belum tersimpan ikut percakapan yang lama. Penanda
+    // kolomnya dikosongkan: percakapan baru langsung menampilkan isiannya sendiri.
+    if (orderTimer || orderPending.size) void saveOrder();
+    orderPending.clear();
+    orderSaving.clear();
     conv = { phone, older: [], olderMore: false, key: '', first: true };
+    for (const id of Object.keys(ORDER_INPUTS)) $(id).value = '';
+    $('orderState').textContent = '';
+    $('orderStatus').hidden = true;
+    $('orderChecked').textContent = '';
+    $('orderLinks').replaceChildren();
+    $('orderHistory').replaceChildren();
     $('thread').replaceChildren(el('div', { className: 'daysep', textContent: T('memuat…', 'loading…') }));
     $('convNote').value = '';
     $('convNoteState').textContent = '';
-    $('convName').textContent = phone;
-    $('convPhone').textContent = '';
     $('convLead').replaceChildren();
+    $('convSum').hidden = true;
   }
   await pollConv();
 }
@@ -1901,9 +2495,18 @@ async function pollConv() {
   // Tab tidak terlihat: tidak perlu bertanya ke server, cukup jadwalkan lagi.
   if (!document.hidden || conv.first) {
     try {
+      const seq = conv.orderSeq || 0;
       const r = await api('leads/' + encodeURIComponent(phone));
       if (!conv || conv.phone !== phone || page !== 'chat') return;
+      // Isian pesanan disimpan atau resi dicek selama permintaan ini berjalan:
+      // data pesanan dan tahap di jawaban ini sudah basi, yang sekarang dipakai.
+      const keep = conv.order && (conv.orderBusy || orderSaving.size || (conv.orderSeq || 0) !== seq)
+        ? { order: conv.order, stage: conv.contact && conv.contact.stage } : null;
       Object.assign(conv, r);
+      if (keep) {
+        conv.order = keep.order;
+        if (conv.contact && keep.stage) conv.contact.stage = keep.stage;
+      }
       renderConv();
     } catch (e) {
       if (conv.first) {
@@ -1934,21 +2537,20 @@ function confirmOptOutResume() {
 function renderConvHead() {
   const c = conv.contact;
   const name = nameOf(c);
-  $('convName').textContent = name || c.phone;
-  $('convPhone').textContent = [name ? c.phone : '', c.waName && c.waName !== name ? 'WA: ' + c.waName : ''].filter(Boolean).join(' · ');
   $('title').textContent = name || c.phone;
   document.title = (name || c.phone) + ' · Alice AI';
-  const [holdText, holdCls] = c.hold === 'berhenti' ? [T('Minta tidak dihubungi', 'Asked not to be contacted'), 'danger']
-    : c.hold === 'admin' ? [T('Bot diam: admin membalas', 'Bot quiet: an admin replied'), 'warn']
-    : c.hold === 'tombol' ? [T('Bot dijeda di percakapan ini', 'Bot paused in this conversation'), 'warn']
-    : c.hold === 'tenang' ? [T('Bot aktif, menunggu jam tenang selesai', 'Bot active: waiting for quiet hours to end'), 'warn']
-    : [T('Bot aktif', 'Bot active'), 'ok'];
-  $('convHold').textContent = holdText + (c.needsSales ? T(' · perlu staf', ' · needs staff') : '');
-  $('convHold').className = 'chip ' + (c.needsSales ? 'danger' : holdCls);
+  // Sakelar "Bot menjawab": keadaannya ditulis di sampingnya. Klik = jeda atau nyalakan lagi.
+  const [holdText, holdCls] = c.hold === 'berhenti' ? [T('Pelanggan minta tidak dihubungi', 'The customer asked not to be contacted'), 'danger']
+    : c.hold === 'admin' ? [T('Diam, admin sedang membalas', 'Quiet, an admin is replying'), 'warn']
+    : c.hold === 'tombol' ? [T('Dijeda', 'Paused'), 'warn']
+    : c.hold === 'tenang' ? [T('Aktif, menunggu jam tenang selesai', 'Active, waiting for quiet hours to end'), 'warn']
+    : [T('Aktif', 'Active'), 'ok'];
   const off = botHeld(c.hold);
-  withIcon($('convBot'), off ? 'play' : 'pause', c.hold === 'berhenti' ? T('Nyalakan bot lagi (abaikan permintaan berhenti)', 'Turn the bot back on (ignore the stop request)')
-    : off ? T('Nyalakan bot lagi', 'Turn the bot back on') : T('Jeda bot di percakapan ini', 'Pause the bot in this conversation'));
-  $('convHandled').hidden = !c.needsSales;
+  $('convBot').setAttribute('aria-checked', String(!off));
+  $('convBot').className = 'switchbtn ' + holdCls;
+  $('convHold').textContent = holdText;
+  $('convBot').title = off ? T('Nyalakan bot lagi di percakapan ini', 'Turn the bot back on in this conversation') : T('Jeda bot di percakapan ini', 'Pause the bot in this conversation');
+  $('convNeeds').hidden = !c.needsSales;
   if ($('convStage').options.length !== STAGES.length || $('convStage').dataset.lang !== lang) {
     $('convStage').replaceChildren(...STAGES.map((s) => el('option', { value: s, textContent: stageLabel(s) })));
     $('convStage').dataset.lang = lang;
@@ -1957,15 +2559,62 @@ function renderConvHead() {
   paintStage($('convStage'));
   // Catatan yang sedang diketik tidak ditimpa oleh pembaruan berkala.
   if (document.activeElement !== $('convNote') && !noteTimer) $('convNote').value = c.note || '';
-  const facts = conv.fields.map((f) => [sentenceCase(f.label), c.lead[f.key]]).filter(([, v]) => v);
-  $('convLead').replaceChildren(...[
-    ...facts.flatMap(([k, v], i) => [i ? ' · ' : '', el('b', { textContent: k + ': ' }), v]),
-    c.summary ? el('div', { style: 'flex-basis:100%', textContent: T('Ringkasan: ', 'Summary: ') + c.summary }) : null,
-    !facts.length && !c.summary ? T('Belum ada data pelanggan yang tercatat.', 'No customer data recorded yet.') : null,
-  ].filter((x) => x !== null));
-  $('convLead').hidden = false;
+  // Data pelanggan: nomor dan nama WhatsApp, lalu isian yang sudah terisi. Isian kosong ditulis "-" supaya terlihat apa yang belum diketahui.
+  const facts = [
+    [T('Nomor', 'Number'), c.phone, 'phone'],
+    ...(c.waName && c.waName !== name ? [[T('Nama WhatsApp', 'WhatsApp name'), c.waName]] : []),
+    ...conv.fields.map((f) => [sentenceCase(f.label), c.lead[f.key] || '']),
+  ];
+  $('convLead').replaceChildren(...facts.flatMap(([k, v, cls]) => [el('dt', { textContent: k }), el('dd', { className: v ? cls || '' : 'empty', textContent: v || '-' })]));
+  $('convSum').hidden = !c.summary;
+  $('convSumText').textContent = c.summary || '';
   $('replyBlocked').hidden = c.canReply;
   $('replyText').disabled = $('replySend').disabled = !c.canReply;
+  renderConvOrder();
+}
+
+/** Nomor pesanan, resi, kurir, dan status kurir terakhir di kepala percakapan. */
+function renderConvOrder() {
+  const o = conv.order;
+  $('convOrder').hidden = !o;
+  if (!o) return;
+  // Pesanan Tokopedia & Shop yang tertaut: status, waktu bayar, dan total, di atas kolom pesanan.
+  const shop = conv.marketplace;
+  $('convShop').hidden = !shop;
+  if (shop) {
+    const [stText, stCls] = shopStatus(shop.status);
+    $('convShop').replaceChildren('Tokopedia & Shop: ', el('span', { className: 'chip' + (stCls ? ' ' + stCls : ''), textContent: stText }),
+      shop.paidTime ? ' · ' + T('dibayar ', 'paid ') + when(shop.paidTime) : '', ' · ' + shopMoney(shop.total, shop.currency));
+    $('convShop').title = shop.orderId;
+  }
+  const couriers = conv.couriers || [];
+  const sel = $('orderCourier');
+  if (sel.options.length !== couriers.length + 1 || sel.dataset.lang !== lang) {
+    const cur = sel.value;
+    sel.replaceChildren(el('option', { value: '', textContent: T('Pilih kurir', 'Choose a courier') }),
+      ...couriers.map((k) => el('option', { value: k.code, textContent: k.label })));
+    sel.dataset.lang = lang;
+    sel.value = cur;
+  }
+  // Kolom yang sedang diketik atau menunggu disimpan tidak ditimpa oleh pembaruan berkala.
+  for (const [id, [, key]] of Object.entries(ORDER_INPUTS)) {
+    if (document.activeElement !== $(id) && !orderPending.has(id) && !orderSaving.has(id)) $(id).value = o[key] || '';
+  }
+  const [text, cls] = o.error ? [T('Error: ', 'Error: ') + o.error, 'danger']
+    : o.phase === 'delivered' ? [T('Terkirim ke pelanggan: ', 'Delivered to the customer: ') + o.status, 'ok']
+    : o.phase === 'problem' ? [T('Bermasalah: ', 'Problem: ') + o.status, 'warn']
+    : o.phase === 'transit' ? [T('Dalam perjalanan: ', 'In transit: ') + o.status, 'info']
+    : o.phase === 'pending' ? [T('Menunggu kurir: ', 'Waiting for pickup: ') + o.status, '']
+    : [T('Belum dicek', 'Not checked yet'), ''];
+  $('orderStatus').textContent = text;
+  $('orderStatus').className = 'chip' + (cls ? ' ' + cls : '');
+  $('orderStatus').hidden = !o.awb;
+  $('orderChecked').textContent = o.awb && o.checkedAt ? T('dicek ', 'checked ') + clock(o.checkedAt) : '';
+  $('orderLinks').replaceChildren(...(o.links || []).map((l) => el('a', { className: 'link', href: l.url, target: '_blank', rel: 'noopener', textContent: l.label })));
+  $('orderTrack').hidden = !o.trackingEnabled;
+  $('orderOff').hidden = o.trackingEnabled;
+  $('orderHistory').replaceChildren(...(o.history || []).slice(0, 3).map((h) =>
+    el('li', { textContent: [h.date, h.desc, h.location].filter(Boolean).join(' · ') })));
 }
 
 function bubble(m, pending) {
@@ -2110,6 +2759,121 @@ $('convNote').addEventListener('input', () => {
   noteTimer = setTimeout(() => void saveNote(), 900);
 });
 $('convNote').addEventListener('blur', () => { if (noteTimer) void saveNote(); });
+
+/**
+ * Simpan isian pesanan yang berubah (hanya kolom yang berubah). Simpanan
+ * berjalan satu per satu: yang baru menunggu yang sebelumnya selesai, supaya
+ * dua simpanan untuk kolom yang sama tidak saling menyalip. Mengembalikan
+ * Promise<boolean> yang tidak pernah gagal: true = tersimpan atau tidak ada
+ * yang perlu disimpan, false = error (pesannya ditampilkan di #orderState),
+ * juga kalau simpanan sebelumnya dalam antrean error.
+ */
+function saveOrder() {
+  clearTimeout(orderTimer);
+  orderTimer = null;
+  // Percakapan bisa sudah berganti saat simpanan berjalan: pegang yang sekarang
+  // beserta isi kolomnya, karena openConv langsung mengosongkan kolom-kolom itu.
+  const cv = conv;
+  const ids = [...orderPending];
+  orderPending.clear();
+  if (!cv || !ids.length) return orderSave && orderSaveConv === cv ? orderSave : Promise.resolve(true);
+  const values = ids.map((id) => [id, id === 'orderAwb' ? $(id).value.trim().toUpperCase() : $(id).value.trim()]);
+  for (const id of ids) orderSaving.add(id);
+  cv.orderBusy = (cv.orderBusy || 0) + 1;
+  const prev = orderSave;
+  const prevConv = orderSaveConv;
+  const p = (async () => {
+    // Urutan tetap dijaga untuk semua percakapan, tetapi error simpanan milik
+    // percakapan lain tidak dihitung di sini.
+    const prevRes = prev ? await prev : true;
+    const prevOk = prevConv === cv ? prevRes : true;
+    let ok = true;
+    // Dibandingkan dengan data sesudah simpanan sebelumnya selesai. Data
+    // percakapan pertama belum datang (cv.order kosong): semua kolom yang
+    // menunggu dikirim apa adanya, tanpa perbandingan.
+    const body = {};
+    for (const [id, v] of values) {
+      const [field, key] = ORDER_INPUTS[id];
+      if (!cv.order || v !== (cv.order[key] || '')) body[field] = v;
+    }
+    if (!Object.keys(body).length) {
+      if (conv === cv && prevOk) $('orderState').textContent = '';
+    } else {
+      if (conv === cv) $('orderState').textContent = T('Menyimpan…', 'Saving…');
+      try {
+        const r = await api('leads/' + encodeURIComponent(cv.phone), { method: 'PUT', body: JSON.stringify(body) });
+        cv.order = r.order;
+        if (cv.contact) cv.contact.stage = r.stage;
+        if (conv === cv) $('orderState').textContent = T('Tersimpan.', 'Saved.');
+      } catch (e) {
+        ok = false;
+        if (conv === cv) $('orderState').textContent = e.message;
+      }
+    }
+    cv.orderBusy -= 1;
+    cv.orderSeq = (cv.orderSeq || 0) + 1;
+    // Penanda kolom milik percakapan lain (sesudah pindah) tidak disentuh.
+    if (conv === cv) for (const id of ids) orderSaving.delete(id);
+    if (conv === cv && cv.contact) renderConvHead();
+    return prevOk && ok;
+  })();
+  orderSave = p;
+  orderSaveConv = cv;
+  void p.finally(() => { if (orderSave === p) orderSave = orderSaveConv = null; });
+  return p;
+}
+for (const id of ['orderRef', 'orderAwb']) {
+  $(id).addEventListener('input', () => {
+    orderPending.add(id);
+    clearTimeout(orderTimer);
+    $('orderState').textContent = '';
+    orderTimer = setTimeout(() => void saveOrder(), 900);
+  });
+  $(id).addEventListener('blur', () => { if (orderPending.size) void saveOrder(); });
+}
+$('orderCourier').addEventListener('change', () => {
+  orderPending.add('orderCourier');
+  void saveOrder();
+});
+
+/** Bagian `order` yang berasal dari pelacakan, bukan dari isian staf. */
+const TRACK_FIELDS = ['status', 'phase', 'history', 'checkedAt', 'error', 'links', 'trackingEnabled'];
+function trackingPart(order) {
+  const out = {};
+  for (const k of TRACK_FIELDS) if (order && k in order) out[k] = order[k];
+  return out;
+}
+
+// "Cek resi": tanya status kurir sekarang; tahap bisa ikut naik ke dikirim atau selesai.
+$('orderTrack').addEventListener('click', async () => {
+  if (!conv || !conv.order) return;
+  const cv = conv;
+  $('orderTrack').disabled = true;
+  cv.orderBusy = (cv.orderBusy || 0) + 1;
+  try {
+    // Isian yang belum tersimpan atau sedang disimpan selesai dulu: yang dicek
+    // resi terbaru. Simpanan error: resi tidak dicek, pesan errornya sudah ada
+    // di #orderState.
+    // Simpanan yang berjalan untuk percakapan lain (sebelum pindah) tidak ditunggu.
+    const saved = orderTimer || orderPending.size ? saveOrder() : orderSaveConv === cv ? orderSave : null;
+    if (saved && !(await saved)) return;
+    const r = await api('leads/' + encodeURIComponent(cv.phone) + '/track', { method: 'POST' });
+    // Hanya hasil pelacakan yang diambil. Nomor pesanan, resi, dan kurir tetap
+    // dari cv.order: simpanan yang mulai selama pengecekan bisa selesai lebih
+    // dulu, dan isinya lebih baru daripada jawaban ini.
+    const { ref, awb, courier } = cv.order;
+    cv.order = { ...cv.order, ...trackingPart(r.order), ref, awb, courier };
+    if (cv.contact) cv.contact.stage = r.stage;
+    if (leadData) for (const c of leadData.rows) if (c.phone === cv.phone) c.stage = r.stage;
+    if (conv === cv && cv.contact) renderConvHead();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    cv.orderBusy -= 1;
+    cv.orderSeq = (cv.orderSeq || 0) + 1;
+    $('orderTrack').disabled = false;
+  }
+});
 
 // ---------- pertanyaan yang belum terjawab ----------
 let handoffData = null;
@@ -2377,9 +3141,9 @@ function renderAttention() {
     });
     const name = nameOf(c);
     const open = el('a', { className: 'btn', href: convPath(c.phone) }, ico('message-circle'), T('Buka percakapan', 'Open conversation'));
-    rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), textContent: name || c.phone }), name ? el('small', { textContent: c.phone }) : null),
+    rows.push(el('tr', {}, el('td', { className: 'who' }, el('a', { href: convPath(c.phone), className: name ? '' : 'phone', textContent: name || c.phone }), name ? el('small', { className: 'phone', textContent: c.phone }) : null),
       el('td', {}, el('span', { className: 'chip warn', textContent: T('Perlu staf', 'Needs staff') })),
-      el('td', { className: 'sum', textContent: c.summary || '-' }),
+      sumCell(c.summary),
       el('td', { className: 'acts' }, el('div', { className: 'acts-in' }, open, done))));
   }
   // Petunjuk satu baris di atas daftar, hanya kalau ada pelanggan yang menunggu staf.
@@ -2409,6 +3173,8 @@ const ALERT_KINDS = {
   'kiriman-gagal': () => T('Balasan gagal terkirim', 'Reply not sent'),
   llm: () => T('LLM bermasalah', 'LLM problem'),
   'bot-mati': () => T('Bot berhenti', 'Bot stopped'),
+  resi: () => T('Cek resi: saldo atau batas', 'Tracking: balance or cap'),
+  marketplace: () => T('Tokopedia & Shop: tautan toko', 'Tokopedia & Shop: shop link'),
 };
 
 /** Level baris catatan error; nilai lama di baris yang sudah tersimpan juga dikenali. */
@@ -2443,7 +3209,7 @@ function renderAlerts(r) {
   $('alerts').replaceChildren(th(T('Waktu', 'Time'), T('Jenis', 'Type'), T('Keterangan', 'Details')),
     el('tbody', {}, ...(rows.length ? rows : [emptyRow(3, T('Belum ada warning.', 'No warnings yet.'))])));
   const errs = r.errors.map((e) => el('tr', {}, el('td', { textContent: when(e.at), style: 'white-space:nowrap' }),
-    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'warn' : ''), textContent: isError(e.level) ? 'Error' : 'Warning' })),
+    el('td', {}, el('span', { className: 'chip ' + (isError(e.level) ? 'danger' : 'warn'), textContent: isError(e.level) ? 'Error' : 'Warning' })),
     el('td', { className: 'mono', textContent: e.text })));
   $('errors').replaceChildren(th(T('Waktu', 'Time'), 'Level', T('Pesan', 'Message')),
     el('tbody', {}, ...(errs.length ? errs : [emptyRow(3, T('Belum ada error yang tercatat.', 'No errors recorded yet.'))])));
@@ -2478,7 +3244,7 @@ function renderUsage() {
   // usageData null = sedang dimuat: kotak dan grafik berupa kerangka. usageData.error = gagal dimuat.
   const loading = !usageData;
   const error = (usageData && usageData.error) || '';
-  busy(['usageTiles', 'chartCost', 'chartCalls'], loading);
+  busy(['usageTiles', 'chartCost', 'chartCalls', 'resiTiles', 'chartResi'], loading);
   const u = usageData && usageData.u;
   const price = u ? u.price : { in: 0, cached: 0, out: 0 };
   const rate = u ? u.usdIdr : 0;
@@ -2492,6 +3258,8 @@ function renderUsage() {
     b.addEventListener('click', () => { if (usageRange !== r) { usageRange = r; renderUsage(); } });
     return b;
   }));
+  // Kartu cek resi memakai data dan rentang yang sama.
+  renderResi(loading, error, u && u.resi, n);
 
   // Hari terakhir = hari ini menurut peramban, atau hari data terbaru kalau zona waktu bot sudah lebih dulu.
   const raw = u ? u.days : [];
@@ -2574,6 +3342,94 @@ function renderUsage() {
   columnChart({ el: $('chartCalls'), title: T('Panggilan LLM per hari', 'LLM calls per day'),
     help: T('Jumlah panggilan ke LLM, ' + n + ' hari terakhir.', 'Number of LLM calls, last ' + n + ' days.'),
     days, series: [{ key: 'calls', label: T('Panggilan', 'Calls'), slot: 1 }] });
+}
+
+/** Teks contoh kerangka kotak dan catatan kartu cek resi (sepanjang teks aslinya). */
+const RESI_SAMPLE = {
+  counts: () => T('000 cek · otomatis 000 · manual 00', '000 checks · automatic 000 · manual 00'),
+  balance: () => T('cukup untuk ±000 cek lagi · 00 cek gratis tersisa', 'enough for about 000 more checks · 00 free checks left'),
+  note: () => T('Tarif Rp15 per cek setelah kuota gratis · saldo dibaca 14.05', 'Rate Rp15 per check after the free quota · balance read at 14:05'),
+};
+
+/**
+ * Kartu "Pemakaian dan biaya cek resi" (usage.resi dari /usage). Rentangnya sama dengan kartu LLM.
+ * Biaya = jumlah cek × tarif: batas atas, karena kuota gratis berlaku untuk seluruh akun Binderbyte
+ * (semua proyek). Sisa kuota gratis tampil terpisah, tidak dikurangkan.
+ */
+function renderResi(loading, error, r, n) {
+  const resi = r || { enabled: false, price: 0, dailyMax: 0, days: [], account: null, accountError: null };
+  $('resiOff').hidden = loading || Boolean(error) || resi.enabled;
+
+  // Hari tanpa cek diisi 0; terlama dulu (paling kiri di grafik). Hari terakhir seperti di kartu LLM.
+  const raw = resi.days;
+  const today = new Date().toLocaleDateString('en-CA');
+  const last = raw.length && raw[0].day > today ? raw[0].day : today;
+  const first = shiftDay(last, 1 - n);
+  const byDay = new Map(raw.map((d) => [d.day, d]));
+  const days = [];
+  for (let i = 0; i < n; i++) {
+    const day = shiftDay(first, i);
+    const d = byDay.get(day);
+    days.push({ day, auto: d ? d.auto : 0, manual: d ? d.manual : 0 });
+  }
+  const price = resi.price;
+  const checks = (d) => d.auto + d.manual;
+  const sum = (list) => list.reduce((a, d) => ({ auto: a.auto + d.auto, manual: a.manual + d.manual }), { auto: 0, manual: 0 });
+  const counts = (c) => int(checks(c)) + T(' cek · otomatis ', ' checks · automatic ') + int(c.auto) + ' · manual ' + int(c.manual);
+  const todaySum = sum(days.filter((d) => d.day === last));
+  const total = sum(days);
+
+  // Kotak angka: hari ini, seluruh rentang, saldo akun, dan batas harian cek otomatis.
+  const acc = resi.account;
+  let balance = [T('Tidak aktif', 'Not active'), ''];
+  if (loading) balance = ['Rp00.000', RESI_SAMPLE.balance()];
+  else if (resi.enabled && !acc) balance = [T('belum terbaca', 'not read yet'), resi.accountError || ''];
+  else if (resi.enabled && resi.accountError) {
+    // Pembacaan terakhir gagal: saldo lama tetap tampil, dengan waktunya dan pesan error-nya.
+    balance = [idr(acc.balance), T('Saldo terakhir dibaca ', 'Balance last read ') + when(acc.at) + ' · Error: ' + resi.accountError];
+  } else if (resi.enabled) {
+    balance = [idr(acc.balance), T('cukup untuk ±', 'enough for about ') + int(price > 0 ? Math.floor(acc.balance / price) : 0) +
+      T(' cek lagi · ', ' more checks · ') + int(acc.freeLeft) + T(' cek gratis tersisa', ' free checks left')];
+  }
+  const tile = (k, v, sub) => tileNode(k, v, sub, null, loading);
+  if (error) $('resiTiles').replaceChildren(el('div', { className: 'tile tile-err' }, errorNote(error)));
+  else $('resiTiles').replaceChildren(
+    tile(T('Hari ini', 'Today'), loading ? 'Rp000' : idr(checks(todaySum) * price), loading ? RESI_SAMPLE.counts() : counts(todaySum)),
+    tile(T(n + ' hari terakhir', 'Last ' + n + ' days'), loading ? 'Rp0.000' : idr(checks(total) * price), loading ? RESI_SAMPLE.counts() : counts(total)),
+    tile(T('Saldo Binderbyte', 'Binderbyte balance'), balance[0], balance[1]),
+    // TRACK_DAILY_MAX=0 (atau kurang): cek otomatis dimatikan di bot, tombol "Cek resi" tetap jalan.
+    !loading && resi.dailyMax <= 0
+      ? tile(T('Batas harian', 'Daily cap'), T('Nonaktif', 'Off'),
+        T('Cek otomatis dimatikan (TRACK_DAILY_MAX=0); tombol Cek resi tetap bisa dipakai',
+          'Automatic checks are off (TRACK_DAILY_MAX=0); the Cek resi button still works'))
+      : tile(T('Batas harian', 'Daily cap'), loading ? '000 / 000' : int(todaySum.auto) + ' / ' + int(resi.dailyMax),
+        T('cek otomatis hari ini; manual tidak dibatasi', 'automatic checks today; manual is not capped')));
+
+  // Grafik: cek otomatis dan manual bertumpuk, urutan seri tetap.
+  const host = $('chartResi');
+  columnChart({ el: host, title: T('Cek resi per hari', 'Tracking checks per day'), stacked: true, format: int, error,
+    help: T('Jumlah cek resi, ' + n + ' hari terakhir.', 'Number of tracking checks, last ' + n + ' days.'),
+    days: loading ? null : days,
+    series: [{ key: 'auto', label: T('Otomatis', 'Automatic'), slot: 1 }, { key: 'manual', label: 'Manual', slot: 2 }] });
+  if (error) return;
+  // Satu baris keterangan tarif di bawah grafik (selama dimuat: kerangka sepanjang teks biasanya).
+  const note = (content) => host.querySelector(':scope > .cb').append(el('p', { className: 'help chart-note' }, content));
+  if (loading) { note(skelText(RESI_SAMPLE.note())); return; }
+  // Saldo dibaca hari ini: jam saja; hari lain: tanggal dan jam.
+  const readAt = (at) => (new Date(at).toLocaleDateString('en-CA') === today ? clock(at) : when(at));
+  note(acc
+    ? T('Tarif ', 'Rate ') + idr(price) + T(' per cek setelah kuota gratis · saldo dibaca ', ' per check after the free quota · balance read at ') + readAt(acc.at)
+    : T('Tarif bawaan ', 'Default rate ') + idr(price) + T(' per cek setelah kuota gratis', ' per check after the free quota'));
+
+  // Tampilan "Tabel": hari dengan cek, terbaru di atas, dengan biayanya.
+  const th = (t, num) => el('th', { textContent: t, className: num ? 'num' : '' });
+  const td = (t, num) => el('td', { textContent: t, className: num ? 'num' : '' });
+  const line = (label, d) => el('tr', {}, el('td', { textContent: label, style: 'white-space:nowrap' }), td(int(d.auto), 1), td(int(d.manual), 1), td(idr(checks(d) * price), 1));
+  const rows = days.filter((d) => checks(d) > 0).reverse().map((d) => line(dayLong(d.day), d));
+  host.querySelector(':scope > .cb > .scroll').replaceChildren(el('table', { className: 'list' },
+    el('thead', {}, el('tr', {}, th(T('Tanggal', 'Date')), th(T('Otomatis', 'Automatic'), 1), th('Manual', 1), th(T('Biaya (Rp)', 'Cost (Rp)'), 1))),
+    el('tbody', {}, ...(rows.length ? rows : [emptyRow(4, T('Belum ada data', 'No data yet'))])),
+    ...(rows.length ? [el('tfoot', {}, line(T('Jumlah ' + n + ' hari', 'Total, ' + n + ' days'), total))] : [])));
 }
 
 // ---------- WhatsApp & keadaan bot ----------
@@ -2676,10 +3532,10 @@ function renderWa() {
   const code = w && !stale && w.state === 'pairing' && w.pairing_code;
   $('waCodeBox').hidden = !code;
   $('waCode').textContent = code ? w.pairing_code.replace(/^(.{4})(.{4})$/, '$1-$2') : '';
-  $('waDetail').textContent = wa && wa.pending === 'pair' ? T('Permintaan kode pairing dikirim ke bot…', 'Pairing code requested from the bot…')
-    : wa && wa.pending === 'reset' ? T('Bot sedang memutus sesi lama…', 'The bot is disconnecting the old session…')
-    : connected ? T('Tersambung sebagai ', 'Connected as ') + showPhone(w.self_phone)
-    : w && w.detail ? w.detail : '';
+  $('waDetail').replaceChildren(...(wa && wa.pending === 'pair' ? [T('Permintaan kode pairing dikirim ke bot…', 'Pairing code requested from the bot…')]
+    : wa && wa.pending === 'reset' ? [T('Bot sedang memutus sesi lama…', 'The bot is disconnecting the old session…')]
+    : connected ? [T('Tersambung sebagai ', 'Connected as '), w.self_phone ? el('span', { className: 'phone', textContent: showPhone(w.self_phone) }) : showPhone(w.self_phone)]
+    : w && w.detail ? [w.detail] : []));
   const cloud = p && p.transport === 'cloud';
   // Kode pairing hanya berguna selama belum tersambung, dan hanya di jalur Baileys.
   $('waPairBox').hidden = connected || cloud;
@@ -2748,8 +3604,12 @@ function renderStrip() {
   if (st && st.onlyNumbers) out.push(chip('warn', T('Mode uji', 'Test mode') + ' · ' + st.onlyNumbers + T(' nomor', ' numbers'), pathOf('lanjutan'), 'flask'));
   if (!state.testReady) out.push(chip('warn', T('LLM belum diatur', 'LLM not configured'), waHref, 'alert'));
   const month = state.month || { idr: 0 };
-  // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw.
-  out.push(chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#cost', 'coins'));
+  // Nominal tetap "Rp" (bukan "RP"): dibungkus .raw. Tooltip: rincian LLM dan cek resi.
+  const cost = chip('', el('span', {}, el('span', { className: 'raw', textContent: idr(month.idr) }), T(' bulan ini', ' this month')), pathOf('lanjutan') + '#cost', 'coins');
+  const llm = month.llm !== undefined ? month.llm : month.idr;
+  // Biaya cek resi = batas atas (kuota gratis belum dikurangi).
+  cost.title = 'LLM ' + idr(llm) + T(' · Cek resi maks. ', ' · Tracking up to ') + idr(month.resi || 0);
+  out.push(cost);
   // Lencana di wadahnya sendiri (di HP bergulung ke samping); tombol Coba chat di ujung kanan, di semua halaman
   // (node yang sama dipindahkan lagi).
   $('strip').replaceChildren(el('div', { className: 'strip-chips' }, ...out), $('tryBtn'));
@@ -3064,7 +3924,11 @@ function show(next, r = {}) {
   if (!KNOWLEDGE.includes(page)) closeTry();
   clearTimeout(waTimer);
   clearTimeout(convTimer);
-  if (page !== 'chat') { if (noteTimer) void saveNote(); conv = null; }
+  if (page !== 'chat') {
+    if (noteTimer) void saveNote();
+    if (orderTimer || orderPending.size) void saveOrder();
+    conv = null;
+  }
   renderMeta();
   // Halaman berdata: kerangka digambar langsung (sebelum permintaan apa pun), lalu datanya dimuat.
   // Pindah halaman dan ganti proyek memakai jalur yang sama.
@@ -3082,6 +3946,20 @@ function show(next, r = {}) {
     void loadLeads();
   }
   if (page === 'chat') void openConv(r.phone);
+  if (page === 'pesanan') {
+    shopRows = null;
+    shopRowsError = '';
+    renderShopOrders();
+    void loadShopOrders();
+    void loadShopInfo();
+  }
+  if (page === 'marketplace') {
+    readLinked();
+    shopInfo = null;
+    shopInfoError = '';
+    renderMarketplace();
+    void loadShopInfo();
+  }
   if (page === 'produk') {
     // Daftar yang sudah dimuat Beranda langsung digambar: kartu ini dekat bawah halaman, jadi tanpa isinya
     // halaman terlalu pendek dan guliran ke #questions (dari "Lihat semua") berhenti di tempat yang salah.
@@ -3176,6 +4054,13 @@ async function openProject(id) {
   waError = '';
   leadError = '';
   usageData = null;
+  shopInfo = null;
+  shopInfoError = '';
+  shopRows = null;
+  shopRowsError = '';
+  shopFilter = 'semua';
+  $('shopSearch').value = '';
+  setShopBadge();
   $('waNumber').value = '';
   clearQr();
   $('chat').replaceChildren(chatHint());
@@ -3186,6 +4071,7 @@ async function openProject(id) {
   projectDirty = false;
   $('app').hidden = false;
   $('strip').hidden = false;
+  $('helpFab').hidden = false;
   renderAll();
   // Tinggi kepala (kini dengan bilah keadaan) langsung ditulis, tidak menunggu ResizeObserver:
   // kalau menunggu, isi halaman sempat tergambar setinggi kepala lama lalu melompat turun.
@@ -3215,6 +4101,8 @@ async function route() {
     await openProject(want);
     // Angka di menu Percakapan butuh daftar pelanggan; dua halaman ini memuatnya sendiri.
     if (r.page !== 'beranda' && r.page !== 'percakapan') void loadLeads();
+    // Angka di menu Pesanan; dua halaman Tokopedia & Shop memuatnya sendiri.
+    if (r.page !== 'pesanan' && r.page !== 'marketplace') void loadShopInfo();
   }
   renderProjects();
   if (!exists) show('notfound', { text: T('Proyek “', 'Project “') + r.project + T('” tidak ditemukan. Pilih proyek lain di menu samping.', '” was not found. Choose another project in the side menu.') });
@@ -3224,6 +4112,8 @@ async function route() {
 
 function showLogin() {
   $('login').classList.add('on');
+  $('helpFab').hidden = true;
+  closeHelp();
   setTimeout(() => $('pw').focus(), 0);
 }
 
@@ -3248,12 +4138,15 @@ function renderAll() {
   renderStrip();
   setBadge();
   if (!chat.length) $('chat').replaceChildren(chatHint());
+  if (!helpHistory.length && $('helpChat').childElementCount) helpIntro();
   // Data halaman yang sudah dimuat cukup digambar ulang (mis. setelah ganti bahasa).
   if (leadData || page === 'percakapan') renderLeads();
   if (homeData || page === 'beranda') renderHome();
   if (handoffData) renderHandoffs();
   if (wa || page === 'whatsapp') renderWa();
   if (usageData || page === 'lanjutan') renderUsage();
+  if (shopInfo || page === 'marketplace') renderMarketplace();
+  if (shopRows || page === 'pesanan') renderShopOrders();
   if (conv) { conv.key = ''; renderConv(); }
   if (page) { renderMeta(); renderToc(); }
 }

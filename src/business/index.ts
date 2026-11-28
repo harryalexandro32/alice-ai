@@ -294,6 +294,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('followupClosing' in input) set('followupClosing', text(input.followupClosing, 300, 'Kalimat follow-up', true));
   if ('forbidPrices' in input) set('forbidPrices', Boolean(input.forbidPrices));
   if ('stopAfterHuman' in input) set('stopAfterHuman', Boolean(input.stopAfterHuman));
+  if ('followupAfterHuman' in input) set('followupAfterHuman', Boolean(input.followupAfterHuman));
   if ('recipients' in input) {
     if (!Array.isArray(input.recipients) || input.recipients.length > 20) throw new Error('Penerima notifikasi: maksimal 20 baris');
     const rows = input.recipients
@@ -314,7 +315,7 @@ export function validate(input: Record<string, unknown>): Partial<Editable> {
   if ('notifyRoutes' in input) {
     const raw = (input.notifyRoutes && typeof input.notifyRoutes === 'object' ? input.notifyRoutes : {}) as Record<string, unknown>;
     const routes: Partial<Record<NotifyKind, Route>> = {};
-    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati'] as const) {
+    for (const k of ['lead', 'butuh-staf', 'wa-putus', 'kiriman-dijeda', 'kiriman-gagal', 'llm', 'bot-mati', 'resi', 'marketplace'] as const) {
       const v = raw[k];
       if (v === 'owner' || v === 'staff' || v === 'both' || v === 'none') routes[k] = v;
     }

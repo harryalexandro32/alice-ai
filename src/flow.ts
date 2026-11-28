@@ -23,11 +23,14 @@ import { recipientPhones } from './notify';
 import { currentProject } from './project';
 import { deliverOutbox, salesText, type LeadPayload } from './sinks/outbox';
 import {
-  addHandoff, addMessage, contactByAddress, countInboundSince, createContact, dueDeferred, getContact, humanSeenAt, isBotOff, markHuman,
-  outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact, type MessageKind,
+  addHandoff, addMessage, contactByAddress, countInboundSince, createContact, dueDeferred, fillOrder, getContact, humanSeenAt, isBotOff,
+  markHuman, outboxAdd, pausedUntil, recentMessages, releaseToBot, setBotOff, setPause, updateContact, type Contact, type MessageKind,
+  type OrderFill, type Stage,
 } from './store';
 import { inQuiet, quietEndAfter } from './quiet';
-import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK } from './texts';
+import { onOrderRefChanged } from './tiktok';
+import { parseOrderHints } from './tracking';
+import { askMissing, handoffText, mediaAck, noDash, NON_TEXT, OPT_OUT_ACK, paceEmoji, PRAY, sameText, withoutEmoji } from './texts';
 import type { MediaKind, Quote } from './transport/types';
 
 /** `image` = path file foto atau PDF; kalau ada, `text` menjadi keterangannya. */
@@ -50,7 +53,7 @@ export function setBeforeTurn(fn: () => Promise<void>): void {
 
 /** Berkas yang sama paling banyak sekian kali per pelanggan dalam riwayat terakhirnya. */
 const MAX_SAME_FILE = 3;
-const ATTACH_FAILED = 'Mohon maaf, berkasnya belum berhasil terkirim dari sini 🙏 Tim kami yang akan mengirimkannya ya.';
+const ATTACH_FAILED = `Mohon maaf, berkasnya belum berhasil terkirim dari sini ${PRAY} Tim kami yang akan mengirimkannya ya.`;
 
 export interface Inbound {
   phone: string;
@@ -96,8 +99,9 @@ export function contactName(c: Pick<Contact, 'lead'>): string | null {
 function bareGreeting(text: string): boolean {
   return (
     text.length <= 30 &&
-    /^(p+|halo+|hallo+|hai+|hi+|hello+|helo+|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|permisi|misi|ass?alam\S*( ?wr\.? ?wb\.?| ?alaikum\S*)?|info|min|admin|kak|gan|bos|tes|test)[\s!.,?🙏]*$/i.test(
-      text.trim()
+    /^(p+|halo+|hallo+|hai+|hi+|hello+|helo+|pagi|siang|sore|malam|selamat (pagi|siang|sore|malam)|permisi|misi|ass?alam\S*( ?wr\.? ?wb\.?| ?alaikum\S*)?|info|min|admin|kak|gan|bos|tes|test)[\s!.,?]*$/i.test(
+      // "halo 🙏🏻", "pagi 😊": emoji apa pun di belakang sapaan tidak mengubahnya.
+      withoutEmoji(text).trim()
     )
   );
 }
@@ -301,6 +305,51 @@ async function recordQuestion(phone: string, question: string, at: number): Prom
   }
 }
 
+/**
+ * Catat nomor pesanan, resi, dan kurir dari pesan pelanggan. Hanya mengisi
+ * kolom yang masih kosong: isian staf dan tangkapan sebelumnya tidak ditimpa.
+ * Syarat "masih kosong" diperiksa lagi di database (fillOrder), jadi isian
+ * staf yang masuk sesaat sebelumnya juga aman. Tidak membalas. Tahap tidak
+ * diubah, kecuali nomor pesanan yang baru dicatat sama dengan pesanan dari
+ * toko Tokopedia & Shop yang ditautkan dan belum tertaut ke percakapan lain:
+ * pesanan itu lalu ditautkan ke percakapan ini, resinya diisi, dan tahapnya
+ * naik (src/tiktok.ts).
+ */
+async function captureOrder(c: Contact, text: string, at: number): Promise<Contact> {
+  const hints = parseOrderHints(text);
+  const fill: OrderFill = {};
+  if (hints.orderRef && !c.order_ref) fill.order_ref = hints.orderRef.slice(0, 60);
+  const awb = hints.awb?.slice(0, 40);
+  const awbNow = Boolean(awb && !c.awb);
+  // Tebakan kurir hanya untuk resi yang dicatat sekarang atau resi yang sama
+  // dengan yang tersimpan, bukan untuk resi lain (misalnya resi milik teman).
+  const courierNow = Boolean(hints.courier && !c.courier && (awbNow || awb === c.awb));
+  if (awbNow || courierNow) fill.awb = awb;
+  if (courierNow) fill.courier = hints.courier;
+  if (!Object.keys(fill).length) return c;
+  const updated = await fillOrder(c.phone, fill, at);
+  // Log hanya untuk kolom yang benar-benar ditulis oleh panggilan ini.
+  const wroteRef = Boolean(fill.order_ref && !c.order_ref && updated.order_ref === fill.order_ref);
+  const wroteAwb = Boolean(awbNow && updated.awb === fill.awb && updated.awb_at === at);
+  const wroteCourier = Boolean(fill.courier && !c.courier && updated.courier === fill.courier);
+  if (wroteRef) console.log(`[alur] ${c.phone}: nomor pesanan dicatat: ${fill.order_ref}`);
+  if (wroteAwb) console.log(`[alur] ${c.phone}: resi dicatat: ${fill.awb}${wroteCourier ? ` (${fill.courier})` : ''}`);
+  else if (wroteCourier) console.log(`[alur] ${c.phone}: kurir dicatat: ${fill.courier}`);
+  if (wroteRef && fill.order_ref) {
+    // Pesanan toko yang sudah masuk: tautkan sekarang, tapi hanya yang belum tertaut ke percakapan lain
+    // (nomor dari chat tidak merebut pesanan). Error di sini tidak boleh menghentikan alur chat.
+    try {
+      if (await onOrderRefChanged(c.phone, fill.order_ref, at, { byStaff: false })) {
+        console.log(`[toko] ${c.phone}: pesanan ${fill.order_ref} ditautkan dari chat`);
+        return (await getContact(c.phone)) ?? updated;
+      }
+    } catch (e) {
+      console.error(`[toko] ${c.phone}: pesanan ${fill.order_ref} tidak bisa ditautkan: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  return updated;
+}
+
 export async function handleInbound(m: Inbound): Promise<void> {
   // Pemilik mungkin baru menyimpan perubahan lewat dashboard.
   await beforeTurn();
@@ -336,6 +385,9 @@ export async function handleInbound(m: Inbound): Promise<void> {
     last_dir: 'in',
     followup_state: 'idle',
   });
+  // Nomor pesanan dan resi yang ditempel pelanggan dicatat apa pun keadaannya
+  // (juga saat ditangani admin), sebelum pemeriksaan berhenti dan jeda.
+  if (m.text?.trim()) c = await captureOrder(c, m.text, at);
 
   // Pelanggan lama yang diimpor dengan "bot diam": baru sekarang alamat chatnya diketahui.
   if (c.pending_off) {
@@ -476,7 +528,7 @@ export async function runDeferredTurn(phone: string): Promise<void> {
   }
   if (c.opted_out_at) {
     // Minta berhenti di jam tenang: jawaban tetapnya baru dikirim sekarang, sekali.
-    if (c.last_out_text !== OPT_OUT_ACK) await reply(c, OPT_OUT_ACK);
+    if (!sameText(c.last_out_text, OPT_OUT_ACK)) await reply(c, OPT_OUT_ACK);
     return;
   }
   if (await humanHolds(c.address, at)) {
@@ -547,8 +599,8 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
   if (!text && !image) {
     if (media) {
       const ack = mediaAck(media);
-      if (c.last_out_text !== ack) c = await reply(c, ack);
-    } else if (m.media !== 'stiker' && c.last_out_text !== NON_TEXT && !isNew) {
+      if (!sameText(c.last_out_text, ack)) c = await reply(c, ack);
+    } else if (m.media !== 'stiker' && !sameText(c.last_out_text, NON_TEXT) && !isNew) {
       // Jangan mengulang pemberitahuan yang sama untuk tiap pesan beruntun.
       c = await reply(c, NON_TEXT);
     }
@@ -602,6 +654,12 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
     if (rejected) {
       console.error(`[alur] ${c.phone}: balasan dibuang (${rejected})`);
       out = null;
+    }
+    if (out) {
+      // Emoji tidak di setiap pesan. Tanda lampiran "[foto:…]" bukan pesan bot.
+      // Balasan yang hanya emoji tetap terkirim (lihat paceEmoji), bukan diserahkan ke tim.
+      const spoken = history.filter((t) => t.dir === 'out' && !t.text.startsWith('[')).map((t) => t.text);
+      out = paceEmoji(out, isNew ? [c.last_out_text] : spoken);
     }
     if (!out) {
       // Tanpa jawaban dari LLM: minta data yang kurang, atau serahkan ke manusia.
@@ -702,13 +760,25 @@ async function respond(c: Contact, m: Inbound, stored: string, isNew: boolean, a
 }
 
 /**
+ * Tahap prospek yang masih terbuka untuk pengingat setelah admin membalas:
+ * tim sudah menghubungi, tapi belum ada pembayaran, kiriman, atau penutupan.
+ * "Link terkirim" sengaja tidak termasuk: tanpa data pesanan dari toko, kita
+ * tidak tahu apakah pelanggan sudah membeli lewat link itu, dan pengingat ke
+ * orang yang sudah membayar terasa mengganggu.
+ */
+export function openForHumanFollowup(stage: Stage): boolean {
+  return stage === 'dihubungi' || stage === 'menunggu';
+}
+
+/**
  * Manusia mengambil alih chat ini: bot mundur (jeda + tanda "admin membalas"),
- * pesannya dicatat sebagai pesan manusia, follow-up yang menunggu batal, tanda
+ * pesannya dicatat sebagai pesan manusia, follow-up bot yang menunggu batal, tanda
  * "perlu staf" lepas (staf sudah menjawab), dan lead yang masih "baru" atau
- * "menunggu" (tim) pindah ke "dihubungi". Dipakai balasan dari HP
- * (handleHumanReply) dan dari dashboard, supaya keduanya selalu sama persis.
- * Mengembalikan kontak dan id pesan yang dicatat, atau null kalau alamat ini
- * belum dikenal.
+ * "menunggu" (tim) pindah ke "dihubungi". Kalau `followupAfterHuman` menyala dan
+ * tahapnya masih terbuka, pengingat setelah admin dijadwalkan (followup.ts).
+ * Dipakai balasan dari HP (handleHumanReply) dan dari dashboard, supaya
+ * keduanya selalu sama persis. Mengembalikan kontak dan id pesan yang dicatat,
+ * atau null kalau alamat ini belum dikenal.
  */
 export async function applyHumanReply(
   address: string, text: string, at: number, kind?: MessageKind
@@ -718,10 +788,13 @@ export async function applyHumanReply(
   const c = await contactByAddress(address);
   if (!c) return null;
   const messageId = await addMessage(c.phone, 'human', text || '[bukan teks]', at, null, kind);
-  // Balasan yang menunggu jam tenang batal: manusia sudah menjawabnya.
+  const stage: Stage = c.stage === 'baru' || c.stage === 'menunggu' ? 'dihubungi' : c.stage;
+  // Balasan yang menunggu jam tenang batal: manusia sudah menjawabnya. Setiap
+  // pesan admin menjadwalkan ulang pengingatnya dari pesan admin yang terbaru.
   const contact = await updateContact(c.phone, {
-    last_dir: 'human', followup_state: 'idle', deferred_until: null, needs_sales: 0,
-    ...(c.stage === 'baru' || c.stage === 'menunggu' ? { stage: 'dihubungi' as const } : {}),
+    last_dir: 'human', deferred_until: null, needs_sales: 0,
+    followup_state: biz.followupAfterHuman && openForHumanFollowup(stage) ? 'pending' : 'idle',
+    ...(stage !== c.stage ? { stage } : {}),
   });
   return { contact, messageId };
 }

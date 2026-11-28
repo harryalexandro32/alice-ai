@@ -211,6 +211,9 @@ main { min-width: 0; }
 .content { padding: 20px 32px 70px; max-width: 1180px; }
 /* Halaman percakapan memakai lebar lebih (dua kolom). */
 main:has(section[data-page="chat"].on) .content { max-width: 1400px; }
+/* Daftar percakapan tidak punya daftar "Di halaman ini", jadi tabelnya memakai lebar itu juga
+   (sama dengan lebar total halaman yang punya daftar: 1180 + 24 + 200). */
+main:has(section[data-page="percakapan"].on) .content { max-width: 1404px; }
 section[data-page] { display: none; }
 section[data-page].on { display: block; }
 
@@ -234,6 +237,8 @@ a.chip:hover { filter: brightness(.97); }
 .card > .ch > .help, .card > .ch > div > .help { font-size: 13px; margin-top: 2px; }
 .help { color: var(--muted); margin: 0; }
 .cb > .help { margin-bottom: 14px; }
+/* Keterangan di atas tabel "Perlu perhatian": berjarak dari bingkai tabelnya. */
+.attention-body > .help { margin-bottom: 12px; }
 .cardfoot { border-top: 1px solid var(--line); background: var(--surface2); padding: 10px 16px; border-radius: 0 0 var(--radius) var(--radius); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 13px; }
 /* Teks biasa di kaki kartu: satu butir flex, jadi kata tebal di dalamnya tetap sebaris. */
 .cardfoot > .note { display: inline; white-space: normal; margin: 0; min-width: 0; }
@@ -290,14 +295,24 @@ div.sub { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
    bergulung di dalam kotaknya dan kepalanya tetap terlihat; tabel pendek tidak berubah. */
 .scroll { overflow: auto; max-height: calc(100vh - var(--chrome-h) - 32px); max-height: calc(100dvh - var(--chrome-h) - 32px); }
 table { width: 100%; border-collapse: collapse; }
-table.list th, table.list td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-table.list th { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--line); white-space: nowrap; }
-/* Kepala tabel menempel di atas kotak .scroll; z-index di atas isian dan tombol di sel. Dengan border-collapse: collapse
-   garis bawah th tidak ikut menempel, jadi garisnya digambar dengan box-shadow (padding +1px menggantikan garis yang dihapus). */
-table.list thead th { position: sticky; top: 0; z-index: 2; border-bottom: 0; padding-bottom: 11px; box-shadow: inset 0 -1px 0 var(--line); }
-table.list tr:last-child td { border-bottom: 0; }
+/* Semua tabel memakai gaya yang sama dengan tabel isian (table.grid, di bawah): bingkai bersudut bulat di wadah .scroll,
+   kepala abu-abu, dan garis tipis di antara baris dan kolom. Bingkainya di wadah, bukan di tabel: wadah memotong isinya
+   di sudut bulat, dan tabel yang lebih lebar dari wadahnya tidak memotong garis bingkai kanan dan bawah. */
+.scroll:has(> table.list, > table.grid) { border: 1px solid var(--line); border-radius: var(--radius); }
+table.list { border-collapse: separate; border-spacing: 0; }
+table.list th, table.list td { text-align: left; padding: 10px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+table.list tr > :last-child { border-right: 0; }
+table.list th { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--muted); white-space: nowrap; }
+/* Kepala tabel menempel di atas kotak .scroll; z-index di atas isian dan tombol di sel. */
+table.list thead th { position: sticky; top: 0; z-index: 2; padding: 7px 10px; background: var(--surface3); border-bottom-color: var(--line); }
+table.list tbody tr:last-child td { border-bottom: 0; }
+/* Judul kolom yang bisa diurutkan (tabel Percakapan): tombol polos seukuran teks judul; panah hanya di kolom yang aktif. */
+table.list th .sorthd { display: inline-flex; align-items: center; gap: 4px; height: auto; line-height: inherit; vertical-align: top; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; border-radius: 3px; }
+table.list th .sorthd:hover, table.list th .sorthd.on { color: var(--ink); }
+table.list th .sorthd .i { width: 12px; height: 12px; vertical-align: 0; }
+table.list th .sorthd:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--focus); }
 table.list td.num, table.list th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-table.list tfoot td { font-weight: 600; background: var(--surface2); border-top: 1px solid var(--line); }
+table.list tfoot td { font-weight: 600; background: var(--surface2); border-top: 1px solid var(--line); border-bottom: 0; }
 table.list td.acts { white-space: nowrap; text-align: right; width: 1%; }
 table.list a { color: var(--blue); text-decoration: none; }
 table.list a:hover { text-decoration: underline; }
@@ -310,7 +325,7 @@ td.who small { display: block; color: var(--muted); }
 /* tabel isian: tiap sel adalah kotak isian, seperti lembar kerja */
 /* table-layout: fixed: lebar kolom dari CSS, bukan dari isi, jadi tabel tidak melebar melewati kartunya.
    Wadah .scroll baru bergulung ke samping di layar sempit (lihat min-width di bagian HP). */
-table.grid { border: 1px solid var(--line); border-radius: var(--radius); border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+table.grid { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 table.grid th, table.grid td { border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); padding: 0; vertical-align: middle; }
 table.grid tr > :last-child { border-right: 0; }
 table.grid tbody tr:last-child td { border-bottom: 0; }
@@ -455,7 +470,7 @@ span.skel { display: block; height: 14px; border-radius: var(--radius); }
   .skel, .meter.skel, .skel-text { animation: none; background: var(--skel); }
 }
 /* Baris tabel kerangka: tepat 40 px. Baris pertanyaan kerangka: tepat 48 px. */
-table.list tr.skel-row td { height: 40px; padding: 0 12px; vertical-align: middle; border-bottom: 0; }
+table.list tr.skel-row td { height: 40px; padding: 0 10px; vertical-align: middle; border-bottom: 0; }
 .skel-qrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 48px; border-bottom: 1px solid var(--line-soft); }
 .skel-qrow:last-child { border-bottom: 0; }
 /* Isi kartu yang berisi kerangka tidak menyusut di bawah ukuran kerangkanya, juga setelah datanya datang,
@@ -512,8 +527,14 @@ select.stagesel option { background-color: var(--field); color: var(--ink); font
 #attention .acts-in { display: inline-flex; gap: 6px; }
 /* Tombol "Buka chat" adalah tautan di dalam tabel: tetap berteks putih, tidak ikut warna tautan tabel. */
 #attention a.btn, :root[data-theme=dark] #attention a.btn { color: var(--on-blue); text-decoration: none; }
-td.sum { max-width: 340px; min-width: 200px; color: var(--ink2); }
+/* Ringkasan di tabel: teks sekunder (lebih kecil dan pudar), paling banyak 3 baris. Teks lengkapnya ada di
+   tooltip dan di panel percakapan. */
+td.sum { max-width: 340px; min-width: 220px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+td.sum .clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
 td.mono { font-family: var(--font-mono); font-size: 12px; word-break: break-word; }
+/* Nomor telepon: huruf mono, supaya angkanya rata dan mudah dibaca per digit. Geist Mono tampak lebih besar
+   dari Inter pada ukuran yang sama, jadi sedikit diperkecil. */
+.phone { font-family: var(--font-mono); font-size: .92em; font-variant-numeric: tabular-nums; }
 tr.stale td { background: var(--danger-soft); }
 .note-ico { cursor: help; }
 /* Halaman percakapan: di layar lebar chat di kiri, data pelanggan di kanan; di layar sempit bertumpuk (data dulu). */
@@ -521,13 +542,63 @@ tr.stale td { background: var(--danger-soft); }
 .convgrid > .card { margin-bottom: 0; }
 @media (min-width: 1100px) {
   .convgrid { grid-template-columns: minmax(0, 1fr) 380px; }
-  .convgrid > .convhead { order: 2; position: sticky; top: calc(var(--chrome-h, 89px) + 16px); }
+  .convgrid > .convhead { order: 2; position: sticky; top: calc(var(--chrome-h, 89px) + 16px); max-height: calc(100vh - var(--chrome-h, 89px) - 32px); overflow-y: auto; }
   .convgrid > .card:not(.convhead) { order: 1; }
   .convgrid .thread { max-height: calc(100vh - var(--chrome-h, 89px) - 260px); min-height: 360px; }
 }
-.convtop { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.convwho { flex: 1; min-width: 180px; font-size: 16px; }
-.convctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+/* Panel data pelanggan: bagian bertumpuk (.cp-sec) yang dipisah garis tipis. */
+.cp-sec { padding: 16px; }
+.cp-sec + .cp-sec { border-top: 1px solid var(--line); }
+.cp-h { font-size: 13px; line-height: 20px; font-weight: 600; margin: 0 0 10px; color: var(--ink); }
+.cp-k { font-size: 13px; color: var(--muted); }
+/* Baris label dan nilai (Tahap, Bot menjawab). */
+.cp-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 12px; }
+.cp-row + .cp-row { margin-top: 10px; }
+.cp-row select { width: 100%; }
+/* "Menunggu staf": kotak warning di atas panel, dengan tombolnya sendiri. */
+.cp-alert { background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; font-size: 13px; }
+.cp-alert p { margin: 0 0 10px; color: var(--ink2); }
+.cp-alert .cp-alert-t { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--warn); font-weight: 600; }
+/* Sakelar bot sebagai tombol (role=switch): jalur seperti .switch, keadaannya ditulis di samping dengan warna nada. */
+.switchbtn { display: inline-flex; align-items: center; gap: 8px; height: auto; min-height: var(--control-h); padding: 0; border: 0; background: none; cursor: pointer; text-align: left; line-height: 1.35; font-size: 13px; }
+.switchbtn .track { position: relative; width: 34px; height: 18px; flex: none; border-radius: 99px; background: var(--off); transition: background-color .15s; }
+.switchbtn .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--field); transition: left .15s; }
+.switchbtn[aria-checked=true] .track { background: var(--ok); }
+.switchbtn[aria-checked=true] .track::after { left: 18px; }
+.switchbtn.ok { color: var(--ok); }
+.switchbtn.warn { color: var(--warn); }
+.switchbtn.danger { color: var(--danger); }
+.switchbtn:focus-visible { outline: 0; }
+.switchbtn:focus-visible .track { box-shadow: 0 0 0 3px var(--focus); }
+.switchbtn:disabled { cursor: default; opacity: .6; }
+/* Data pelanggan: daftar label dan nilai; ringkasan di kotak sendiri di bawahnya. */
+.cp-dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 13px; }
+.cp-dl dt { color: var(--muted); }
+.cp-dl dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.cp-dl dd.empty { color: var(--faint); }
+.cp-sum { margin-top: 14px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface2); border: 1px solid var(--line-soft); }
+.cp-sum p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink2); }
+label.f.cp-f { margin: 0; }
+.cp-f textarea { display: block; }
+.cp-f > span.cp-h { margin-bottom: 8px; }
+.convhead label.f > small:empty { display: none; }
+/* Label isian di panel lebih ringan dari judul bagian, supaya judul bagian tetap paling menonjol. */
+.convhead label.f > span:not(.cp-h) { font-weight: 500; color: var(--muted); }
+/* Pesanan dan resi. */
+.order .row { gap: 10px; }
+.order label.f { margin-bottom: 10px; min-width: 0; }
+.order input, .order select { min-width: 0; }
+.order > small.help { display: block; margin: -4px 0 8px; }
+.order > small.help:empty { display: none; }
+.order-track { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.order-track .chip { white-space: normal; height: auto; min-height: 22px; padding: 2px 6px; }
+.order-track .help { font-size: 12px; }
+.order-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 0; font-size: 13px; }
+.order-links:empty { display: none; }
+.order > .help { margin-top: 8px; font-size: 13px; }
+.order-hist { list-style: none; margin: 8px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); font-size: 12px; line-height: 1.5; color: var(--muted); }
+.order-hist li + li { margin-top: 4px; }
+.order-hist:empty { display: none; }
 .thread { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; min-height: 200px; overflow-y: auto; padding: 12px; background: var(--surface3); border: 1px solid var(--line); border-radius: var(--radius); }
 .bubble { max-width: 78%; padding: 7px 11px 5px; border-radius: 10px; white-space: pre-wrap; word-break: break-word; border: 1px solid var(--line-soft); }
 .bubble.in { align-self: flex-start; background: var(--bubble-in); }
@@ -543,6 +614,8 @@ tr.stale td { background: var(--danger-soft); }
 .bubble .quote span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--muted); }
 .daysep { align-self: center; font-size: 12px; color: var(--muted); padding: 2px 8px; background: var(--card); border-radius: var(--radius-sm); border: 1px solid var(--line-soft); }
 .replybox { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
+/* Keterangan di bawah kotak balasan: berjarak dari kotaknya. */
+.replybox ~ .help { margin-top: 10px; font-size: 13px; }
 .replybox textarea { flex: 1; }
 .qitem { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; background: var(--surface2); }
 .qitem .q { font-weight: 600; white-space: pre-wrap; word-break: break-word; }
@@ -603,8 +676,34 @@ tr.stale td { background: var(--danger-soft); }
 .has-savebar .content { padding-bottom: calc(var(--savebar-h) + 40px); }
 .has-savebar .toast { bottom: calc(var(--savebar-h) + 16px); }
 
+/* ---- bantuan ---- */
+/* Tombol bulat di kanan bawah; naik bersama bilah simpan. Kabar singkat (toast) bergeser ke kirinya. */
+.help-fab { position: fixed; right: 20px; bottom: 20px; z-index: 17; width: 48px; height: 48px; padding: 0; border-radius: 50%; border: 0;
+  background: var(--blue); color: var(--on-blue); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .22); transition: transform .15s, background-color .15s, bottom .2s; }
+.help-fab .i { width: 24px; height: 24px; }
+.help-fab:hover { background: color-mix(in srgb, var(--blue) 90%, var(--bg)); transform: translateY(-1px); }
+.help-fab:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--focus), 0 6px 20px rgba(0, 0, 0, .22); }
+.has-savebar .help-fab { bottom: calc(var(--savebar-h) + 16px); }
+.help-tabs { flex: none; }
+.help-tabs button .i { width: 14px; height: 14px; }
+/* Pertanyaan contoh di awal percakapan bantuan: tombol garis yang membungkus. */
+.help-sug { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 100%; align-self: center; }
+.help-sug button { height: auto; min-height: var(--control-h-sm); padding: 5px 10px; font-size: 12px; line-height: 1.35; white-space: normal; text-align: left; }
+/* Tombol "Buka halaman" di bawah jawaban. */
+.msg .goto { display: inline-flex; margin-top: 8px; }
+/* Tab Panduan: bantuan.md yang digambar app.js (renderMd) di kotak yang bergulung. */
+.kb { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); padding: 4px 16px 16px; font-size: 13px; line-height: 1.55; }
+.kb h1 { font-size: 17px; margin: 14px 0 6px; }
+.kb h2 { font-size: 14px; font-weight: 700; margin: 20px 0 6px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.kb h3 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+.kb p { margin: 6px 0; }
+.kb ul { margin: 4px 0; padding-left: 18px; }
+.kb li { margin: 3px 0; }
+.kb code { font-size: 11px; }
+
 /* ---- lapisan ---- */
-.toast { position: fixed; right: 20px; bottom: 20px; background: var(--inverse); color: #fff; padding: 10px 16px; border-radius: var(--radius); opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; max-width: min(360px, calc(100vw - 40px)); z-index: 30; }
+.toast { position: fixed; right: 84px; bottom: 20px; background: var(--inverse); color: #fff; padding: 10px 16px; border-radius: var(--radius); opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; max-width: min(360px, calc(100vw - 104px)); z-index: 30; }
 .toast.on { opacity: 1; transform: none; }
 .toast.err { background: var(--danger-solid); }
 .login { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
@@ -708,7 +807,7 @@ div.sub.sub-first { margin-top: 0; }
   .qs-foot { display: none; }
   .bubble { max-width: 90%; }
   /* "Perlu perhatian" di HP: tiap baris membungkus, tombolnya tidak tersembunyi di kanan. */
-  #attention tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+  #attention tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
   #attention tbody tr:last-child { border-bottom: 0; }
   #attention td { border: 0; padding: 0; }
   #attention td.sum { flex-basis: 100%; min-width: 0; max-width: none; }
@@ -735,3 +834,19 @@ div.sub.sub-first { margin-top: 0; }
   .savebar-in .btn { flex: 1; }
   .tile { padding: 14px; }
 }
+
+/* ---------- Tokopedia & Shop: tautan toko, halaman Pesanan, baris pesanan di percakapan ---------- */
+.mk-url { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.mk-url .cp-k { min-width: 112px; }
+.mk-url code { overflow-wrap: anywhere; }
+.mk-facts { margin: 12px 0; }
+.mk-code { margin: 8px 0 12px; }
+.mk-code .help { margin: 0 0 6px; }
+.mk-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mk-code-row input { flex: 1 1 220px; min-width: 0; max-width: 360px; }
+.shop-id { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.shop-item { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.shop-link { display: flex; gap: 6px; align-items: center; }
+.shop-link input { width: 150px; }
+.shop-orders td.who .btn { margin-top: 4px; }
+.cp-shop { margin: 0 0 10px; font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }

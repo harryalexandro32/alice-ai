@@ -83,6 +83,21 @@ const base = {
   llmPriceCached: num('LLM_PRICE_CACHED', 0.006),
   llmPriceOut: num('LLM_PRICE_OUT', 1.2),
   usdIdr: num('USD_IDR', 16_500),
+  // Pelacakan resi lewat Binderbyte (opsional). Kosong = tanpa cek status otomatis.
+  binderbyteKey: str('BINDERBYTE_API_KEY'),
+  // Paling banyak sekian cek resi otomatis per proyek per hari (tombol "Cek resi" tidak dihitung).
+  trackDailyMax: num('TRACK_DAILY_MAX', 500),
+  // Tarif Rp per cek resi sesudah kuota gratis, kalau tarif dari akun Binderbyte belum terbaca.
+  trackPriceIdr: num('TRACK_PRICE_IDR', 15),
+  // Warning ke pemilik kalau kuota gratis habis dan saldo Binderbyte di bawah sekian Rupiah.
+  trackBalanceMinIdr: num('TRACK_BALANCE_MIN_IDR', 3000),
+  // Tokopedia & Shop (aplikasi di TikTok Shop Partner Center, lihat src/tiktok.ts).
+  // Kosong = fitur mati; halaman Pengaturan > Tokopedia & Shop menjelaskan cara menyalakannya.
+  tiktokAppKey: str('TIKTOK_APP_KEY'),
+  tiktokAppSecret: str('TIKTOK_APP_SECRET'),
+  tiktokServiceId: str('TIKTOK_SERVICE_ID'),
+  // Alamat publik server ini: dasar alamat callback izin (/tiktok/auth) dan webhook (/tiktok/webhook).
+  publicBaseUrl: str('PUBLIC_BASE_URL', 'https://alice-api.lukicenturi.com').replace(/\/+$/, ''),
 
   // Follow-up dikirim setelah pelanggan diam selama waktu yang diacak di antara
   // dua angka ini (seperti jeda balasan), supaya tidak selalu tepat di jam yang sama.

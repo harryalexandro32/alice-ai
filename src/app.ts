@@ -29,6 +29,7 @@ import { setLlmProblemListener, setUsageRecorder } from './llm/provider';
 import { setGuardListener } from './transport/sendguard';
 import { addUsage, dueDeferred, nextDeferredAt } from './store';
 import { noDash } from './texts';
+import { runTracking } from './tracking';
 import type { Transport, TransportInbound } from './transport/types';
 
 /**
@@ -233,7 +234,7 @@ export async function startApp(raw: Transport): Promise<void> {
   // Notifikasi ke sales dan kabar "butuh staf": hanya antre (lihat makeWaSender).
   const toSales = makeSalesNotifier(transport);
   setSalesNotifier(toSales);
-  // Pesan tes dari Pengaturan > Notifikasi: ke satu nomor, seperti kabar lain.
+  // Pesan tes dari Pengaturan > Notifikasi dan warning yang diantre dashboard: ke satu nomor, seperti kabar lain.
   setTestSender(makeWaSender(transport));
   // Balasan staf dari dashboard: isinya apa adanya; mikir singkat lalu mengetik
   // sesuai panjangnya, lalu lewat pengaman nomor di transport.
@@ -300,7 +301,15 @@ export async function startApp(raw: Transport): Promise<void> {
       .finally(() => (replying = false));
   }, REPLY_POLL_MS);
 
+  // Putaran berkala tidak pernah tumpang tindih: satu putaran bisa lebih lama
+  // dari 5 menit kalau LLM atau WhatsApp lambat.
+  let ticking = false;
   const tick = async () => {
+    if (ticking) {
+      console.log('[app] putaran sebelumnya masih jalan, dilewat');
+      return;
+    }
+    ticking = true;
     try {
       await reload(true);
       await runFollowups((to, text) =>
@@ -314,9 +323,27 @@ export async function startApp(raw: Transport): Promise<void> {
       await runDueDeferred();
     } catch (e) {
       console.error('[app] putaran berkala gagal:', e instanceof Error ? e.message : e);
+    } finally {
+      ticking = false;
     }
   };
   setInterval(() => void tick(), 5 * MINUTE);
+
+  // Cek resi punya putaran sendiri: Binderbyte bisa lambat (20 resi x 15
+  // detik), dan itu tidak boleh menunda follow-up atau balasan yang ditunda.
+  // Tiap resi paling sering sekali per 30 menit (diatur runTracking).
+  let tracking = false;
+  setInterval(() => {
+    if (tracking) {
+      console.log('[resi] putaran sebelumnya masih jalan, dilewat');
+      return;
+    }
+    tracking = true;
+    void runTracking()
+      .catch((e) => console.error('[resi] putaran gagal:', e instanceof Error ? e.message : e))
+      .finally(() => (tracking = false));
+  }, 5 * MINUTE);
+
   // Balasan yang tertunda sebelum bot dinyalakan ulang juga dijadwalkan.
   void scheduleDeferred().catch((e) => console.error('[jam tenang] jadwal gagal:', e instanceof Error ? e.message : e));
 }

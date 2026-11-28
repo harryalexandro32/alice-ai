@@ -1,21 +1,26 @@
 /**
- * Follow-up: satu pengingat kalau pelanggan diam setelah bot membalas.
+ * Follow-up: satu pengingat kalau pelanggan diam. Ada dua pemicu:
+ * - bot membalas atau bertanya, lalu pelanggan diam (`last_dir = 'out'`);
+ * - admin manusia membalas, lalu pelanggan diam (`last_dir = 'human'`,
+ *   `followupAfterHuman`). Jadwalnya dihitung dari pesan admin terakhir, dan
+ *   sesudah pengingat itu bot tetap tidak ikut campur di chat tersebut.
  *
  * Ini SATU-SATUNYA pesan yang bot kirim tanpa dipicu pesan masuk, jadi di
  * sinilah risiko terbesar — kelihatan seperti spam, atau (di Cloud API) jatuh
  * di luar jendela layanan 24 jam dan ditolak. Karena itu aturannya sempit:
  * sekali per masa diam, ada batas seumur nomor, hanya di jam wajar, dan batal
- * begitu pelanggan atau manusia bicara.
+ * begitu pelanggan bicara.
  */
 
 import { followupBrain } from './brain';
 import { llmEnabled } from './llm/provider';
 import { cfg, HOUR, MINUTE } from './config';
 import { localMinutes, now } from './clock';
-import { contactName, humanHolds, missingFields, projectPaused, type Sender } from './flow';
+import { contactName, humanHolds, missingFields, openForHumanFollowup, projectPaused, type Sender } from './flow';
+import { biz } from './business';
 import { inQuiet, quietEndAfter, quietStartBefore } from './quiet';
-import { addMessage, followupCandidates, recentMessages, updateContact, type Contact } from './store';
-import { followupText, noDash } from './texts';
+import { addMessage, followupCandidates, humanSeenAt, isBotOff, recentMessages, updateContact, type Contact } from './store';
+import { followupEmoji, followupText, humanFollowupText, noDash } from './texts';
 
 /** Menulis follow-up untuk satu pelanggan; null = pakai kalimat tetap. */
 export type FollowupWriter = (c: Contact, hours: number) => Promise<string | null>;
@@ -91,6 +96,56 @@ function windowDueAt(lastInbound: number, key: string): number {
   return due - (m >= end ? m - end : m + 24 * 60 - end) * MINUTE - 5 * MINUTE;
 }
 
+/** Batas yang sama untuk kedua pemicu: terlambat, jendela 24 jam, batas per nomor. */
+function limitSkip(c: Contact, t: number, due: number): string | null {
+  return t > due + GRACE_MS
+    ? 'sudah terlalu lama lewat'
+    : cfg.followupMaxHours && t > c.last_inbound_at + cfg.followupMaxHours * HOUR
+      ? 'di luar jendela 24 jam'
+      : c.followup_total >= cfg.followupMaxTotal
+        ? 'batas follow-up nomor ini tercapai'
+        : null;
+}
+
+/** Kenapa follow-up setelah bot membalas dilewat; null = kirim. */
+async function botSkip(c: Contact, t: number, due: number): Promise<string | null> {
+  if (c.opted_out_at) return 'pelanggan minta tidak dihubungi';
+  if (await humanHolds(c.address, t)) return 'sedang ditangani manusia';
+  return limitSkip(c, t, due);
+}
+
+/**
+ * Kenapa pengingat setelah admin membalas dilewat; null = kirim. Penahan
+ * "admin membalas" (humanHolds) sengaja tidak dipakai: justru keadaan itulah
+ * yang diingatkan. Tombol "Bot menjawab" yang dimatikan tetap menahannya.
+ */
+async function humanSkip(c: Contact, t: number, due: number, humanAt: number): Promise<string | null> {
+  if (!humanAt) return 'bot sudah dinyalakan lagi di percakapan ini';
+  if (c.opted_out_at) return 'pelanggan minta tidak dihubungi';
+  if (!biz.followupAfterHuman) return 'follow-up setelah admin dimatikan';
+  if (await isBotOff(c.address)) return 'bot dimatikan di percakapan ini';
+  if (!openForHumanFollowup(c.stage)) return 'tahap prospek sudah lewat';
+  return limitSkip(c, t, due);
+}
+
+/**
+ * Follow-up setelah bot membalas: ditulis untuk percakapan ini kalau bisa;
+ * kalau LLM mati atau jawabannya ditolak pagar, kalimat tetap yang dipakai —
+ * follow-up tidak boleh batal. Tulisan LLM ditutup dengan tepat satu emoji,
+ * seperti kalimat tetapnya.
+ */
+async function botText(c: Contact, t: number): Promise<string> {
+  let text = followupText(contactName(c), missingFields(c));
+  try {
+    const written = await writer(c, (t - c.last_inbound_at) / HOUR);
+    // Hanya tulisan LLM yang emojinya dipindah ke akhir; kalimat tetap dibiarkan apa adanya.
+    text = written ? followupEmoji(noDash(written)) : noDash(text);
+  } catch (e) {
+    console.error(`[follow-up] ${c.phone}: penulis gagal, pakai kalimat tetap: ${e instanceof Error ? e.message : e}`);
+  }
+  return text;
+}
+
 /**
  * Kirim follow-up yang sudah waktunya, satu per satu. Di bot sungguhan (app.ts)
  * `send` memakai irama manusia: mikir singkat, "sedang mengetik…" sesuai
@@ -105,36 +160,22 @@ export async function runFollowups(send: Sender): Promise<number> {
   let sent = 0;
 
   for (const c of await followupCandidates()) {
-    const due = followupDueAt(c.last_inbound_at, c.phone);
+    // Pengingat setelah admin: dijadwalkan dari pesan admin terakhir. 0 = tanda
+    // "admin membalas" sudah dilepas (bot dinyalakan lagi), jadi langsung dilewat.
+    const human = c.last_dir === 'human';
+    const humanAt = human ? await humanSeenAt(c.address) : 0;
+    const due = human ? (humanAt ? followupDueAt(humanAt, c.phone) : 0) : followupDueAt(c.last_inbound_at, c.phone);
     if (t < due) continue;
 
-    const skip =
-      c.opted_out_at
-        ? 'pelanggan minta tidak dihubungi'
-        : (await humanHolds(c.address, t))
-          ? 'sedang ditangani manusia'
-          : t > due + GRACE_MS
-            ? 'sudah terlalu lama lewat'
-            : cfg.followupMaxHours && t > c.last_inbound_at + cfg.followupMaxHours * HOUR
-              ? 'di luar jendela 24 jam'
-              : c.followup_total >= cfg.followupMaxTotal
-                ? 'batas follow-up nomor ini tercapai'
-                : null;
+    const skip = human ? await humanSkip(c, t, due, humanAt) : await botSkip(c, t, due);
     if (skip) {
       console.log(`[follow-up] ${c.phone}: dilewat (${skip})`);
       await updateContact(c.phone, { followup_state: 'idle' });
       continue;
     }
 
-    // Ditulis untuk percakapan ini kalau bisa; kalau LLM mati atau jawabannya
-    // ditolak pagar, kalimat tetap yang dipakai — follow-up tidak boleh batal.
-    let text = followupText(contactName(c), missingFields(c));
-    try {
-      text = (await writer(c, (t - c.last_inbound_at) / HOUR)) ?? text;
-      text = noDash(text);
-    } catch (e) {
-      console.error(`[follow-up] ${c.phone}: penulis gagal, pakai kalimat tetap: ${e instanceof Error ? e.message : e}`);
-    }
+    // Setelah admin: kalimat tetap, tanpa LLM, karena admin yang memegang percakapannya.
+    const text = human ? noDash(humanFollowupText(contactName(c))) : await botText(c, t);
     try {
       await send({ phone: c.phone, address: c.address }, text);
     } catch (e) {
@@ -149,7 +190,7 @@ export async function runFollowups(send: Sender): Promise<number> {
       followup_state: 'idle',
       followup_total: c.followup_total + 1,
     });
-    console.log(`[follow-up] ${c.phone}: terkirim`);
+    console.log(`[follow-up] ${c.phone}: terkirim${human ? ' (setelah admin)' : ''}`);
     sent += 1;
   }
   return sent;

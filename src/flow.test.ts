@@ -18,12 +18,13 @@ import { recipientsFor, waTargets } from './notify';
 import { missingFields, quoteNote, greetingFor, setGreetingRandom, timeOpener, handleHumanReply, handleInbound, holdReason, isOptOut, runDeferred, markHandled, setBrain, setSender, switchBot } from './flow';
 import { plausibleName } from './names';
 import { followupDueAt, runFollowups, setFollowupWriter } from './followup';
-import { deliverOutbox, MAX_REPLY_ATTEMPTS, setReplySender, setSalesNotifier, setTestSender, type ReplyPayload } from './sinks/outbox';
+import { deliverOutbox, MAX_REPLY_ATTEMPTS, QUICK_KINDS, setReplySender, setSalesNotifier, setTestSender, type ReplyPayload } from './sinks/outbox';
+import { ALERT_TITLES, raiseAlert } from './alerts';
 import { clearDb, openDb } from './db';
 import { ensureProject } from './db/seed';
 import { setDefaultProject } from './project';
-import { getContact, listHandoffs, outboxAdd, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, updateContact, updateProject, importContact } from './store';
-import { handoffText, NON_TEXT, noDash, followupText, OPT_OUT_ACK } from './texts';
+import { getContact, getOrder, listHandoffs, outboxAdd, outboxPending, outboxState, pendingReplies, recentAlerts, recentMessages, releaseToBot, setBotOff, setOrderContact, updateContact, updateProject, importContact, upsertOrderRow } from './store';
+import { followupEmoji, handoffText, hasEmoji, NON_TEXT, noDash, followupText, humanFollowupText, oneEmoji, OPT_OUT_ACK, paceEmoji, PRAY, sameText } from './texts';
 
 // Nilai bibit dibaca sebelum database dibuka: dari bibit gfan, tanpa database.
 setDefaultProject(seedCtx('gfan'));
@@ -91,6 +92,7 @@ async function fresh(): Promise<void> {
   biz.files = [];
   biz.products = SEED_PRODUCTS;
   biz.stopAfterHuman = true;
+  biz.followupAfterHuman = true;
   biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }];
   biz.notifyRoutes = {};
   cfg.llmVision = true;
@@ -173,7 +175,7 @@ const tests: [string, () => Promise<void>][] = [
     await say('butuh exhaust buat gudang');
     assert.equal(sales.length, 1);
     assert.match(sales[0] ?? '', /Lead lengkap/);
-    assert.match(sales[0] ?? '', /Nama: Budi\nKota\/alamat: Surabaya\nKebutuhannya: exhaust fan gudang/);
+    assert.match(sales[0] ?? '', /Nama: Budi\nKota\/alamat: Surabaya\nKebutuhan: exhaust fan gudang/);
     assert.match(sales[0] ?? '', /wa\.me\/6281211110001/);
     next = () => R('Sama-sama.', { need: 'exhaust fan gudang 16 inci' });
     await say('yang 16 inci ya');
@@ -227,7 +229,7 @@ const tests: [string, () => Promise<void>][] = [
     await say('halo');
     next = () => null;
     await say('ada jet fan?');
-    assert.match(sent[1] ?? '', /nama, kota\/alamat dan kebutuhannya/);
+    assert.match(sent[1] ?? '', /nama, kota\/alamat dan kebutuhan/);
     next = () => R('ok', { name: 'Adi', city: 'Solo', need: 'jet fan' });
     await say('Adi Solo jet fan');
     next = () => null;
@@ -248,7 +250,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
     advance(1 * HOUR + MINUTE); // 09:01 besoknya
     assert.equal(await follow(), 1);
-    assert.match(sent.at(-1) ?? '', /Menyambung chat sebelumnya[\s\S]*nama, kota\/alamat dan kebutuhannya/);
+    assert.match(sent.at(-1) ?? '', /Menyambung chat sebelumnya[\s\S]*nama, kota\/alamat dan kebutuhan/);
     advance(HOUR);
     assert.equal(await follow(), 0, 'tidak dua kali untuk masa diam yang sama');
     advance(48 * HOUR);
@@ -269,7 +271,7 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(await follow(), 0);
     advance(3 * HOUR + MINUTE); // 08:01
     assert.equal(await follow(), 1);
-    assert.match(sent.at(-1) ?? '', /Halo Budi[\s\S]*kota\/alamat dan kebutuhannya/);
+    assert.match(sent.at(-1) ?? '', /Halo Budi[\s\S]*kota\/alamat dan kebutuhan/);
   }],
 
   ['percakapan yang sudah selesai tidak dikejar', async () => {
@@ -341,11 +343,123 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal(brainCalls[0]?.history.some((h) => h.dir === 'human'), true);
   }],
 
-  ['manusia membalas setelah bot: follow-up yang menunggu batal', async () => {
+  ['manusia membalas setelah bot: follow-up bot batal, diganti pengingat setelah admin', async () => {
     await say('halo');
     await handleHumanReply({ address: A, text: 'saya bantu ya' });
     advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), humanFollowupText(null), 'bukan follow-up bot yang menanyakan data');
     assert.equal(await follow(), 0);
+  }],
+
+  ['admin membalas lalu pelanggan diam: satu pengingat setelah 23 jam, bot tetap tidak ikut campur', async () => {
+    await say('halo');
+    await updateContact(A, { lead: { name: 'Budi' } });
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    assert.equal((await getContact(A))?.followup_state, 'pending');
+    advance(22 * HOUR);
+    assert.equal(await follow(), 0, 'belum waktunya');
+    advance(HOUR + MINUTE); // 09:01 besoknya
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), humanFollowupText('Budi'));
+    assert.equal(sent.at(-1), noDash(sent.at(-1) ?? ''));
+    const c = await getContact(A);
+    assert.deepEqual([c?.followup_total, c?.followup_state, c?.last_dir], [1, 'idle', 'out']);
+    assert.equal((await recentMessages(A, 1))[0]?.dir, 'out', 'dicatat sebagai pesan bot');
+    advance(HOUR);
+    assert.equal(await follow(), 0, 'hanya sekali');
+    // Sesudah pengingat, bot tetap keluar dari chat ini.
+    const before = sent.length;
+    await say('masih ada?');
+    assert.equal(sent.length, before);
+    assert.equal(brainCalls.length, 0);
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'balasan pelanggan tidak memicu follow-up bot');
+  }],
+
+  ['admin membalas, pelanggan menjawab sebelum 23 jam: pengingat batal', async () => {
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    advance(5 * HOUR);
+    await say('oke bu, saya pikir dulu');
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+  }],
+
+  ['pengingat setelah admin: tahap yang sudah lewat dilewati', async () => {
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    await updateContact(A, { stage: 'selesai' });
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    // Balasan admin di tahap yang sudah lewat tidak menjadwalkan pengingat.
+    await updateContact(A, { stage: 'payment' });
+    await handleHumanReply({ address: A, text: 'pembayarannya sudah kami terima' });
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    // Link terkirim juga tidak: pelanggan mungkin sudah membeli lewat link itu.
+    await updateContact(A, { stage: 'link' });
+    await handleHumanReply({ address: A, text: 'silakan lanjut lewat link ya' });
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+  }],
+
+  ['pengingat setelah admin dimatikan: tidak dijadwalkan, dan yang menunggu dilewati', async () => {
+    biz.followupAfterHuman = false;
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    // Sudah dijadwalkan, lalu setelannya dimatikan sebelum waktunya.
+    biz.followupAfterHuman = true;
+    await handleHumanReply({ address: A, text: 'ada yang bisa dibantu lagi pak?' });
+    biz.followupAfterHuman = false;
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+  }],
+
+  ['pengingat setelah admin: bot dimatikan atau dinyalakan lagi di chat itu = dilewati', async () => {
+    await say('halo');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    await setBotOff(A, now());
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'bot dimatikan');
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+    // Dinyalakan lagi: tanda "admin membalas" dilepas, pengingatnya ikut batal.
+    await releaseToBot(A);
+    await handleHumanReply({ address: A, text: 'ada yang bisa dibantu lagi pak?' });
+    await releaseToBot(A);
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0, 'bot dinyalakan lagi');
+    assert.equal((await getContact(A))?.followup_state, 'idle');
+  }],
+
+  ['pengingat setelah admin: pesan admin berikutnya menjadwalkan ulang, tetap sekali', async () => {
+    await say('halo'); // 10:00
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    advance(10 * HOUR); // 20:00
+    await handleHumanReply({ address: A, text: 'kalau ada pertanyaan kabari ya pak' });
+    advance(13 * HOUR + MINUTE); // 09:01 besoknya: 23 jam dari pesan pertama
+    assert.equal(await follow(), 0, 'dihitung dari pesan admin terakhir');
+    advance(10 * HOUR); // 19:01 = 23 jam dari pesan kedua
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), humanFollowupText(null));
+    advance(HOUR);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_total, 1);
+  }],
+
+  ['pengingat setelah admin ikut batas follow-up per nomor', async () => {
+    cfg.followupMaxTotal = 1;
+    await say('halo');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 1, 'follow-up bot');
+    await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 0);
+    assert.equal((await getContact(A))?.followup_state, 'idle');
   }],
 
   ['ringkasan percakapan: disimpan tiap giliran dan diberikan lagi ke LLM', async () => {
@@ -960,7 +1074,7 @@ const tests: [string, () => Promise<void>][] = [
     });
     advance(23 * HOUR + MINUTE);
     assert.equal(await follow(), 1);
-    assert.equal(sent.at(-1), 'Halo Pak Budi, untuk exhaust gudangnya kemarin, ukuran ruangannya jadi berapa ya?');
+    assert.equal(sent.at(-1), `Halo Pak Budi, untuk exhaust gudangnya kemarin, ukuran ruangannya jadi berapa ya? ${PRAY}`, 'ditutup 🙏🏻');
     assert.equal(seen[0]?.summary, 'Cari exhaust gudang; menunggu ukuran.');
     assert.ok(seen[0]!.hours > 22.9 && seen[0]!.hours < 23.2);
 
@@ -997,7 +1111,7 @@ const tests: [string, () => Promise<void>][] = [
       assert.equal(sent[0], 'Halo, selamat siang, selamat datang di toko kami, ada yang bisa dibantu?');
       assert.equal(sent[1], 'Ada, Pak, ini katalognya. Ukuran 16-20 inci tersedia.');
       assert.equal(sent[2], '[pdf:Katalog Seri A.pdf] Katalog, Seri A');
-      assert.equal(sent[3], 'Halo Pak, jadi yang mana?');
+      assert.equal(sent[3], `Halo Pak, jadi yang mana? ${PRAY}`);
       assert.ok(sent.every((t) => !dash.test(t)), 'tidak ada satu pun kiriman yang membawa tanda pisah panjang');
       // Kabar ke staf dan kalimat tetap mesin juga bersih.
       next = () => null;
@@ -1189,7 +1303,8 @@ const tests: [string, () => Promise<void>][] = [
     assert.equal((await getContact(A))?.stage, 'baru');
     await handleHumanReply({ address: A, text: 'Halo pak, dengan saya Rina' });
     const c = await getContact(A);
-    assert.deepEqual([c?.stage, c?.last_dir, c?.followup_state], ['dihubungi', 'human', 'idle']);
+    // 'pending' = pengingat setelah admin dijadwalkan (followupAfterHuman).
+    assert.deepEqual([c?.stage, c?.last_dir, c?.followup_state], ['dihubungi', 'human', 'pending']);
     assert.equal((await recentMessages(A, 1))[0]?.dir, 'human');
     await updateContact(A, { stage: 'payment' });
     await handleHumanReply({ address: A, text: 'sudah saya kirim penawarannya' });
@@ -1233,6 +1348,83 @@ const tests: [string, () => Promise<void>][] = [
     await say('halo', B);
     await say('mau beli GFAF-20A', B);
     assert.equal((await getContact(B))?.stage, 'menunggu');
+  }],
+
+  ['nomor pesanan dan resi dari chat dicatat', async () => {
+    await say('halo');
+    await say('pesanan saya 576123456789012345 sudah dibayar ya');
+    let c = await getContact(A);
+    assert.equal(c?.order_ref, '576123456789012345');
+    assert.equal(c?.stage, 'baru', 'tahap tidak diubah');
+    assert.equal(c?.awb, null, 'angka tanpa kata resi bukan resi');
+
+    advance(MINUTE);
+    // Sisa pengecekan lama (tanpa resi) tidak boleh menunda pengecekan resi baru.
+    await updateContact(A, { ship_checked_at: now() - MINUTE, ship_status: 'DELIVERED', ship_error: 'lama', ship_phase: 'delivered' });
+    await say('resi J&T: JP1234567890');
+    c = await getContact(A);
+    assert.deepEqual([c?.awb, c?.courier, c?.awb_at], ['JP1234567890', 'jnt', now()]);
+    assert.deepEqual([c?.ship_checked_at, c?.ship_status, c?.ship_error, c?.ship_phase], [null, null, null, null], 'hasil pelacakan lama dikosongkan');
+    assert.equal(c?.stage, 'baru');
+
+    // Yang sudah terisi tidak ditimpa tangkapan berikutnya.
+    await say('eh salah, nomornya 577999999999999999, resi JNE: CGK0123456789');
+    c = await getContact(A);
+    assert.deepEqual([c?.order_ref, c?.awb, c?.courier], ['576123456789012345', 'JP1234567890', 'jnt']);
+
+    // Saat admin membalas (bot diam), nomornya tetap dicatat.
+    const B = '+6281211110002';
+    await say('halo', B);
+    await handleHumanReply({ address: B, text: 'Halo pak, dengan saya Rina' });
+    const before = sent.length;
+    await say('no. resi: tkp01-abc1234 ya kak, invoice INV/20261120/MPL/1234567890', B);
+    assert.equal(sent.length, before, 'bot tetap diam');
+    c = await getContact(B);
+    assert.deepEqual([c?.order_ref, c?.awb, c?.courier], ['INV/20261120/MPL/1234567890', 'TKP01-ABC1234', 'kurir_tokopedia']);
+
+    // Resi tersimpan tanpa kurir: tebakan kurir dari resi lain tidak dipakai, dari resi yang sama dipakai.
+    const D = '+6281211110005';
+    await say('halo', D);
+    await updateContact(D, { awb: 'JP1234567890', awb_at: now() });
+    await say('resi JNE: CGK0123456789 itu punya teman', D);
+    c = await getContact(D);
+    assert.deepEqual([c?.awb, c?.courier], ['JP1234567890', null], 'kurir resi lain tidak menempel');
+    await say('resi J&T JP1234567890', D);
+    c = await getContact(D);
+    assert.deepEqual([c?.awb, c?.courier], ['JP1234567890', 'jnt']);
+  }],
+
+  ['nomor pesanan dari chat yang sudah ada di pesanan Tokopedia & Shop: ditautkan, resi diisi, tahap naik', async () => {
+    const ORDER = '576123456789012345';
+    await upsertOrderRow({
+      order_id: ORDER, shop_id: 'SHOP-ID', platform: 'TOKOPEDIA', status: 'AWAITING_SHIPMENT', create_time: T0 - HOUR, update_time: T0 - 30 * MINUTE,
+      paid_time: T0 - 50 * MINUTE, cancel_time: null, total_amount: '250000', currency: 'IDR', payment_method: null, is_cod: false, buyer_user_id: null,
+      recipient_name: 'B***i', recipient_phone: null, items: [], tracking_number: 'JP7770001', shipping_provider: 'J&T Express', fulfillment_type: null,
+      shipping_type: null, cancel_reason: null, synced_at: T0,
+    });
+    await say('halo');
+    await say(`pesanan saya ${ORDER} sudah dibayar ya`);
+    assert.equal((await getOrder(ORDER))?.contact_phone, A, 'pesanan ditautkan ke percakapan ini');
+    const c = await getContact(A);
+    assert.deepEqual([c?.order_ref, c?.stage, c?.awb, c?.courier], [ORDER, 'payment', 'JP7770001', 'jnt']);
+    // Nomor pesanan yang belum ada di pesanan toko: hanya dicatat, tahap tidak diubah (lihat tes di atas).
+  }],
+
+  ['nomor pesanan dari chat yang sudah tertaut ke percakapan lain: tidak direbut', async () => {
+    const ORDER = '576123456789012399';
+    const OTHER = '+6281299990055';
+    await upsertOrderRow({
+      order_id: ORDER, shop_id: 'SHOP-ID', platform: 'TOKOPEDIA', status: 'IN_TRANSIT', create_time: T0 - HOUR, update_time: T0 - 30 * MINUTE,
+      paid_time: T0 - 50 * MINUTE, cancel_time: null, total_amount: '250000', currency: 'IDR', payment_method: null, is_cod: false, buyer_user_id: null,
+      recipient_name: 'B***i', recipient_phone: null, items: [], tracking_number: 'JP7770002', shipping_provider: 'J&T Express', fulfillment_type: null,
+      shipping_type: null, cancel_reason: null, synced_at: T0,
+    });
+    await setOrderContact(ORDER, OTHER);
+    await say('halo');
+    await say(`pesanan saya ${ORDER} ya`);
+    assert.equal((await getOrder(ORDER))?.contact_phone, OTHER, 'pesanan tetap di percakapan lain');
+    const c = await getContact(A);
+    assert.deepEqual([c?.order_ref, c?.stage, c?.awb], [ORDER, 'baru', null], 'nomornya dicatat, tapi resi dan tahap tidak diambil');
   }],
 
   ['dioper ke tim: tahap "baru" jadi "menunggu"; balasan admin, "sudah ditangani", atau tautan beli memindahkannya', async () => {
@@ -1312,6 +1504,60 @@ const tests: [string, () => Promise<void>][] = [
       setTestSender(null);
       setReplySender(null);
     }
+  }],
+
+  ['warning dari proses tanpa WhatsApp (dashboard): diantre untuk pemilik, lalu dikirim bot', async () => {
+    const OWNER = '+6281299990077';
+    biz.recipients = [{ name: 'Sales', role: 'staff', phone: SALES }, { name: 'Pemilik', role: 'owner', phone: OWNER }];
+    const text = 'Token toko GFAN Official tidak bisa diperpanjang.';
+    assert.equal(await raiseAlert('marketplace', text, { key: 'token' }), true);
+    const message = `⚠️ ${ALERT_TITLES.marketplace} | ${biz.brand}\n${text}`;
+    let rows = await outboxPending(20, ['alert']);
+    assert.deepEqual(rows.map((r) => [r.kind, r.payload]), [['alert', { phone: OWNER, text: message, kind: 'marketplace' }]], 'satu baris untuk pemilik');
+    // Masa tenang 24 jam: tidak diantre lagi.
+    assert.equal(await raiseAlert('marketplace', text, { key: 'token' }), false);
+    // whatsapp: false tidak diantre.
+    await raiseAlert('kiriman-gagal', 'x', { key: 'k', whatsapp: false });
+    assert.equal((await outboxPending(20, ['alert'])).length, 1);
+    const got: string[] = [];
+    // Tanpa pengirim (mis. cli.ts): menunggu, tidak dihitung gagal.
+    await deliverOutbox(QUICK_KINDS);
+    assert.equal((await outboxPending(20, ['alert']))[0]?.attempts, 0);
+    setTestSender(async (phone, t) => {
+      got.push(`${phone}: ${t}`);
+      return true;
+    });
+    try {
+      await deliverOutbox(QUICK_KINDS);
+      assert.deepEqual(got, [`${OWNER}: ${message}`]);
+      rows = await outboxPending(20, ['alert']);
+      assert.equal(rows.length, 0, 'terkirim');
+    } finally {
+      setTestSender(null);
+    }
+  }],
+
+  ['warning antrean yang gagal terus: ditutup sesudah MAX_REPLY_ATTEMPTS percobaan, keluar dari antrean', async () => {
+    const OWNER = '+6281299990077';
+    biz.recipients = [{ name: 'Pemilik', role: 'owner', phone: OWNER }];
+    assert.equal(await raiseAlert('marketplace', 'Token toko GFAN Official tidak bisa diperpanjang.', { key: 'token' }), true);
+    const [row] = await outboxPending(20, ['alert']);
+    assert.ok(row, 'satu baris warning diantre');
+    let tries = 0;
+    setTestSender(async () => {
+      tries += 1;
+      throw new Error('socket tertutup');
+    });
+    try {
+      for (let i = 0; i < MAX_REPLY_ATTEMPTS + 3; i++) await deliverOutbox(QUICK_KINDS);
+    } finally {
+      setTestSender(null);
+    }
+    assert.equal(tries, MAX_REPLY_ATTEMPTS, 'berhenti mencoba setelah batas');
+    const [state] = await outboxState([row!.id]);
+    assert.equal(state?.attempts, MAX_REPLY_ATTEMPTS);
+    assert.notEqual(state?.done_at, null, 'ditutup');
+    assert.deepEqual(await outboxPending(20, ['alert']), [], 'tidak ada lagi di antrean');
   }],
 
   ['balasan dari dashboard: dikirim bot lewat antrean, menunggu selama belum tersambung, gagal terus = warning', async () => {
@@ -1425,6 +1671,83 @@ const tests: [string, () => Promise<void>][] = [
     await say('ada katalog online?');
     assert.ok(!sent.some((t) => /gfan\.co\.id/.test(t)), 'tautan tidak terkirim');
     assert.equal(sent.length, 2, 'diganti kalimat cadangan');
+  }],
+
+  ['emoji: paling banyak satu, dan tidak di setiap balasan', async () => {
+    assert.equal(oneEmoji('Siap Pak 🙏🏻😊 Kami cek ☺️ dulu ya 👍'), 'Siap Pak 🙏🏻 Kami cek dulu ya');
+    assert.equal(paceEmoji('Terima kasih 🙏🏻 Kami cek dulu ya ☺️', []), 'Terima kasih 🙏🏻 Kami cek dulu ya');
+    assert.equal(paceEmoji('Terima kasih 🙏🏻 Kami cek dulu ya', ['Siap ☺️', 'Kota mana?']), 'Terima kasih. Kami cek dulu ya');
+    assert.equal(paceEmoji('Boleh 🙏🏻\nKota mana?', ['Siap ☺️', 'a', 'b']), 'Boleh 🙏🏻\nKota mana?', 'hanya dua pesan terakhir');
+    assert.equal(paceEmoji('Kipas GFAN® 16 inci, harga ↔ stok ✅', ['Halo 🙏']), 'Kipas GFAN® 16 inci, harga ↔ stok', 'tanda ® dan panah bukan emoji');
+    assert.equal(followupEmoji('Halo Pak, jadi yang mana?'), `Halo Pak, jadi yang mana? ${PRAY}`);
+    assert.equal(followupEmoji('Halo Pak 😊 jadi yang mana? 🙏'), 'Halo Pak jadi yang mana? 😊', 'emoji pertama pindah ke akhir');
+    assert.match(systemPrompt(), /Emoji boleh, tapi jarang/);
+
+    // Emoji yang dibuang tidak meninggalkan spasi sebelum tanda baca.
+    const none = (t: string) => paceEmoji(t, ['Halo 🙏']);
+    assert.equal(none('Kami cek dulu ya 🙏🏻, nanti kami kabari'), 'Kami cek dulu ya, nanti kami kabari');
+    assert.equal(none('Oke 👍!'), 'Oke!');
+    assert.equal(none('Terima kasih 🙏🏻.'), 'Terima kasih.');
+    // Titik hanya untuk awal kalimat baru, bukan sebelum sapaan, nama, atau kode produk.
+    assert.equal(none('Siap 🙏🏻 Pak, kami cek dulu.'), 'Siap Pak, kami cek dulu.');
+    assert.equal(none('Kipas 🌀 GFAN tersedia'), 'Kipas GFAN tersedia');
+    assert.equal(none('Ada 😊 GFAF-40A ready'), 'Ada GFAF-40A ready');
+    assert.equal(none('Terima kasih 🙏🏻 Kami cek dulu'), 'Terima kasih. Kami cek dulu');
+    assert.equal(none('Siap 🙏🏻 Budi, kami cek.'), 'Siap Budi, kami cek.', 'nama sebagai sapaan');
+    // Tanda panah dan simbol bukan emoji; bendera dan gabungan ZWJ satu emoji.
+    for (const e of ['🙏', '🙏🏻', '☺️', '😊', '⚡', '👍', '❤️', '👨‍👩‍👧', '🇮🇩']) assert.ok(hasEmoji(e), e);
+    for (const e of ['➡', '⬇', '★', '✓', '➀', '®', '©', '™', '↔', '☺']) assert.ok(!hasEmoji(e), e);
+    // Tanda panah, centang, © ® ™ dengan FE0F juga bukan emoji, dan tetap utuh di teks.
+    for (const e of ['➡️', '⬅️', '↔️', '⤴️', '⬇️', '✔️', '✖️', '©️', '®️', '™️', 'GFAN©️']) assert.ok(!hasEmoji(e), e);
+    assert.equal(none('Rute: Jakarta ➡️ Bandung ➡️ Garut'), 'Rute: Jakarta ➡️ Bandung ➡️ Garut');
+    assert.equal(none('✔️ Ready stok\n✔️ Garansi 1 tahun'), '✔️ Ready stok\n✔️ Garansi 1 tahun');
+    assert.equal(none('GFAN©️ Indonesia ✅ ready'), 'GFAN©️ Indonesia ready');
+    assert.ok(hasEmoji('✅'));
+    assert.equal(oneEmoji('Merdeka 🇮🇩🇮🇩 semua'), 'Merdeka 🇮🇩 semua');
+    assert.equal(none('Kami sekeluarga 👨‍👩‍👧 senang'), 'Kami sekeluarga senang');
+    // Balasan yang hanya emoji tetap terkirim dengan satu emoji.
+    assert.equal(none('🙏🏻'), '🙏🏻');
+    assert.equal(none('🙏🏻😊'), '🙏🏻');
+    // Spasi sisa dirapikan; baris kosong di antara paragraf tetap.
+    assert.equal(none('Terima kasih 🙏 😊 Kami cek'), 'Terima kasih. Kami cek');
+    assert.equal(oneEmoji('Siap 🙏 😊 Kami'), 'Siap 🙏 Kami');
+    assert.equal(none('Baik 🙏\n\nKota mana?'), 'Baik\n\nKota mana?');
+    assert.equal(none('Baik\n\n🙏\n\nKota mana?'), 'Baik\n\nKota mana?');
+    // Kalimat tetap lama (🙏 polos) dikenali sama dengan yang baru.
+    assert.ok(sameText(NON_TEXT.replace(PRAY, '🙏'), NON_TEXT));
+    assert.ok(!sameText(null, NON_TEXT));
+    assert.ok(!sameText(OPT_OUT_ACK, NON_TEXT));
+
+    // Salam pembuka memakai emoji, jadi balasan LLM sesudahnya dan sesudahnya lagi tanpa emoji.
+    next = () => R('Ada, Pak 🙏🏻 Untuk ruangan seluas apa?');
+    await say('ada jet fan?');
+    assert.ok(sent[0]?.includes('🙏'), 'salam dari profil tidak diubah');
+    assert.equal(sent[1], 'Ada, Pak. Untuk ruangan seluas apa?');
+    await say('10 x 20 meter');
+    assert.equal(sent[2], 'Ada, Pak. Untuk ruangan seluas apa?', 'salam masih di dua pesan terakhir');
+    next = () => R('Siap, kami catat ☺️');
+    await say('ok');
+    assert.equal(sent[3], 'Siap, kami catat ☺️', 'dua pesan terakhir tanpa emoji: boleh satu');
+    await say('makasih');
+    assert.equal(sent[4], 'Siap, kami catat');
+    next = () => R('🙏🏻');
+    await say('sama-sama');
+    assert.deepEqual(sent.slice(5), [PRAY], 'balasan hanya emoji tidak menjadi kalimat cadangan');
+
+    // Setelah deploy: NON_TEXT lama dengan 🙏 polos tidak dikirim ulang.
+    await updateContact(A, { last_out_text: NON_TEXT.replace(PRAY, '🙏') });
+    await say(null);
+    assert.equal(sent.length, 6, 'pemberitahuan lama tidak diulang');
+  }],
+
+  ['sapaan dengan emoji tetap sapaan kosong; follow-up LLM ditutup emoji', async () => {
+    await say('halo 🙏🏻');
+    assert.equal(brainCalls.length, 0, 'tidak perlu LLM');
+    onlyGreeting();
+    setFollowupWriter(async () => 'Halo Pak, jadi pasang di gudang yang mana?');
+    advance(23 * HOUR + MINUTE);
+    assert.equal(await follow(), 1);
+    assert.equal(sent.at(-1), `Halo Pak, jadi pasang di gudang yang mana? ${PRAY}`);
   }],
 ];
 

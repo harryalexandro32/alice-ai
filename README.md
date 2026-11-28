@@ -5,11 +5,15 @@ Mesin asisten penjualan WhatsApp yang bisa dipakai ulang untuk bisnis apa pun:
 1. **Salam** untuk chat pertama.
 2. **Mengumpulkan data lead** (field-nya ditentukan profil bisnis), lalu mengirimnya ke nomor WA
    sales. Semua lead juga tampil di dashboard (Percakapan) dan bisa diunduh sebagai CSV.
-3. **Follow-up** kalau pelanggan diam (bawaan: jam ke-23, sekali, hanya jam 08–20).
+3. **Follow-up** kalau pelanggan diam (bawaan: jam ke-23, sekali, hanya jam 08–20), juga satu
+   pengingat kalau pelanggan tidak membalas admin manusia (`followupAfterHuman`).
 4. **Tanya-jawab** lewat LLM (bawaan DeepSeek) dari pengetahuan milik bisnis itu saja.
 
 Hal yang tidak diketahui bot (mis. harga) dioper ke manusia. Kalau pemilik membalas sendiri dari
-aplikasi WhatsApp, bot diam untuk kontak itu selama `HUMAN_PAUSE_HOURS`.
+aplikasi WhatsApp, bot diam untuk kontak itu selama `HUMAN_PAUSE_HOURS` (atau seterusnya dengan
+`stopAfterHuman`). Kalau pelanggan tidak membalas admin itu, bot mengirim satu pengingat dengan
+kalimat tetap sekitar 23 jam setelah pesan admin terakhir, selama tahapnya masih dihubungi atau
+menunggu (bukan link terkirim: pelanggan mungkin sudah membeli); sesudahnya bot tetap diam di chat itu.
 
 **Proyek.** Satu proyek = satu bisnis = satu nomor WhatsApp, dengan lead, profil, berkas,
 pengaturan, dan penerima notifikasi sendiri. Semua proyek ada di satu database PostgreSQL (`DATABASE_URL`);
@@ -59,17 +63,18 @@ dibagikan, atau dibuka di tab baru:
 | `/gfan` | **Beranda**: 4 angka 7 hari terakhir, *Perlu perhatian*, pertanyaan yang belum terjawab |
 | `/gfan/conversations` | daftar pelanggan dengan saringan tahap, cari, unduh CSV, impor pelanggan lama |
 | `/gfan/conversations/+62812…` | satu percakapan: riwayat lengkap, balas dari web, tahap, catatan |
+| `/gfan/orders` | **Pesanan** dari toko Tokopedia & Shop yang ditautkan: saringan, cari, tautkan ke percakapan |
 | `/gfan/knowledge/behavior` | **Cara bot bicara**: siapa yang menjawab, logo, pembukaan, pertanyaan dan rekomendasi, gaya & aturan balasan, yang harus dijawab manusia. Juga `products` (daftar produk, pertanyaan yang belum terjawab, pengetahuan lain) dan `brochures`. Panel **Coba chat** ada di tiap halaman |
 | `/gfan/settings` | proyek, saat admin ikut membalas, follow-up |
-| `/gfan/settings/whatsapp` | juga `notifications`, `advanced` (mode uji, batas, biaya LLM, riwayat warning, error) |
+| `/gfan/settings/whatsapp` | juga `notifications`, `marketplace` (tautan toko Tokopedia & Shop), `advanced` (mode uji, batas, biaya LLM, riwayat warning, error) |
 
 Alamat lama `/admin` dialihkan ke `/`. Alamat lama berbahasa Indonesia (`/gfan/percakapan…`,
 `/gfan/pengaturan/…`) dialihkan (301) ke alamat barunya. Halaman Pengetahuan lama
 (`knowledge/identity`, `knowledge/recommendations`, `knowledge/other`, `/gfan/pengetahuan/…`) tidak
 dialihkan dan menjadi 404; `/gfan/knowledge` dialihkan ke `knowledge/behavior`. Daftar alamat
 ada di `src/admin/routes.ts`. Data lewat `/api/<proyek>/…`; id proyek tidak boleh memakai kata
-yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `webhook`,
-`conversations`, `knowledge`, `settings`, …).
+yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `webhook`, `tiktok`,
+`orders`, `conversations`, `knowledge`, `settings`, …).
 
 - **Pemilih proyek** di bilah atas: pindah proyek (tetap di menu yang sama), atau
   **＋ Proyek baru…** (id, nama, bibit profil `gfan`/`generic`). Nomor bot diatur di Pengaturan >
@@ -77,6 +82,13 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
 - **Cari** (QuickSwitch) di bilah atas, atau Ctrl+K / ⌘K / `/`: satu kotak cari untuk halaman dan
   bagiannya, percakapan (nama, nomor 08… atau +62…, isian lead), produk, proyek lain, dan aksi
   (tema, bahasa, Coba chat). ↑↓ memilih, Enter membuka, Esc menutup.
+- **Bantuan** (tombol tanda tanya di kanan bawah, atau lewat Cari): panel untuk staf. Tab *Tanya*
+  menjawab pertanyaan tentang dashboard ("bisa tidak?", "caranya?", "menunya di mana?") lewat LLM, hanya
+  dari `src/admin/bantuan.md`; tab *Panduan* menampilkan berkas itu apa adanya. Pertanyaan yang tidak
+  terjawab dari panduan dicatat ke `<DATA_DIR>/bantuan-belum-terjawab.jsonl` dan di log dashboard
+  (`journalctl -u alice-admin`). **Aturan:** setiap perubahan fitur dashboard juga memperbarui
+  `bantuan.md`; `admin.test.ts` gagal kalau ada judul kartu, lipatan, atau menu di `page.html` yang tidak
+  disebut di sana.
 - **Bilah keadaan** di atas tiap halaman: WhatsApp tersambung atau belum, **Bot dijeda**,
   **MODE UJI**, dan perkiraan biaya LLM bulan ini. Tiap tanda adalah tautan ke pengaturannya.
 - **Percakapan**: tiap pelanggan punya **tahap** (baru, menunggu tim, dihubungi, link terkirim,
@@ -92,8 +104,76 @@ yang dipakai alamat (`api`, `login`, `logout`, `assets`, `admin`, `health`, `web
   Tanda **Perlu staf** (bukan tahap) muncul saat bot meminta bantuan staf, di tahap apa pun, dan
   hilang saat staf membalas (dari HP atau dari web) atau menandai **Sudah ditangani**.
 
-  Tahap tidak pernah turun sendiri. Pembayaran, barang terkirim, pesanan selesai, dan batal hanya diubah
-  staf dari dashboard; bot tidak pernah memasang atau mengubahnya.
+  Tahap tidak pernah turun sendiri. Batal hanya diubah staf dari dashboard; bot tidak pernah memasang
+  atau mengubahnya. Pembayaran diubah staf, atau dipasang oleh pesanan dari toko yang ditautkan (lihat
+  **Tokopedia & Shop**). Barang terkirim dan pesanan selesai diubah staf, atau dipasang oleh pelacakan
+  resi (lihat **Pesanan dan resi**) dan oleh pesanan dari toko yang ditautkan.
+- **Pesanan dan resi**: di kepala tiap percakapan ada kolom **Nomor pesanan**, **Nomor resi**, dan
+  **Kurir**. Bot mencatat nomor pesanan (id 18 digit Tokopedia atau TikTok Shop yang mulai dengan 576
+  atau 577, atau nomor invoice `INV/…`) dan resi (setelah kata "resi" atau "awb", atau resi `TKP…`
+  Kurir Rekomendasi Tokopedia) yang ditempel pelanggan di chat, hanya ke kolom yang masih kosong, juga
+  saat admin sedang membalas. Tombol **Cek resi** menanyakan status kurir sekarang; selain itu bot
+  mengecek tiap 5 menit, dan tiap resi paling sering sekali per 30 menit (6 jam setelah error), selama
+  30 hari sejak resinya diisi. Status kurir menaikkan tahap ke "barang terkirim" (paket di jalan) atau
+  "pesanan selesai" (paket diterima); tahap tidak pernah turun dan "batal" tidak disentuh. Pengecekan
+  otomatis hanya menaikkan tahap: kalau staf menurunkan tahap sendiri (misalnya dari "pesanan selesai" ke
+  "barang terkirim"), pengecekan berikutnya menaikkannya lagi selama resi masih dalam 30 hari. Supaya
+  tidak naik lagi, kosongkan resinya atau pilih "batal". Status retur, batal, hilang, atau rusak tampil
+  sebagai "Bermasalah", tidak mengubah tahap, dan dicek lagi paling cepat 6 jam kemudian. Status
+  sebelum paket diambil kurir (misalnya "menunggu pickup" atau "manifested") tampil sebagai "Menunggu
+  kurir" dan juga tidak mengubah tahap. Pelacakan memakai Binderbyte
+  dan butuh `BINDERBYTE_API_KEY` di `.env`. Tanpa key itu, kolomnya tetap bisa diisi dan tautan cek
+  resi tetap ada, tapi tanpa status otomatis. Pengecekan otomatis paling banyak `TRACK_DAILY_MAX` resi
+  per proyek per hari (bawaan 500); tombol **Cek resi** tidak dibatasi.
+  Kartu **Pemakaian dan biaya cek resi** di Pengaturan > Lanjutan menampilkan jumlah cek per hari
+  (otomatis dan manual), perkiraan biayanya, serta saldo dan sisa kuota gratis akun Binderbyte, dan bot
+  mengirim warning "Cek resi" ke pemilik kalau batas harian tercapai atau kuota gratis habis dan saldo di
+  bawah `TRACK_BALANCE_MIN_IDR` (bawaan Rp3.000).
+- **Tokopedia & Shop**: tautkan toko Tokopedia (dijalankan TikTok Shop) lewat satu aplikasi di TikTok
+  Shop Partner Center, supaya status pembayaran, resi, dan kurir tiap pesanan masuk sendiri. Isi
+  `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, dan `TIKTOK_SERVICE_ID` dari halaman aplikasi di Partner Center,
+  dan isi di sana dua alamat: Redirect URL `{PUBLIC_BASE_URL}/tiktok/auth` dan Webhook URL
+  `{PUBLIC_BASE_URL}/tiktok/webhook` (bawaan `PUBLIC_BASE_URL` = `https://alice-api.lukicenturi.com`).
+  Kosong = fitur mati; halaman Pengaturan > Tokopedia & Shop menjelaskan cara menyalakannya dan
+  menampilkan kedua alamat itu. Pemilik toko menautkan tokonya sekali dari halaman itu (**Tautkan
+  toko**: masuk dengan akun Seller Center, lalu setujui akses pesanan). Alamat halaman izin dibuat
+  baru tiap klik dan hanya berlaku sekali selama 30 menit (sesudah dashboard dimulai ulang, alamat yang
+  belum dipakai tidak berlaku lagi: klik **Tautkan toko** lagi); sesudah izin, Tokopedia & Shop kembali ke
+  dashboard (`ADMIN_ORIGINS` yang pertama). Untuk aplikasi "seller developer" (aplikasi pribadi toko
+  sendiri di Partner Center, yang bisa menampilkan kode izin tanpa kembali ke dashboard), tempel kodenya
+  di kolom **Tautkan dengan kode** di halaman yang sama; kolom ini juga tampil tanpa `TIKTOK_SERVICE_ID`.
+  Webhook URL harus memakai `PUBLIC_BASE_URL` (alice-api), bukan domain dashboard di Vercel: tanda
+  tangan webhook dihitung dari isi kiriman apa adanya. Satu toko hanya bisa tertaut ke satu proyek. Pesanan masuk lewat webhook dan
+  sinkron tiap 15 menit (tabel `orders`; sinkron pertama 30 hari ke belakang), lalu tampil di halaman
+  **Pesanan** dengan saringan (belum bayar, perlu dikirim, dikirim, selesai, batal, belum tertaut) dan
+  pencarian. Angka di menu Pesanan = pesanan yang sudah dibayar tapi belum tertaut ke percakapan.
+  Pesanan dicocokkan ke percakapan **hanya lewat nomor pesanan** (Nomor pesanan di percakapan sama
+  dengan id pesanan), karena marketplace menyamarkan nama dan nomor pembeli; staf juga bisa menautkan
+  atau melepas pesanan di halaman Pesanan. Nomor pesanan yang diisi staf atau ditangkap bot dari chat
+  langsung menautkan pesanan yang sudah ada (nomor dari chat tidak merebut pesanan yang sudah tertaut ke
+  percakapan lain; nomor dari staf memindahkannya). Nomor pesanan yang diganti atau dikosongkan melepas
+  pesanan lamanya, jadi pesanan itu tidak lagi mengubah resi dan tahap percakapan; sinkron berikutnya juga mencocokkan pesanan lama dengan
+  nomor pesanan yang dicatat belakangan. Data pesanan yang lebih tua tidak menimpa yang lebih baru. Pesanan yang cocok dan sudah dibayar mengisi resi dan kurir percakapannya (kalau resinya masih
+  kosong, atau resi pesanan yang sama berganti; pesanan batal, belum bayar, atau ditahan tidak mengisi resi) dan menaikkan tahap: dibayar -> pembayaran, diambil
+  kurir atau di jalan -> barang terkirim, sampai atau selesai -> pesanan selesai. Tahap tidak pernah
+  turun dan "batal" tidak disentuh; pesanan batal tidak mengubah tahap. Di halaman percakapan, status,
+  waktu bayar, dan total pesanannya tampil di atas kolom pesanan. Token toko diperpanjang otomatis
+  (gangguan jaringan atau server dicoba lagi pada putaran berikutnya) dan disimpan apa adanya di database lokal (tabel `shop_links`; PostgreSQL hanya mendengar di 127.0.0.1).
+  Kalau toko mencabut izin aplikasi, semua tautan dan semua pesanan toko itu dihapus di semua proyek
+  (juga tautan yang diputus dari dashboard di proyek lain; syarat developer TikTok Shop), dan warning
+  hanya masuk ke proyek yang menerima webhook-nya. Pemilik mendapat warning "Tokopedia & Shop" kalau izin dicabut, token ditolak saat
+  diperpanjang, atau izin akan berakhir; warning dari proses dashboard masuk antrean keluar (jenis
+  `alert`) dan dikirim bot lewat WhatsApp dengan teks yang sama. Server menyimpan webhook di tabel `webhook_events` sebagai
+  menunggu, lalu menjawab 200 sebelum memprosesnya. Jadi TikTok tidak mengirim ulang, dan webhook tidak hilang
+  kalau dashboard berhenti di tengah jalan: webhook yang belum selesai, gagal diproses, atau pesanannya belum
+  terbaca dicoba lagi tiap putaran 15 menit, paling banyak 10 kali. Kiriman ulang dengan id yang sama tidak
+  diproses dua kali. Pencabutan izin dicoba
+  terus sampai tautan dan pesanan toko itu terhapus. Sinkron atau webhook yang berjalan selagi izin
+  dicabut (atau tautan diputus) tidak menyimpan pesanan toko itu lagi. **Putuskan tautan** di dashboard
+  menyimpan pesanan yang sudah masuk; token toko dihapus, tapi baris tautannya tetap ada (status
+  `unlinked`), jadi kalau toko itu nanti mencabut izin, pesanan yang disimpan itu juga dihapus.
+  Pencabutan izin untuk toko lain, atau yang lebih tua dari tautan sekarang (misalnya kiriman ulang
+  sesudah toko ditautkan lagi; tanpa timestamp, waktunya = saat webhook itu pertama masuk), diabaikan. Mengganti toko menghapus pesanan toko lama yang tersimpan.
 - **Tautan marketplace**: tiap produk punya kolom Tokopedia dan Shopee (https, di situs
   marketplace itu). Kalau pelanggan ingin membeli produk yang punya tautan, LLM hanya memilih
   produknya (`buy`); kode mengirim tautannya sebagai pesan sendiri dan mencatatnya di riwayat
@@ -151,7 +231,7 @@ dijumlahkan: bot menunggu sekali, selama jeda yang terbesar. Keadaannya disimpan
 
 Irama kiriman (`src/pace.ts`, berlaku untuk semua jalur): bot "mikir" dulu selama jeda di kartu **Balasan**
 di Pengaturan (diacak di antara dua angkanya; follow-up dan balasan dari dashboard 1–3 detik), lalu
-"sedang mengetik…" selama panjang pesannya (3,5–5,5 huruf per detik, 1,5–15 detik). Bot melayani
+"sedang mengetik…" selama panjang pesannya (3,5–5,5 huruf per detik, 1,5–6 detik). Bot melayani
 satu lawan bicara pada satu waktu: selama mengetik ke satu chat, kiriman ke chat lain (termasuk
 notifikasi ke sales) menunggu giliran. Jalur `cloud` tidak punya "sedang mengetik…"; jedanya sama.
 
@@ -214,10 +294,11 @@ src/
   project.ts            proyek yang sedang dilayani (bawaan proses bot / per permintaan dashboard)
   heartbeat.ts          laporan bot ke dashboard (WhatsApp, QR, kode pairing) + permintaan dashboard
   business/types.ts     bentuk profil bisnis
-  business/gfan/        profil + katalog GFAN (ditranskripsi tangan dari catalog-pdf/)
+  business/gfan/        profil + katalog GFAN (ditranskripsi tangan dari catalog-pdf/; harga dari catalog-pdf/harga/)
   business/generic/     bibit netral untuk proyek baru
   brain.ts              prompt dirakit dari profil + pagar balasan
   flow.ts               pesan masuk -> balasan; salam, data lead, serah-terima
+  tiktok.ts             tautan toko Tokopedia & Shop: izin, webhook, sinkron pesanan, cocokkan ke percakapan
   followup.ts           jadwal & pengiriman follow-up
   sinks/                antrean lead -> WA sales, balasan dari dashboard (dicoba ulang)
   transport/            baileys.ts, cloud.ts — keduanya memenuhi types.ts

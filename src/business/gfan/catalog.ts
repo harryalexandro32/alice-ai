@@ -1,12 +1,13 @@
 /**
- * Katalog GFAN, ditranskripsi dari enam PDF di catalog-pdf/.
+ * Katalog GFAN, ditranskripsi dari tujuh PDF di catalog-pdf/.
  *
  * Ditulis tangan, bukan hasil pdftotext: kolom tabelnya berantakan kalau
  * diekstrak otomatis, dan satu angka yang bergeser kolom sudah cukup buat bikin
  * bot menjawab salah dengan yakin. Angka di sini PERSIS seperti di PDF —
  * termasuk yang tampak janggal (lihat CATATAN di bawah). Jangan "dirapikan".
  *
- * Katalognya TIDAK memuat harga, stok, garansi, maupun kontak.
+ * Tabel di sini TIDAK memuat harga, stok, garansi, maupun kontak. Harga dari
+ * price list (Agustus 2026) ada di daftar produk (profile.ts), bukan di sini.
  */
 
 import { renderCatalog } from '../catalog';
@@ -229,6 +230,7 @@ export const SERIES: Series[] = [
       'Semua model berputar 2900 r/min. Daya 0,2–0,55 kW. Kebisingan 50–69 dB(A).',
       'GZ-200 dan GZ-250 memakai 220 V/50 Hz (satu fasa); GZ-300 memakai 380 V/50 Hz (tiga fasa).',
       'Gambar dimensi ada di katalognya; angkanya tidak dimuat di sini.',
+      'Di price list jet fan (Agustus 2026), GZ-300 ditulis sebagai GZ-315; spesifikasinya sama (3000 m³/h, 0,55 kW, 220/380 V).',
     ],
     tables: [
       {
@@ -238,6 +240,37 @@ export const SERIES: Series[] = [
           ['GZ-200', '1360', '150', '2900', '0.2', '220/50', '50', '15'],
           ['GZ-250', '1998', '190', '2900', '0.21', '220/50', '59', '26'],
           ['GZ-300', '3000', '240', '2900', '0.55', '380/50', '69', '32'],
+        ],
+      },
+    ],
+  },
+  {
+    id: 'GAC',
+    name: 'Evaporative Air Cooler — Seri GAC',
+    source: 'Air Cooler - GFan.pdf',
+    facts: [
+      'Pendingin udara evaporatif (air cooler) beroda untuk area luas: gudang & workshop, area produksi, pabrik, bengkel, gedung olahraga, area komersial, restoran & kafe.',
+      'Sistem evaporatif alami (bukan AC/freon): butuh udara segar masuk dan jalur buang udara panas supaya pendinginannya terasa.',
+      'Motor 100% tembaga (copper). Semua model 220 V 50 Hz.',
+      '5 model. Volume udara 12000–23000 m³/h, daya 550–1800 W, tangki air 100–260 L, area jangkauan 60–180 m².',
+      // SEMENTARA: hapus setelah brosur yang sudah diperbaiki dipasang.
+      'Brosur PDF air cooler yang beredar sekarang salah cetak: kodenya tertulis MHB (MHB-10-A, MHB-10-B, MHB-10-C, MHB-18-H, MHB-23-H). Kode yang benar GAC dengan angka dan huruf yang sama: MHB-18-H = GAC-18-H, dan seterusnya. Kalau pelanggan menyebut kode MHB, jawab dengan kode GAC yang sama dan jelaskan singkat bahwa itu model yang sama.',
+    ],
+    tables: [
+      {
+        title: 'Spesifikasi teknis',
+        columns: [
+          'Model', 'Volume udara (m³/h)', 'Daya (W)', 'Tegangan (V/Hz)', 'Kebisingan (dB)', 'Tangki air (L)',
+          'Konsumsi air (L/jam)', 'Area jangkauan (m²)', 'Berat bersih/kotor (kg)', 'Dimensi P x L x T (mm)',
+        ],
+        rows: [
+          ['GAC-10-A', '12000', '550', '220/50', '≤ 55', '100', '6–8', '60–80', '38 / 41', '870 x 870 x 1680'],
+          ['GAC-10-B', '14000', '550', '220/50', '≤ 55', '100', '6–8', '60–80', '44 / 47', '870 x 870 x 1850'],
+          // CATATAN: brosur menulis area "180–100 m²" (terbalik); price list menulis 100–180. Ditulis 100–180.
+          ['GAC-10-C', '16000', '680', '220/50', '≤ 58', '100', '8–10', '100–180', '48 / 51', '870 x 870 x 2100'],
+          ['GAC-18-H', '18000', '1100', '220/50', '≤ 75', '260', '5–10', '120–150', '72 / 75', '1100 x 1100 x 1960'],
+          // CATATAN: brosur menulis 1800 W; price list menulis 1,30 kW. Ditulis angka brosur (lembar spesifikasi).
+          ['GAC-23-H', '23000', '1800', '220/50', '≤ 80', '260', '5–10', '150–180', '82 / 85', '1100 x 1100 x 2200'],
         ],
       },
     ],
@@ -259,11 +292,15 @@ export function catalogText(): string {
  *
  * Polanya sengaja longgar (awalan seri + angka) supaya "GFC20-30A" maupun
  * "GZ-400" sama-sama tertangkap. "GFC Series" tanpa angka tidak dianggap kode.
+ * Kode air cooler ditulis dengan dua tanda hubung (GAC-10-A); ejaan "GAC10A"
+ * atau "GAC-10A" dirapikan dulu. Kode MHB-… (salah cetak di brosur lama) tetap
+ * tertangkap dan ditolak, supaya bot tidak memakainya.
  */
 export function unknownModels(text: string): string[] {
-  const found = text.toUpperCase().match(/\b(?:GFC|GFAF|GAI|GZ)[-\s]?\d[0-9A-Z-]*/g) ?? [];
+  const found = text.toUpperCase().match(/\b(?:GFC|GFAF|GAI|GZ|MHB|GAC)[-\s]?\d[0-9A-Z-]*/g) ?? [];
   return found
     .map((m) => m.replace(/\s+/g, '').replace(/-+$/, ''))
     .map((m) => (/^(GFAF|GAI|GZ)\d/.test(m) ? m.replace(/^(GFAF|GAI|GZ)/, '$1-') : m))
+    .map((m) => m.replace(/^(MHB|GAC)-?(\d+)-?([A-Z])$/, '$1-$2-$3'))
     .filter((m) => !MODEL_CODES.has(m));
 }

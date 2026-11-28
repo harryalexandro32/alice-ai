@@ -11,6 +11,9 @@
  * tersambung balasan itu menunggu; yang terus gagal dicatat sebagai warning.
  * Pesan tes notifikasi (jenis `test`, tombol "Kirim tes" di Pengaturan >
  * Notifikasi) berjalan dengan cara yang sama: satu baris per nomor penerima.
+ * Warning dari proses tanpa WhatsApp (jenis `alert`, mis. dashboard dengan
+ * tautan toko Tokopedia & Shop) juga: teksnya sudah jadi (lihat raiseAlert di
+ * src/alerts.ts), bot mengirimnya ke satu penerima per baris.
  */
 
 import { raiseAlert } from '../alerts';
@@ -43,8 +46,16 @@ export interface TestPayload {
 /** Mengirim teks ke satu penerima notifikasi. False = sengaja tidak dikirim; melempar = gagal. */
 export type TestSender = (phone: string, text: string) => Promise<boolean>;
 
-/** Jenis yang diperiksa bot tiap beberapa detik (balasan dari dashboard dan pesan tes). */
-export const QUICK_KINDS: readonly OutboxKind[] = ['reply', 'test'];
+/** Warning untuk satu penerima notifikasi, dengan teks yang sudah jadi (judul + isi). */
+export interface AlertPayload {
+  phone: string;
+  text: string;
+  /** Jenis warning-nya (NotifyKind), hanya untuk log. */
+  kind?: string;
+}
+
+/** Jenis yang diperiksa bot tiap beberapa detik (balasan dari dashboard, pesan tes, dan warning dari dashboard). */
+export const QUICK_KINDS: readonly OutboxKind[] = ['reply', 'test', 'alert'];
 
 /** Balasan staf dari dashboard, dikirim bot apa adanya. */
 export interface ReplyPayload {
@@ -84,7 +95,7 @@ export function setSalesNotifier(fn: SalesNotifier): void {
 }
 
 let testSender: TestSender | null = null;
-/** Dipasang app.ts: cara mengirim pesan tes ke satu penerima notifikasi. */
+/** Dipasang app.ts: cara mengirim pesan tes dan warning antrean ke satu penerima notifikasi. */
 export function setTestSender(fn: TestSender | null): void {
   testSender = fn;
 }
@@ -112,15 +123,16 @@ export function salesText(p: LeadPayload): string {
   );
 }
 
-async function deliverTest(id: number, p: TestPayload): Promise<void> {
+/** Kirim satu baris ke satu penerima notifikasi: pesan tes, atau warning dari dashboard. */
+async function deliverTest(id: number, p: TestPayload, label = 'pesan tes'): Promise<void> {
   try {
     if (!testSender) throw new Error('pengirim pesan tes belum terpasang');
     const sent = await testSender(p.phone, p.text);
     await outboxDone(id, now());
-    console.log(`[outbox] pesan tes #${id} ${sent ? 'terkirim ke' : 'dilewat untuk'} ${p.phone}`);
+    console.log(`[outbox] ${label} #${id} ${sent ? 'terkirim ke' : 'dilewat untuk'} ${p.phone}`);
   } catch (e) {
     await outboxFailed(id).catch(() => {});
-    console.error(`[outbox] pesan tes #${id} ke ${p.phone} gagal: ${e instanceof Error ? e.message : e}`);
+    console.error(`[outbox] ${label} #${id} ke ${p.phone} gagal: ${e instanceof Error ? e.message : e}`);
   }
 }
 
@@ -147,9 +159,21 @@ async function deliverOnce(only?: readonly OutboxKind[]): Promise<void> {
       if (row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverReply(row.id, row.attempts, row.payload as ReplyPayload);
       continue;
     }
+    if ((row.kind === 'test' || row.kind === 'alert') && row.attempts >= MAX_REPLY_ATTEMPTS) {
+      // Pesan tes dan warning yang sudah gagal sekian kali tidak dicoba lagi: ditutup, supaya keluar dari antrean.
+      await outboxDone(row.id, now());
+      console.log(`[outbox] ${row.kind} #${row.id} dibuang setelah ${row.attempts} percobaan`);
+      continue;
+    }
     if (row.kind === 'test') {
       // Seperti balasan: menunggu selama belum tersambung, berhenti dicoba setelah beberapa kali gagal.
       if (row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverTest(row.id, row.payload as TestPayload);
+      continue;
+    }
+    if (row.kind === 'alert') {
+      // Seperti pesan tes. Proses tanpa pengirim (mis. cli.ts) tidak menghabiskan percobaannya: menunggu bot.
+      const p = row.payload as AlertPayload;
+      if (testSender && row.attempts < MAX_REPLY_ATTEMPTS && replyReady()) await deliverTest(row.id, p, `warning ${p.kind ?? ''}`.trim());
       continue;
     }
     if (row.kind !== 'sales') {

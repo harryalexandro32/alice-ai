@@ -34,7 +34,7 @@ export interface MediaFile {
 }
 
 /** Jenis kabar yang bisa dikirim ke pemilik/staf. */
-export type NotifyKind = 'lead' | 'butuh-staf' | 'wa-putus' | 'kiriman-dijeda' | 'kiriman-gagal' | 'llm' | 'bot-mati';
+export type NotifyKind = 'lead' | 'butuh-staf' | 'wa-putus' | 'kiriman-dijeda' | 'kiriman-gagal' | 'llm' | 'bot-mati' | 'resi' | 'marketplace';
 /** Ke siapa sebuah jenis kabar dikirim. */
 export type Route = 'owner' | 'staff' | 'both' | 'none';
 
@@ -171,6 +171,12 @@ export interface Business {
    * bot hanya diam selama HUMAN_PAUSE_HOURS, lalu aktif lagi.
    */
   stopAfterHuman: boolean;
+  /**
+   * True = kalau pelanggan tidak membalas pesan admin manusia, bot mengirim
+   * satu pengingat sekitar FOLLOWUP_AFTER_HOURS setelah pesan admin terakhir,
+   * selama tahap prospeknya masih terbuka (dihubungi, menunggu, link).
+   */
+  followupAfterHuman: boolean;
   /** Pemilik dan staf yang dikabari bot. */
   recipients: Recipient[];
   /** Jenis kabar -> penerimanya. Yang tidak diisi memakai rute bawaan. */
@@ -197,7 +203,7 @@ export interface Business {
 export const EDITABLE = [
   'brand', 'persona', 'alias', 'about', 'honorific', 'greeting', 'greetingKnown', 'leadFields', 'products', 'catalog', 'notes', 'questions', 'styleRules',
   'lessons', 'advice', 'handoffTopics', 'handoffLabel', 'forbidPrices', 'guardCodes', 'followupClosing',
-  'files', 'logo', 'stopAfterHuman', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
+  'files', 'logo', 'stopAfterHuman', 'followupAfterHuman', 'knownAt', 'knownCount', 'recipients', 'notifyRoutes', 'settings', 'replyDelayMin', 'replyDelayMax',
 ] as const satisfies readonly (keyof Business)[];
 
 export type Editable = Pick<Business, (typeof EDITABLE)[number]>;

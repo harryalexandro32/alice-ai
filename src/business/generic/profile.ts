@@ -17,14 +17,14 @@ export const generic: Business = {
   honorific: 'Kak',
 
   greeting:
-    'Halo, terima kasih sudah menghubungi kami 🙏\n' +
+    'Halo, terima kasih sudah menghubungi kami 🙏🏻\n' +
     'Ada yang bisa kami bantu?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Nama\n' +
     '2. Kota / alamat\n' +
     '3. Kebutuhannya',
   greetingKnown:
-    'Halo, terima kasih sudah menghubungi kami 🙏\n' +
+    'Halo, terima kasih sudah menghubungi kami 🙏🏻\n' +
     'Dengan Kak {nama}, betul?\n\n' +
     'Biar bisa kami bantu dengan tepat, boleh diinfokan dulu:\n' +
     '1. Kota / alamat\n' +
@@ -33,7 +33,7 @@ export const generic: Business = {
   leadFields: [
     { key: 'name', label: 'nama', hint: 'nama orangnya; jangan dari sapaan, nama bisnis kami, atau tebakan', isName: true },
     { key: 'city', label: 'kota/alamat', hint: 'kota atau alamat pelanggan' },
-    { key: 'need', label: 'kebutuhannya', hint: 'ringkasan singkat kebutuhannya dengan kata-katamu' },
+    { key: 'need', label: 'kebutuhan', hint: 'ringkasan singkat kebutuhannya dengan kata-katamu' },
   ],
 
   products: [],
@@ -48,6 +48,7 @@ export const generic: Business = {
   forbidPrices: true,
   guardCodes: false,
   stopAfterHuman: true,
+  followupAfterHuman: true,
   knownAt: 0,
   knownCount: 0,
   recipients: [],

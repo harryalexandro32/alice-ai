@@ -54,8 +54,10 @@
   <symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
-  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol><symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol><symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
   <symbol id="i-panel-left" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-help-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .7c0 1.7-2.5 2.2-2.5 3.6"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
   <!-- Wordmark: tanda oranye (A sebagai path) + teks. "Alice" ikut warna tinta (currentColor), "AI" oranye. Sama dengan brand/wordmark.svg. -->
   <symbol id="brand-wordmark" viewBox="0 0 92 24"><path d="M12 1a10.5 10.5 0 1 1-5.3 19.6l-4.2 1.4c-.6.2-1.1-.3-.9-.9l1.4-4.2A10.5 10.5 0 0 1 12 1z" fill="#f6821f"/><circle cx="11.1" cy="11.8" r="3.4" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M14.5 8.4v6.8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><text x="32" y="18" font-family='-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif' font-size="17" font-weight="700" letter-spacing="-0.34" fill="currentColor">Alice <tspan fill="#f6821f">AI</tspan></text></symbol>
@@ -121,6 +123,7 @@
       <div class="nav-group" data-en="Overview">Ringkasan</div>
       <a data-nav="beranda"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg><span data-en="Home">Beranda</span></a>
       <a data-nav="percakapan"><svg class="i" aria-hidden="true"><use href="#i-message-circle"/></svg><span data-en="Conversations">Percakapan</span><span class="badge" id="convBadge"></span></a>
+      <a data-nav="pesanan"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Orders">Pesanan</span><span class="badge" id="shopBadge"></span></a>
       <div class="nav-group" data-en="Bot knowledge">Pengetahuan bot</div>
       <a data-nav="behavior"><svg class="i" aria-hidden="true"><use href="#i-sparkles"/></svg><span data-en="How the bot talks">Cara bot bicara</span></a>
       <a data-nav="produk"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span data-en="Products">Produk</span></a>
@@ -129,6 +132,7 @@
       <a data-nav="pengaturan"><svg class="i" aria-hidden="true"><use href="#i-toggle"/></svg><span data-en="General">Umum</span></a>
       <a data-nav="whatsapp"><svg class="i" aria-hidden="true"><use href="#i-smartphone"/></svg><span>WhatsApp</span></a>
       <a data-nav="notifikasi"><svg class="i" aria-hidden="true"><use href="#i-bell"/></svg><span data-en="Notifications">Notifikasi</span></a>
+      <a data-nav="marketplace"><svg class="i" aria-hidden="true"><use href="#i-package"/></svg><span>Tokopedia &amp; Shop</span></a>
       <a data-nav="lanjutan"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg><span data-en="Advanced">Lanjutan</span></a>
     </nav>
     <div class="sb-foot">
@@ -148,7 +152,7 @@
     <nav class="bc" id="bc" aria-label="Breadcrumb"></nav>
     <div class="spacer"></div>
     <button class="btn ghost qs-open" id="qsOpen" type="button" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K /" title="Cari di seluruh dashboard" data-en-title="Search the whole dashboard"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl" data-en="Search">Cari</span><kbd id="qsKey">Ctrl K</kbd></button>
-    <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light / dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
+    <button class="btn ghost icon" id="theme" type="button" title="Terang / gelap" aria-label="Terang / gelap" data-en-title="Light or dark"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
   </div>
 
   <div class="strip" id="strip" hidden><button class="btn ghost sm try" id="tryBtn" type="button"><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Try chat">Coba chat</span></button></div>
@@ -207,23 +211,64 @@
         </div>
       </section>
 
+      <!-- ================= Pesanan Tokopedia & Shop ================= -->
+      <section data-page="pesanan">
+        <div class="card">
+          <div class="cb">
+            <div class="leadbar">
+              <input type="search" id="shopSearch" placeholder="Cari nomor pesanan, nama penerima, atau barang…" data-en-ph="Search order number, recipient name or item…">
+            </div>
+            <div class="filters" id="shopFilters" role="group" aria-label="Saring"></div>
+            <p class="help" id="shopCount" style="margin:8px 0 10px"></p>
+            <div class="scroll"><table class="list shop-orders" id="shopOrders"></table></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ================= Satu percakapan ================= -->
       <section data-page="chat">
         <div class="convgrid">
+        <!-- Panel data pelanggan: bagian-bagian bertumpuk, dipisah garis tipis. Nama pelanggan sudah jadi judul halaman. -->
         <div class="card convhead">
-          <div class="cb">
-            <div class="convtop">
-              <div class="convwho"><b id="convName"></b> <span class="help" id="convPhone"></span></div>
-              <span class="chip" id="convHold"></span>
+          <div class="cp-sec">
+            <!-- Hanya tampil saat bot meminta bantuan staf. -->
+            <div class="cp-alert" id="convNeeds" hidden>
+              <p class="cp-alert-t"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span data-en="Waiting for staff">Menunggu staf</span></p>
+              <p data-en="The bot asked your team for help in this conversation. This mark clears when you reply. If you already handled it outside the conversation, for example by phone, mark it here.">Bot meminta bantuan tim Anda di percakapan ini. Tanda ini hilang saat Anda membalas. Kalau sudah ditangani di luar chat, misalnya lewat telepon, tandai di sini.</p>
+              <button class="btn ghost sm" type="button" id="convHandled"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span data-en="Mark as handled">Tandai sudah ditangani</span></button>
             </div>
-            <div class="convctl">
-              <label class="inline"><span data-en="Stage">Tahap</span><select id="convStage"></select></label>
-              <button class="btn ghost" type="button" id="convBot"></button>
-              <button class="btn ghost" type="button" id="convHandled"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg><span data-en="Mark as handled">Tandai sudah ditangani</span></button>
+            <label class="cp-row"><span class="cp-k" data-en="Stage">Tahap</span><select id="convStage"></select></label>
+            <div class="cp-row">
+              <span class="cp-k" id="convBotK" data-en="Bot replies">Bot menjawab</span>
+              <button class="switchbtn" type="button" role="switch" id="convBot" aria-labelledby="convBotK" aria-describedby="convHold"><span class="track" aria-hidden="true"></span><span id="convHold"></span></button>
             </div>
-            <label class="f" style="margin:12px 0 0"><span data-en="Note">Catatan</span><textarea rows="2" id="convNote" placeholder="Catatan untuk tim, misalnya minta penawaran hari Senin" data-en-ph="Note for the team, for example wants a quote on Monday"></textarea><small id="convNoteState"></small></label>
           </div>
-          <div class="cardfoot" id="convLead"></div>
+          <div class="cp-sec">
+            <h3 class="cp-h" data-en="Customer data">Data pelanggan</h3>
+            <dl class="cp-dl" id="convLead"></dl>
+            <div class="cp-sum" id="convSum" hidden><span class="cp-k" data-en="Conversation summary">Ringkasan percakapan</span><p id="convSumText"></p></div>
+          </div>
+          <div class="cp-sec">
+            <label class="f cp-f"><span class="cp-h" data-en="Note">Catatan</span><textarea rows="3" id="convNote" placeholder="Catatan untuk tim, misalnya minta penawaran hari Senin" data-en-ph="Note for the team, for example wants a quote on Monday"></textarea><small id="convNoteState"></small></label>
+          </div>
+          <div class="cp-sec order" id="convOrder">
+            <h3 class="cp-h" data-en="Order">Pesanan</h3>
+            <p class="cp-shop" id="convShop" hidden></p>
+            <label class="f"><span data-en="Order number">Nomor pesanan</span><input type="text" id="orderRef" maxlength="60" autocomplete="off" placeholder="Dari Tokopedia atau Shopee" data-en-ph="From Tokopedia or Shopee"></label>
+            <div class="row">
+              <label class="f"><span data-en="Tracking number">Nomor resi</span><input type="text" id="orderAwb" maxlength="40" autocomplete="off"></label>
+              <label class="f"><span data-en="Courier">Kurir</span><select id="orderCourier"></select></label>
+            </div>
+            <small class="help" id="orderState"></small>
+            <div class="order-track">
+              <button class="btn ghost sm" type="button" id="orderTrack"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Check tracking">Cek resi</span></button>
+              <span class="chip" id="orderStatus"></span>
+              <span class="help" id="orderChecked"></span>
+            </div>
+            <ul class="order-hist" id="orderHistory"></ul>
+            <p class="order-links" id="orderLinks"></p>
+            <p class="help" id="orderOff" hidden data-en="Automatic tracking is not set up yet (BINDERBYTE_API_KEY). The links above still work.">Pelacakan otomatis belum diatur (BINDERBYTE_API_KEY). Tautan di atas tetap bisa dipakai.</p>
+          </div>
         </div>
         <div class="card">
           <div class="cb">
@@ -374,7 +419,7 @@
         <div class="card">
           <div class="ch"><h2 data-en="When a human admin also replies">Saat admin manusia ikut membalas</h2></div>
           <div class="cb">
-            <label class="check"><input type="checkbox" data-key="stopAfterHuman"><span class="ck"><span class="t" data-en="The bot stops after a human admin replies">Bot berhenti setelah admin manusia membalas</span><small class="help" data-en="After a human admin replies or sends a message to a customer, from the phone or from this dashboard, the bot stops in that conversation for good. The bot no longer replies or sends follow-ups to that customer until you turn the bot on again in the conversation.">Setelah admin manusia membalas atau mengirim pesan ke pelanggan, dari HP atau dari dashboard ini, bot berhenti di percakapan itu untuk seterusnya. Bot tidak lagi membalas atau mengirim follow-up ke pelanggan itu, sampai Anda menyalakan bot lagi di percakapannya.</small></span></label>
+            <label class="check"><input type="checkbox" data-key="stopAfterHuman"><span class="ck"><span class="t" data-en="The bot stops after a human admin replies">Bot berhenti setelah admin manusia membalas</span><small class="help" data-en="After a human admin replies or sends a message to a customer, from the phone or from this dashboard, the bot stops in that conversation for good. The bot no longer replies or sends follow-ups to that customer, except one reminder from the Follow-up card if the customer does not reply to the admin, until you turn the bot on again in the conversation.">Setelah admin manusia membalas atau mengirim pesan ke pelanggan, dari HP atau dari dashboard ini, bot berhenti di percakapan itu untuk seterusnya. Bot tidak lagi membalas atau mengirim follow-up ke pelanggan itu, kecuali satu pengingat dari kartu Follow-up kalau pelanggan tidak membalas admin, sampai Anda menyalakan bot lagi di percakapannya.</small></span></label>
             <div class="row" style="margin-bottom:-14px"><label class="f"><span data-en="If turned off, the bot stays quiet for (hours)">Kalau dimatikan, bot diam selama (jam)</span><input type="number" min="1" max="168" data-set="humanPauseHours"></label></div>
           </div>
         </div>
@@ -386,6 +431,7 @@
             <!-- Teks di antara kotak dipecah per span: applyLang mengganti innerHTML tiap [data-en], jadi kotak isian tidak boleh berada di dalamnya. -->
             <p class="fu-line"><span data-en="After the customer has been quiet for">Setelah pelanggan diam</span> <input type="number" class="fu-num" min="1" max="72" data-set="followupAfterHours" aria-label="Kirim setelah pelanggan diam paling cepat (jam)" data-en-title="Send after the customer has been quiet for at least (hours)"> <span class="fu-pair"><span data-en="to">sampai</span> <input type="number" class="fu-num" min="1" max="96" data-set="followupAfterHoursMax" aria-label="Kirim setelah pelanggan diam paling lama (jam)" data-en-title="Send after the customer has been quiet for at most (hours)"></span> <span class="fu-pair"><span data-en="hours, only between">jam, hanya antara pukul</span> <input type="number" class="fu-num" min="0" max="23" data-set="followupStartHour" aria-label="Kirim hanya mulai pukul (jam 0 sampai 23)" data-en-title="Send only from (hour, 0 to 23)"></span> <span class="fu-pair"><span data-en="and">dan</span> <input type="number" class="fu-num" min="1" max="24" data-set="followupEndHour" aria-label="Kirim hanya sampai pukul (jam 1 sampai 24)" data-en-title="Send only until (hour, 1 to 24)"></span><span data-en="&nbsp;o'clock.">.</span></p>
             <p class="fu-line"><span class="fu-pair"><span data-en="At most">Maksimal</span> <input type="number" class="fu-num" min="0" max="5" data-set="followupMaxTotal" aria-label="Paling banyak follow-up per pelanggan" data-en-title="Maximum follow-ups per customer"></span> <span data-en="times per customer.">kali per pelanggan.</span></p>
+            <label class="check" style="margin:10px 0 0"><input type="checkbox" data-key="followupAfterHuman"><span class="ck"><span class="t" data-en="Remind customers who do not reply to an admin">Ingatkan pelanggan yang tidak membalas admin</span><small class="help" data-en="If a customer does not reply to a message from a human admin, the bot sends one reminder after the wait time above, counted from the last admin message. Only while the stage is Contacted or Waiting for team. After that, the bot still does not reply in that conversation. This reminder counts toward the maximum per customer above.">Kalau pelanggan tidak membalas pesan admin manusia, bot mengirim satu pengingat setelah lama tunggu di atas, dihitung dari pesan admin terakhir. Hanya selama tahapnya Dihubungi atau Menunggu tim. Sesudah itu bot tetap tidak ikut membalas di chat tersebut. Pengingat ini ikut dihitung dalam batas maksimal per pelanggan di atas.</small></span></label>
             <div class="sub" id="fuModeLbl" data-en="Message">Isi pesan</div>
             <!-- Kotak centang tersembunyi tetap menjadi isian followupSmart (data-set-bool); dua tombol di bawah hanya mengubahnya. -->
             <input type="checkbox" id="fuSmart" data-set-bool="followupSmart" checked hidden>
@@ -432,7 +478,7 @@
                 <div id="waCodeBox" hidden><div class="sub" data-en="Pairing code">Kode pairing</div><div class="code" id="waCode"></div></div>
                 <div class="help" id="waDetail"></div>
                 <div class="pair" id="waPairBox">
-                  <input type="text" id="waNumber" placeholder="0812…" aria-label="Nomor WhatsApp bot">
+                  <input type="text" id="waNumber" class="phone" placeholder="0812…" aria-label="Nomor WhatsApp bot">
                   <button class="btn ghost" type="button" id="waPair"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg><span data-en="Request pairing code">Minta kode pairing</span></button>
                 </div>
                 <button class="btn danger" type="button" id="waReset"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Disconnect and link again">Putuskan dan tautkan ulang</span></button>
@@ -458,6 +504,14 @@
             <div class="scroll"><table class="list" id="routes"></table></div>
             <p class="help" style="margin-top:10px" data-en="Notifications about WhatsApp itself (disconnected, sending paused, a dashboard reply that failed) and about a stopped bot cannot be sent on WhatsApp. These notifications show in the dashboard, on Home and in Settings › Advanced.">Notifikasi soal WhatsApp itu sendiri (terputus, kiriman dijeda, balasan dashboard gagal) dan soal bot yang berhenti tidak bisa dikirim lewat WhatsApp. Notifikasi ini tampil di dashboard, yaitu di Beranda dan di Pengaturan › Lanjutan.</p>
           </div>
+        </div>
+      </section>
+
+      <!-- ================= Pengaturan: Tokopedia & Shop ================= -->
+      <section data-page="marketplace">
+        <div class="card">
+          <div class="ch"><h2 data-en="Shop link">Tautan toko</h2><p class="help" data-en="Once the shop is linked, each order's payment, tracking number and courier arrive by themselves. An order is matched to a conversation by its order number only, because the marketplace hides the buyer's name and phone number.">Setelah toko ditautkan, status pembayaran, nomor resi, dan kurir tiap pesanan masuk sendiri. Pesanan dicocokkan ke percakapan hanya lewat nomor pesanan, karena marketplace menyamarkan nama dan nomor pembeli.</p></div>
+          <div class="cb" id="mkBody"></div>
         </div>
       </section>
 
@@ -512,6 +566,16 @@
           </div>
           <div class="cardfoot"><span class="note" data-en="The cost here is only an <b>estimate</b>: the number of tokens multiplied by the rates above. The official bill is in your LLM provider account.">Biaya di sini hanya <b>perkiraan</b>: jumlah token dikali tarif di atas. Tagihan resminya ada di akun penyedia LLM Anda.</span></div>
         </div>
+        <div class="card" id="costResi">
+          <div class="ch"><h2 data-en="Tracking number checks and cost">Pemakaian dan biaya cek resi</h2><p class="help" data-en="Tracking number checks to Binderbyte per day and their estimated cost. The time range follows the choice in the LLM card above.">Jumlah cek resi ke Binderbyte per hari dan perkiraan biayanya. Rentang waktunya mengikuti pilihan di kartu LLM di atas.</p></div>
+          <div class="cb">
+            <p class="help" id="resiOff" hidden data-en="Tracking is not set up yet (BINDERBYTE_API_KEY in the server .env).">Pelacakan resi belum diatur (BINDERBYTE_API_KEY di .env server).</p>
+            <div class="tiles four" id="resiTiles"></div>
+            <!-- Grafik digambar app.js (columnChart); tampilan "Tabel"-nya berisi jumlah cek dan biaya per hari. -->
+            <div id="chartResi"></div>
+          </div>
+          <div class="cardfoot"><span class="note" data-en="The cost here is an <b>estimate</b>: checks × the rate, before the free quota is subtracted. The balance and the official bill are in your <a href='https://hub.binderbyte.com' target='_blank' rel='noopener'>Binderbyte account</a>.">Biaya di sini hanya <b>perkiraan</b>: jumlah cek dikali tarif, belum dikurangi kuota gratis. Saldo dan tagihan resminya ada di <a href="https://hub.binderbyte.com" target="_blank" rel="noopener">akun Binderbyte Anda</a>.</span></div>
+        </div>
         <details class="fold" id="alertFold" data-toc>
           <summary><span data-en="Warning history">Riwayat warning</span></summary>
           <div class="fold-body"><div class="scroll"><table class="list" id="alerts"></table></div></div>
@@ -556,6 +620,27 @@
     <button class="btn"><svg class="i" aria-hidden="true"><use href="#i-send"/></svg><span data-en="Send">Kirim</span></button>
     <button class="btn ghost" type="button" id="resetChat"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span data-en="Start over">Mulai ulang</span></button>
   </form>
+</aside>
+
+<!-- Bantuan: tombol tanda tanya di kanan bawah membuka panel samping dengan dua tab. "Tanya" menjawab pertanyaan
+     staf tentang dashboard lewat LLM dari src/admin/bantuan.md; "Panduan" menampilkan berkas itu apa adanya. -->
+<button class="help-fab" id="helpFab" type="button" hidden aria-haspopup="dialog" aria-controls="help" title="Bantuan" aria-label="Bantuan" data-en-title="Help"><svg class="i" aria-hidden="true"><use href="#i-help-circle"/></svg></button>
+<div class="drawer-bg" id="helpBg"></div>
+<aside class="drawer" id="help" role="dialog" aria-label="Bantuan" aria-hidden="true">
+  <div class="drawer-head">
+    <div><h2 data-en="Help">Bantuan</h2><p class="help" data-en="Ask how the dashboard works, or read the guide. Nothing here is sent to customers.">Tanya cara pakai dashboard, atau baca panduannya. Tidak ada yang dikirim ke pelanggan.</p></div>
+    <button class="btn ghost icon" type="button" id="helpClose" aria-label="Tutup" title="Tutup" data-en-title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="filters help-tabs" role="tablist" aria-label="Bantuan">
+    <button type="button" role="tab" class="on" aria-selected="true" data-tab="ask"><svg class="i" aria-hidden="true"><use href="#i-message-square"/></svg><span data-en="Ask">Tanya</span></button>
+    <button type="button" role="tab" aria-selected="false" data-tab="guide"><svg class="i" aria-hidden="true"><use href="#i-book-open"/></svg><span data-en="Guide">Panduan</span></button>
+  </div>
+  <div class="chat" id="helpChat" role="tabpanel"></div>
+  <form class="send" id="helpForm">
+    <input type="text" id="helpText" maxlength="600" placeholder="misalnya bagaimana cara menautkan WhatsApp?" data-en-ph="for example how do I link WhatsApp?" autocomplete="off">
+    <button class="btn" id="helpSend"><svg class="i" aria-hidden="true"><use href="#i-send"/></svg><span data-en="Ask">Tanya</span></button>
+  </form>
+  <div class="kb" id="helpGuide" role="tabpanel" hidden></div>
 </aside>
 
 <!-- Bilah simpan: tetap di bawah layar, muncul hanya selama ada perubahan yang belum disimpan. -->

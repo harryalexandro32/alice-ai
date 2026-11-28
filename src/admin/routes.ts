@@ -7,9 +7,10 @@
  * mengubah salah satu, ubah keduanya.
  */
 export const ROUTES: Readonly<Record<string, string>> = {
-  beranda: '', percakapan: 'conversations',
+  beranda: '', percakapan: 'conversations', pesanan: 'orders',
   behavior: 'knowledge/behavior', produk: 'knowledge/products', brosur: 'knowledge/brochures',
   pengaturan: 'settings', whatsapp: 'settings/whatsapp', notifikasi: 'settings/notifications', lanjutan: 'settings/advanced',
+  marketplace: 'settings/marketplace',
 };
 
 /**
