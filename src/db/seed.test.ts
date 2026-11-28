@@ -27,7 +27,7 @@ cfg.dataRoot = tmp;
     const jet = biz.products.find((p) => p.name === 'GZ-200');
     assert.equal(biz.files.find((f) => f.id === jet?.pdf)?.name, 'Jet Fan - GFan');
     // Brosur air cooler hasil pindai: produknya dipasangkan lewat teks pendamping (.txt).
-    const cooler = biz.products.find((p) => p.name === 'MHB-18-H');
+    const cooler = biz.products.find((p) => p.name === 'GAC-18-H');
     assert.equal(biz.files.find((f) => f.id === cooler?.pdf)?.name, 'Air Cooler - GFan');
     assert.equal(cooler?.price, 'Rp 15.000.000');
     assert.ok(mediaDir().startsWith(tmp), 'media di folder sementara');

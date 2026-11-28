@@ -1,25 +1,25 @@
 GFAN Indonesia - Spesialis Tata Udara & Pendingin Ruang Industri
-Katalog dan price list Evaporative Air Cooler Fan seri MHB (hasil pindai; teks ini ditulis tangan dari brosurnya).
+Katalog dan price list Evaporative Air Cooler Fan seri GAC (hasil pindai; teks ini ditulis tangan dari brosurnya).
 
-AIR COOLER MHB-10-A - Evaporative Air Cooler Fan
+AIR COOLER GAC-10-A - Evaporative Air Cooler Fan
 Motor 100% copper. Volume udara 12.000 m3/h. Daya 550 Watt. Tegangan 220V / 50Hz. Kebisingan <= 55 dB.
 Kapasitas tangki 100 liter. Konsumsi air 6-8 liter/jam. Berat bersih/kotor 38 kg / 41 kg. Dimensi 870 x 870 x 1680 mm. Area jangkauan 60-80 m2.
 Cocok untuk: gudang & workshop, area produksi, gedung olahraga, restoran & kafe.
 
-AIR COOLER MHB-10-B - Evaporative Air Cooler Fan
+AIR COOLER GAC-10-B - Evaporative Air Cooler Fan
 Motor 100% copper. Volume udara 14.000 m3/h. Daya 550 Watt. Tegangan 220V / 50Hz. Kebisingan <= 55 dB.
 Kapasitas tangki 100 liter. Konsumsi air 6-8 liter/jam. Berat bersih/kotor 44 kg / 47 kg. Dimensi 870 x 870 x 1850 mm. Area efektif 60-80 m2.
 
-AIR COOLER MHB-10-C - Evaporative Air Cooler Fan
+AIR COOLER GAC-10-C - Evaporative Air Cooler Fan
 Motor 100% copper. Volume udara 16.000 m3/h. Daya 680 Watt. Tegangan 220V / 50Hz. Kebisingan <= 58 dB.
 Kapasitas tangki 100 liter. Konsumsi air 8-10 liter/jam. Berat bersih/kotor 48 kg / 51 kg. Dimensi 870 x 870 x 2100 mm. Area jangkauan 100-180 m2.
 
-AIR COOLER MHB-18-H - Evaporative Air Cooler Fan
+AIR COOLER GAC-18-H - Evaporative Air Cooler Fan
 Motor 1100W (100% copper). Volume udara 18.000 m3/h. Tegangan 220V / 50Hz. Kebisingan <= 75 dB.
 Kapasitas tangki 260 liter. Konsumsi air 5-10 liter/jam. Berat bersih/kotor 72 kg / 75 kg. Ukuran 1100 x 1100 x 1960 mm. Area efektif 120-150 m2.
 Cocok untuk: pabrik & gudang, bengkel & workshop, area komersial, restoran & kafe.
 
-AIR COOLER MHB-23-H - Evaporative Air Cooler Fan
+AIR COOLER GAC-23-H - Evaporative Air Cooler Fan
 Motor 100% copper. Konsumsi daya 1800 Watt. Volume udara 23.000 m3/h. Tegangan 220V / 50Hz. Kebisingan <= 80 dB.
 Kapasitas tangki 260 liter. Konsumsi air 5-10 liter/jam. Berat bersih/kotor 82 kg / 85 kg. Dimensi 1100 x 1100 x 2200 mm. Area efektif 150-180 m2.
 
@@ -30,5 +30,4 @@ No | Model | Tipe | Air volume (CMM) | Power (kW) | Water tank (L) | Water consu
 3 | GAC-10-A | Evaporative Air Cooler Fan GAC-10-A | 12.000 | 0,55 | 100 | 6-8 | 220/50 | <55 | 60-80 | 9.000.000
 4 | GAC-10-B | Evaporative Air Cooler Fan GAC-10-B | 14.000 | 0,55 | 100 | 6-8 | 220/50 | <55 | 60-80 | 10.000.000
 5 | GAC-10-C | Evaporative Air Cooler Fan GAC-10-C | 16.000 | 0,68 | 100 | 8-10 | 220/50 | <58 | 100-180 | 11.000.000
-Kode GAC di price list = kode MHB di brosur (GAC-10-A = MHB-10-A, GAC-18-H = MHB-18-H, dst.).
 Instagram dan TikTok: @gfan.id

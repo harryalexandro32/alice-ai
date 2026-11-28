@@ -245,31 +245,30 @@ export const SERIES: Series[] = [
     ],
   },
   {
-    id: 'MHB',
-    name: 'Evaporative Air Cooler — Seri MHB',
+    id: 'GAC',
+    name: 'Evaporative Air Cooler — Seri GAC',
     source: 'Air Cooler - GFan.pdf',
     facts: [
       'Pendingin udara evaporatif (air cooler) beroda untuk area luas: gudang & workshop, area produksi, pabrik, bengkel, gedung olahraga, area komersial, restoran & kafe.',
       'Sistem evaporatif alami (bukan AC/freon): butuh udara segar masuk dan jalur buang udara panas supaya pendinginannya terasa.',
       'Motor 100% tembaga (copper). Semua model 220 V 50 Hz.',
       '5 model. Volume udara 12000–23000 m³/h, daya 550–1800 W, tangki air 100–260 L, area jangkauan 60–180 m².',
-      'Di price list, model yang sama ditulis dengan kode GAC: MHB-10-A = GAC-10-A, MHB-10-B = GAC-10-B, MHB-10-C = GAC-10-C, MHB-18-H = GAC-18-H, MHB-23-H = GAC-23-H.',
     ],
     tables: [
       {
         title: 'Spesifikasi teknis',
         columns: [
-          'Model', 'Kode price list', 'Volume udara (m³/h)', 'Daya (W)', 'Tegangan (V/Hz)', 'Kebisingan (dB)', 'Tangki air (L)',
+          'Model', 'Volume udara (m³/h)', 'Daya (W)', 'Tegangan (V/Hz)', 'Kebisingan (dB)', 'Tangki air (L)',
           'Konsumsi air (L/jam)', 'Area jangkauan (m²)', 'Berat bersih/kotor (kg)', 'Dimensi P x L x T (mm)',
         ],
         rows: [
-          ['MHB-10-A', 'GAC-10-A', '12000', '550', '220/50', '≤ 55', '100', '6–8', '60–80', '38 / 41', '870 x 870 x 1680'],
-          ['MHB-10-B', 'GAC-10-B', '14000', '550', '220/50', '≤ 55', '100', '6–8', '60–80', '44 / 47', '870 x 870 x 1850'],
+          ['GAC-10-A', '12000', '550', '220/50', '≤ 55', '100', '6–8', '60–80', '38 / 41', '870 x 870 x 1680'],
+          ['GAC-10-B', '14000', '550', '220/50', '≤ 55', '100', '6–8', '60–80', '44 / 47', '870 x 870 x 1850'],
           // CATATAN: brosur menulis area "180–100 m²" (terbalik); price list menulis 100–180. Ditulis 100–180.
-          ['MHB-10-C', 'GAC-10-C', '16000', '680', '220/50', '≤ 58', '100', '8–10', '100–180', '48 / 51', '870 x 870 x 2100'],
-          ['MHB-18-H', 'GAC-18-H', '18000', '1100', '220/50', '≤ 75', '260', '5–10', '120–150', '72 / 75', '1100 x 1100 x 1960'],
+          ['GAC-10-C', '16000', '680', '220/50', '≤ 58', '100', '8–10', '100–180', '48 / 51', '870 x 870 x 2100'],
+          ['GAC-18-H', '18000', '1100', '220/50', '≤ 75', '260', '5–10', '120–150', '72 / 75', '1100 x 1100 x 1960'],
           // CATATAN: brosur menulis 1800 W; price list menulis 1,30 kW. Ditulis angka brosur (lembar spesifikasi).
-          ['MHB-23-H', 'GAC-23-H', '23000', '1800', '220/50', '≤ 80', '260', '5–10', '150–180', '82 / 85', '1100 x 1100 x 2200'],
+          ['GAC-23-H', '23000', '1800', '220/50', '≤ 80', '260', '5–10', '150–180', '82 / 85', '1100 x 1100 x 2200'],
         ],
       },
     ],
@@ -291,14 +290,15 @@ export function catalogText(): string {
  *
  * Polanya sengaja longgar (awalan seri + angka) supaya "GFC20-30A" maupun
  * "GZ-400" sama-sama tertangkap. "GFC Series" tanpa angka tidak dianggap kode.
- * Kode air cooler ditulis dengan dua tanda hubung (MHB-10-A); ejaan "MHB10A"
- * atau "MHB-10A" dirapikan dulu, dan kode price list GAC-… dibaca sebagai MHB-….
+ * Kode air cooler ditulis dengan dua tanda hubung (GAC-10-A); ejaan "GAC10A"
+ * atau "GAC-10A" dirapikan dulu. Kode MHB-… (salah cetak di brosur lama) tetap
+ * tertangkap dan ditolak, supaya bot tidak memakainya.
  */
 export function unknownModels(text: string): string[] {
   const found = text.toUpperCase().match(/\b(?:GFC|GFAF|GAI|GZ|MHB|GAC)[-\s]?\d[0-9A-Z-]*/g) ?? [];
   return found
     .map((m) => m.replace(/\s+/g, '').replace(/-+$/, ''))
     .map((m) => (/^(GFAF|GAI|GZ)\d/.test(m) ? m.replace(/^(GFAF|GAI|GZ)/, '$1-') : m))
-    .map((m) => m.replace(/^(MHB|GAC)-?(\d+)-?([A-Z])$/, '$1-$2-$3').replace(/^GAC-/, 'MHB-'))
+    .map((m) => m.replace(/^(MHB|GAC)-?(\d+)-?([A-Z])$/, '$1-$2-$3'))
     .filter((m) => !MODEL_CODES.has(m));
 }

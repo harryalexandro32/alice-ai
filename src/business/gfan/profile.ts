@@ -14,11 +14,11 @@ export const PRICES: Record<string, string> = {
   'GZ-200': 'Rp 6.500.000',
   'GZ-250': 'Rp 9.500.000',
   'GZ-300': 'Rp 15.000.000', // di price list ditulis GZ-315
-  'MHB-10-A': 'Rp 9.000.000',
-  'MHB-10-B': 'Rp 10.000.000',
-  'MHB-10-C': 'Rp 11.000.000',
-  'MHB-18-H': 'Rp 15.000.000',
-  'MHB-23-H': 'Rp 18.000.000',
+  'GAC-10-A': 'Rp 9.000.000',
+  'GAC-10-B': 'Rp 10.000.000',
+  'GAC-10-C': 'Rp 11.000.000',
+  'GAC-18-H': 'Rp 15.000.000',
+  'GAC-23-H': 'Rp 18.000.000',
 };
 
 export const gfan: Business = {
@@ -83,7 +83,7 @@ export const gfan: Business = {
     'HARGA DAN SYARAT (dari price list GFAN, Agustus 2026)\n' +
     '- Harga di DAFTAR PRODUK adalah harga netto per unit dan dapat berubah sewaktu-waktu; produk yang kolom harganya "-" belum ada harganya di data, tim kami yang menginfokan.\n' +
     '- Jet fan GZ: harga belum termasuk PPN, loco Jakarta (ongkos kirim dari Jakarta ditanggung pembeli), garansi 1 tahun, pembayaran DP 30% dan pelunasan 70% dengan giro 30 hari, produk tertentu indent 60 hari.\n' +
-    '- Air cooler MHB: soal PPN, ongkos kirim, dan garansi, tim kami yang memastikan.',
+    '- Air cooler GAC: soal PPN, ongkos kirim, dan garansi, tim kami yang memastikan.',
 
   // Angka pergantian udara di bawah adalah acuan umum ventilasi, BUKAN dari
   // katalog GFAN. Klien perlu mengonfirmasi atau menggantinya lewat dashboard.
@@ -104,7 +104,7 @@ export const gfan: Business = {
     '2. Hitung volume dan kebutuhan udaranya, tunjukkan hitungannya dalam satu-dua baris.\n' +
     '3. Pilih model TERKECIL yang air delivery-nya sudah mencukupi kebutuhan, dan sebutkan satu tingkat di atasnya sebagai pilihan kalau ingin cadangan. Jangan melompati model yang sudah cukup. Kalau tidak ada satu unit yang cukup, jumlah unit = kebutuhan ÷ air delivery per unit, dibulatkan ke atas.\n' +
     '   Contoh: kebutuhan 72–90 m³/h → GFC10-10A (100 m³/h) sudah cukup, jadi itu yang disarankan; GFC10-12A (120 m³/h) hanya disebut sebagai pilihan cadangan.\n' +
-    '4. Pilih seri menurut cara pasang: di plafon → Ceiling Fan GFC; di dinding → GFAF-A, atau GFAF-AB kalau perlu shutter yang menutup saat mati; lewat ducting → GAI; parkiran/basement → Jet Fan GZ (jumlahnya ditentukan tim teknis). Kalau yang dicari bukan buang udara tapi udara yang lebih sejuk di area luas → Air Cooler MHB (lihat bagian AIR COOLER).\n' +
+    '4. Pilih seri menurut cara pasang: di plafon → Ceiling Fan GFC; di dinding → GFAF-A, atau GFAF-AB kalau perlu shutter yang menutup saat mati; lewat ducting → GAI; parkiran/basement → Jet Fan GZ (jumlahnya ditentukan tim teknis). Kalau yang dicari bukan buang udara tapi udara yang lebih sejuk di area luas → Air Cooler GAC (lihat bagian AIR COOLER).\n' +
     '5. Tutup dengan catatan bahwa ini perkiraan awal dan tim teknis GFAN akan memastikan sebelum pemesanan.\n\n' +
     'AIR COOLER (pendingin evaporatif) untuk pabrik, gudang, workshop, showroom, padel court, area komersial\n' +
     'Air cooler berbeda dengan AC: butuh udara segar masuk dan jalur buang udara panas supaya pendinginannya terasa. Tabel pergantian udara di atas untuk ventilasi; untuk air cooler pakai tabel ini.\n' +
@@ -117,9 +117,9 @@ export const gfan: Business = {
     'Langkah:\n' +
     '1. Volume (m³) = panjang × lebar × tinggi. Tinggi bangunan seperti ini jangan diasumsikan, tanyakan.\n' +
     '2. Kebutuhan airflow (m³/jam) = volume × ACH.\n' +
-    '3. Jumlah unit = kebutuhan airflow ÷ volume udara per unit, dibulatkan ke atas. Volume udara per unit ambil dari tabel seri MHB: untuk pabrik dan gudang besar hitung dengan MHB-18-H (18000 m³/h) atau MHB-23-H (23000 m³/h); untuk area yang lebih kecil (workshop, showroom, kafe) MHB-10-A, MHB-10-B, atau MHB-10-C (12000–16000 m³/h). Tunjukkan hitungan untuk satu model, dan sebutkan satu model lain sebagai pembanding kalau berguna.\n' +
-    '   Contoh: gudang 50 × 20 × 7 m = 7.000 m³; target 15 ACH → 105.000 m³/jam; MHB-18-H 18.000 m³/jam → 105.000 ÷ 18.000 = 5,83 → 6 unit (terpasang 108.000 m³/jam).\n' +
-    '4. Jangan mengarang model atau kapasitas air cooler di luar tabel seri MHB. Kalau pelanggan menyebut airflow per unit yang berbeda, hitung dengan angka pelanggan, lalu sebutkan model MHB yang volume udaranya terdekat.\n' +
+    '3. Jumlah unit = kebutuhan airflow ÷ volume udara per unit, dibulatkan ke atas. Volume udara per unit ambil dari tabel seri GAC: untuk pabrik dan gudang besar hitung dengan GAC-18-H (18000 m³/h) atau GAC-23-H (23000 m³/h); untuk area yang lebih kecil (workshop, showroom, kafe) GAC-10-A, GAC-10-B, atau GAC-10-C (12000–16000 m³/h). Tunjukkan hitungan untuk satu model, dan sebutkan satu model lain sebagai pembanding kalau berguna.\n' +
+    '   Contoh: gudang 50 × 20 × 7 m = 7.000 m³; target 15 ACH → 105.000 m³/jam; GAC-18-H 18.000 m³/jam → 105.000 ÷ 18.000 = 5,83 → 6 unit (terpasang 108.000 m³/jam).\n' +
+    '4. Jangan mengarang model atau kapasitas air cooler di luar tabel seri GAC. Kalau pelanggan menyebut airflow per unit yang berbeda, hitung dengan angka pelanggan, lalu sebutkan model GAC yang volume udaranya terdekat.\n' +
     '5. Jumlah unit saja belum menjamin ruangan adem. Sarankan juga exhaust fan untuk membuang udara panas dan lembap (dinding → GFAF-A/GFAF-AB, ducting → GAI) dan pastikan ada jalur udara masuk; jumlah exhaust fan dan posisinya ditentukan tim teknis.\n' +
     '6. Ingatkan singkat bila relevan: arah hembusan sebaiknya mengikuti aliran udara ruangan; air cooler kurang efektif kalau udaranya sudah lembap; panas mesin, atap, matahari, dan jumlah orang ikut memengaruhi hasil.',
 
@@ -141,10 +141,10 @@ export const gfan: Business = {
   replyDelayMax: 30,
 
   evalCases: [
-    { q: 'gudang 50x20 tinggi 7 m mau pakai air cooler 18000 m3/jam per unit, butuh berapa unit?', has: [/105\.?000/, /\b6\*? unit/, /MHB-18-H/] },
-    { q: 'air cooler yang paling besar kapasitasnya berapa, harganya berapa?', has: [/MHB-23-H/, /23\.?000/, /18\.?000\.?000/] },
-    { q: 'MHB-10-A tangkinya berapa liter dan berapa watt', has: [/100/, /550/] },
-    { q: 'GAC-18-H itu tipe yang mana ya?', has: [/MHB-18-H/] },
+    { q: 'gudang 50x20 tinggi 7 m mau pakai air cooler 18000 m3/jam per unit, butuh berapa unit?', has: [/105\.?000/, /\b6\*? unit/, /GAC-18-H/] },
+    { q: 'air cooler yang paling besar kapasitasnya berapa, harganya berapa?', has: [/GAC-23-H/, /23\.?000/, /18\.?000\.?000/] },
+    { q: 'GAC-10-A tangkinya berapa liter dan berapa watt', has: [/100/, /550/] },
+    { q: 'GAC-18-H tangkinya berapa liter, volume udaranya berapa?', has: [/260/, /18\.?000/] },
     { q: 'harga jet fan GZ-200 berapa?', has: [/6\.?500\.?000/] },
     { q: 'GFAF-40A berapa watt dan berapa air delivery nya?', has: [/130/, /2\.?880/] },
     { q: 'exhaust fan industri yang 24 inci ada? modelnya apa', has: [/GFAF-60A/] },
